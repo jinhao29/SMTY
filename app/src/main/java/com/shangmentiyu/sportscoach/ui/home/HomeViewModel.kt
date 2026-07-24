@@ -72,6 +72,20 @@ class HomeViewModel(
         .map { all -> all.filter { it.date == todayStr() } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /**
+     * 学员姓名 → 下一节课（含今日及未来，按日期/时间升序取首条）。
+     *
+     * 数据来源：[LessonRepository.getFrom] 查询 date >= today 的全部课时。
+     * 用途：学员列表"下一节课"显示与修改入口，替代原先仅展示今日课时的逻辑。
+     */
+    val nextLessons: StateFlow<Map<String, Lesson>> = lessonRepo.getFrom(todayStr())
+        .map { lessons ->
+            lessons.groupBy { it.studentName }
+                .mapNotNull { (name, list) -> list.minByOrNull { "${it.date} ${it.time}" }?.let { name to it } }
+                .toMap()
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
     private val _toast = MutableStateFlow<String?>(null)
     val toast: StateFlow<String?> = _toast.asStateFlow()
 
@@ -384,6 +398,45 @@ class HomeViewModel(
                 onDone(true)
             } catch (e: Exception) {
                 toast("删除失败：${e.message ?: "未知错误"}")
+                onDone(false)
+            }
+        }
+    }
+
+    /**
+     * 修改"下一节课"的日期与时间（学员列表入口）。
+     *
+     * 仅更新 Lesson 表的 date / time 字段，不触发消课逻辑；
+     * 数据库变更会通过 [nextLessons] Flow 自动回流到 UI。
+     *
+     * @param lessonId 课时 ID
+     * @param date 新日期 YYYY-MM-DD
+     * @param time 新时间 HH:mm
+     * @param onDone 完成回调（主线程），参数为是否成功
+     */
+    fun updateNextLessonTime(
+        lessonId: String,
+        date: String,
+        time: String,
+        onDone: (Boolean) -> Unit = {}
+    ) {
+        if (date.isBlank() || time.isBlank()) {
+            onDone(false)
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val lesson = lessonRepo.getById(lessonId)
+                if (lesson == null) {
+                    toast("课时不存在，可能已被删除")
+                    onDone(false)
+                    return@launch
+                }
+                lessonRepo.updateLesson(lesson.copy(date = date, time = time))
+                toast("已调整下一节课时间为 $date $time")
+                onDone(true)
+            } catch (e: Exception) {
+                toast("修改失败：${e.message ?: "未知错误"}")
                 onDone(false)
             }
         }

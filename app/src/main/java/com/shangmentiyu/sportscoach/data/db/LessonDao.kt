@@ -15,6 +15,15 @@ interface LessonDao {
     @Query("SELECT * FROM lessons WHERE date = :date ORDER BY time DESC")
     fun getByDate(date: String): Flow<List<Lesson>>
 
+    /**
+     * 查询从指定日期起的所有课时（按日期升序、时间升序）。
+     * 用于学员列表"下一节课"显示：取每个学员的第一条记录即为下一节课。
+     *
+     * @param fromDate 起始日期 YYYY-MM-DD（含）
+     */
+    @Query("SELECT * FROM lessons WHERE date >= :fromDate ORDER BY date ASC, time ASC")
+    fun getFrom(fromDate: String): Flow<List<Lesson>>
+
     @Query("SELECT * FROM lessons WHERE id = :id")
     suspend fun getById(id: String): Lesson?
 
@@ -30,6 +39,17 @@ interface LessonDao {
      */
     @Query("SELECT COUNT(*) FROM lessons WHERE studentName = :studentName AND date = :date AND time = :time")
     suspend fun countByStudentDateTime(studentName: String, date: String, time: String): Int
+
+    /**
+     * 统计学员指定日期起未消课的课时数量（packageId 为空表示尚未扣减课时包）。
+     * 用于长期排课生成时关联课时包余额，避免超额排课。
+     *
+     * @param studentName 学员姓名
+     * @param fromDate 起始日期 YYYY-MM-DD（含）
+     * @return 未消课的课时数量
+     */
+    @Query("SELECT COUNT(*) FROM lessons WHERE studentName = :studentName AND date >= :fromDate AND (packageId = '' OR packageId IS NULL)")
+    suspend fun countUnconsumedFrom(studentName: String, fromDate: String): Int
 
     @Insert
     suspend fun insert(lesson: Lesson)

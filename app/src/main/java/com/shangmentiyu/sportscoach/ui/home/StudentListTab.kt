@@ -29,6 +29,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
+import com.shangmentiyu.sportscoach.ui.theme.OutlinedDatePickerField
+import com.shangmentiyu.sportscoach.ui.theme.OutlinedTimePickerField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -41,15 +43,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.shangmentiyu.sportscoach.data.model.Lesson
 import com.shangmentiyu.sportscoach.data.model.Student
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 
 /**
  * 学员列表 Tab：展示所有学员，每项显示课时余额、下一节课信息、身高体重BMI。
  *
- * 增强点（相比原首页学员列表）：
- * - 显示下一节课日期时间地点（来自今日/近期排课）
- * - 快速记录身高体重BMI入口
+ * 增强点：
+ * - "下一节课"显示真正的下一节未上课（含今日及未来），数据来自 [HomeViewModel.nextLessons]
+ * - 点击下一节课的"编辑"图标可修改该课时的日期与时间
  * - 点击学员跳转成长档案
  */
 @Composable
@@ -62,9 +65,11 @@ fun StudentListTab(
 ) {
     val students by vm.students.collectAsState()
     val remainingMap by vm.remainingMap.collectAsState()
-    val todayLessons by vm.todayLessons.collectAsState()
+    val nextLessons by vm.nextLessons.collectAsState()
 
     var deleteTarget by remember { mutableStateOf<Student?>(null) }
+    // 当前正在编辑的"下一节课"，null 表示未打开修改对话框
+    var editLessonTarget by remember { mutableStateOf<Lesson?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (students.isEmpty()) {
@@ -81,10 +86,6 @@ fun StudentListTab(
                     color = MaterialTheme.colorScheme.outline)
             }
         } else {
-            // 预构建 todayLessons 按学员名索引，避免每个 item 内 firstOrNull 线性扫描
-            val todayLessonMap = remember(todayLessons) {
-                todayLessons.associateBy { it.studentName }
-            }
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(
@@ -98,13 +99,11 @@ fun StudentListTab(
                 }
                 itemsIndexed(students, key = { _, s -> s.name }) { idx, student ->
                     val remaining = remainingMap[student.name] ?: -1
-                    val nextLesson = todayLessonMap[student.name]
+                    val nextLesson = nextLessons[student.name]
                     StudentListItem(
                         student = student,
                         remaining = remaining,
-                        nextLessonTime = nextLesson?.time,
-                        nextLessonDate = nextLesson?.date,
-                        nextLessonLocation = nextLesson?.location,
+                        nextLesson = nextLesson,
                         showTopDivider = idx > 0,
                         onSign = {
                             vm.sign(student.name) { result ->
@@ -115,7 +114,8 @@ fun StudentListTab(
                         },
                         onGrowth = { onGrowth(student.name) },
                         onEdit = { onEditStudent(student) },
-                        onDelete = { deleteTarget = student }
+                        onDelete = { deleteTarget = student },
+                        onEditNextLesson = { editLessonTarget = nextLesson }
                     )
                 }
             }
@@ -131,7 +131,7 @@ fun StudentListTab(
         }
     }
 
-    // 删除确认对话框
+    // 删除学员确认对话框
     deleteTarget?.let { student ->
         GlassAlertDialog(
             onDismissRequest = { deleteTarget = null },
@@ -150,20 +150,82 @@ fun StudentListTab(
             }
         )
     }
+
+    // 修改"下一节课"时间对话框
+    editLessonTarget?.let { lesson ->
+        EditNextLessonDialog(
+            lesson = lesson,
+            onDismiss = { editLessonTarget = null },
+            onConfirm = { newDate, newTime ->
+                vm.updateNextLessonTime(lesson.id, newDate, newTime)
+                editLessonTarget = null
+            }
+        )
+    }
+}
+
+/**
+ * 修改"下一节课"日期与时间的对话框。
+ *
+ * 复用 [OutlinedDatePickerField] / [OutlinedTimePickerField] 保持 UI 一致性。
+ * 确认后通过 [onConfirm] 回调返回新的日期和时间字符串。
+ */
+@Composable
+private fun EditNextLessonDialog(
+    lesson: Lesson,
+    onDismiss: () -> Unit,
+    onConfirm: (date: String, time: String) -> Unit
+) {
+    var dateInput by remember { mutableStateOf(lesson.date) }
+    var timeInput by remember { mutableStateOf(lesson.time) }
+
+    GlassAlertDialog(
+        onDismissRequest = onDismiss,
+        title = "修改下一节课时间",
+        content = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(Spacing.md)
+            ) {
+                Text(
+                    "学员：${lesson.studentName}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+                OutlinedDatePickerField(
+                    value = dateInput,
+                    onValueChange = { dateInput = it },
+                    label = "上课日期"
+                )
+                OutlinedTimePickerField(
+                    value = timeInput,
+                    onValueChange = { timeInput = it },
+                    label = "上课时间"
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(dateInput, timeInput) }
+            ) { Text("保存") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        }
+    )
 }
 
 @Composable
 private fun StudentListItem(
     student: Student,
     remaining: Int,
-    nextLessonTime: String?,
-    nextLessonDate: String?,
-    nextLessonLocation: String?,
+    nextLesson: Lesson?,
     showTopDivider: Boolean,
     onSign: () -> Unit,
     onGrowth: () -> Unit,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onEditNextLesson: () -> Unit
 ) {
     IosGroupedListCard {
         if (showTopDivider) {
@@ -229,28 +291,42 @@ private fun StudentListItem(
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                 }
 
-                // 下一节课信息（日期时间 + 地点）
-                if (nextLessonTime != null && nextLessonDate != null) {
+                // 下一节课信息（日期时间 + 地点 + 修改入口）
+                if (nextLesson != null) {
                     Spacer(Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Filled.Schedule, contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(12.dp))
                         Spacer(Modifier.size(4.dp))
-                        Text("下一节：$nextLessonDate $nextLessonTime",
+                        Text("下一节：${nextLesson.date} ${nextLesson.time}",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary)
-                        if (!nextLessonLocation.isNullOrBlank()) {
+                        if (!nextLesson.location.isNullOrBlank()) {
                             Spacer(Modifier.size(6.dp))
                             Icon(Icons.Filled.LocationOn, contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(12.dp))
                             Spacer(Modifier.size(2.dp))
-                            Text(nextLessonLocation,
+                            Text(nextLesson.location,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.primary,
                                 maxLines = 1,
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                        }
+                        Spacer(Modifier.weight(1f))
+                        // 修改下一节课时间入口
+                        Box(
+                            modifier = Modifier
+                                .size(22.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                                .clickable(onClick = onEditNextLesson),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Filled.Edit, contentDescription = "修改下一节课",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(12.dp))
                         }
                     }
                 }

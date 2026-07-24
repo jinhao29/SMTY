@@ -204,6 +204,9 @@ class OperationRepository(
     suspend fun updateSchedule(schedule: Schedule) = scheduleDao.update(schedule)
     suspend fun deleteSchedule(id: String) = scheduleDao.deleteById(id)
 
+    /** 清空所有排课记录（课表管理"清空全部"功能） */
+    suspend fun deleteAllSchedules() = scheduleDao.deleteAll()
+
     // === 长期排课：自动生成本周课时记录 ===
 
     /**
@@ -212,6 +215,33 @@ class OperationRepository(
      */
     suspend fun hasLessonForScheduleOnDate(studentName: String, date: String, time: String): Boolean {
         return lessonDao.countByStudentDateTime(studentName, date, time) > 0
+    }
+
+    /**
+     * 检查学员是否还能排课：剩余课时包余额 > 未来未消课课时数时才允许继续排课。
+     *
+     * 长期排课生成时调用，确保排课精确到最后一节课，避免超额排课。
+     *
+     * @param studentName 学员姓名
+     * @param fromDate 起始日期 YYYY-MM-DD（含）
+     * @return true=仍有余额可排课；false=余额已用完
+     */
+    suspend fun canScheduleMoreLessons(studentName: String, fromDate: String): Boolean {
+        val summary = getRemainingSummary(studentName)
+        val pendingCount = lessonDao.countUnconsumedFrom(studentName, fromDate)
+        return summary.totalRemaining > pendingCount
+    }
+
+    /**
+     * 统计学员从指定日期起未消课的课时数量。
+     * 用于长期排课生成时计算可用额度 = 课时包余额 - 未消课课时数。
+     *
+     * @param studentName 学员姓名
+     * @param fromDate 起始日期 YYYY-MM-DD（含）
+     * @return 未消课的课时数量
+     */
+    suspend fun countUnconsumedLessonsFrom(studentName: String, fromDate: String): Int {
+        return lessonDao.countUnconsumedFrom(studentName, fromDate)
     }
 
     /**

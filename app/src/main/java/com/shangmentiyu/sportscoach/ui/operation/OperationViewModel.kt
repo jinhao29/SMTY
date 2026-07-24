@@ -190,6 +190,8 @@ class OperationViewModel(
      * - 仅对本周（_weekStart 起算 7 天内）的每个长期排课生成一次
      * - 同一学员+同一日期+同一 startTime 已存在 Lesson 时跳过，避免重复
      * - 自动生成的 Lesson 标记 lessonType = "长期自动"，便于区分手动签到
+     * - 关联课时包余额：学员剩余课时包余额 > 未来未消课课时数时才生成，
+     *   确保排课精确到最后一节课，余额用完后停止生成
      */
     fun ensureLongTermLessonsForWeek() {
         viewModelScope.launch {
@@ -203,6 +205,10 @@ class OperationViewModel(
                 clear(Calendar.MINUTE); clear(Calendar.SECOND); clear(Calendar.MILLISECOND)
             }
             val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            val todayStr = sdf.format(cal.time)
+            // 学员可用课时缓存：remaining(余额) - pending(已存在未消课) - generated(本次新生成)
+            // 初始化时查询一次，之后每生成一节课 generated+1，避免重复查询数据库
+            val remainingMap = mutableMapOf<String, Int>()
             // 遍历本周 7 天
             for (offset in 0..6) {
                 val dayCal = Calendar.getInstance().apply {
@@ -212,9 +218,25 @@ class OperationViewModel(
                 val dayOfWeek = dayCal.get(Calendar.DAY_OF_WEEK).let { if (it == 1) 7 else it - 1 }
                 val dateStr = sdf.format(dayCal.time)
                 longTerm.filter { it.dayOfWeek == dayOfWeek }.forEach { sched ->
-                    if (!opRepo.hasLessonForScheduleOnDate(sched.studentName, dateStr, sched.startTime)) {
-                        opRepo.generateLongTermLesson(sched, dateStr)
+                    // 查重：同一学员+日期+时间已有记录则跳过
+                    if (opRepo.hasLessonForScheduleOnDate(sched.studentName, dateStr, sched.startTime)) {
+                        return@forEach
                     }
+                    // 余额检查：仅对今天及以后的日期检查（过去日期不消耗未来余额）
+                    if (dateStr >= todayStr) {
+                        val available = remainingMap.getOrPut(sched.studentName) {
+                            val summary = opRepo.getRemainingSummary(sched.studentName)
+                            val pending = opRepo.countUnconsumedLessonsFrom(sched.studentName, todayStr)
+                            summary.totalRemaining - pending
+                        }
+                        if (available <= 0) {
+                            // 余额已用完，跳过此学员的后续排课
+                            return@forEach
+                        }
+                        // 生成后扣减可用额度
+                        remainingMap[sched.studentName] = available - 1
+                    }
+                    opRepo.generateLongTermLesson(sched, dateStr)
                 }
             }
         }
@@ -240,6 +262,17 @@ class OperationViewModel(
         viewModelScope.launch {
             opRepo.deleteSchedule(id)
             _toast.value = "已删除"
+        }
+    }
+
+    /**
+     * 清空所有排课记录（课表管理"清空全部"功能）。
+     * 删除 schedules 表全部数据，不影响已签到的课时记录（lessons 表）。
+     */
+    fun deleteAllSchedules() {
+        viewModelScope.launch {
+            opRepo.deleteAllSchedules()
+            _toast.value = "已清空全部课表"
         }
     }
 

@@ -21,14 +21,17 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -95,6 +98,7 @@ fun ScheduleScreen(
     var showEditDialog by remember { mutableStateOf(false) }
     var isCreate by remember { mutableStateOf(true) }
     var prefillDay by remember { mutableStateOf<Int?>(null) }
+    var showClearAllDialog by remember { mutableStateOf(false) }
 
     val dateFmt = remember { SimpleDateFormat("MM-dd", Locale.getDefault()) }
     val weekFmt = remember { SimpleDateFormat("yyyy年MM月dd日", Locale.getDefault()) }
@@ -129,6 +133,18 @@ fun ScheduleScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    }
+                },
+                actions = {
+                    // 清空全部课表按钮（仅当有课表时显示）
+                    if (schedules.isNotEmpty()) {
+                        IconButton(onClick = { showClearAllDialog = true }) {
+                            Icon(
+                                Icons.Filled.DeleteSweep,
+                                contentDescription = "清空全部",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
                 }
             )
@@ -213,6 +229,36 @@ fun ScheduleScreen(
             onSaved = {
                 vm.cancelEdit()
                 showEditDialog = false
+            }
+        )
+    }
+
+    // 清空全部课表确认对话框
+    if (showClearAllDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearAllDialog = false },
+            title = { Text("清空全部课表", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "确认清空所有排课记录吗？\n\n" +
+                    "此操作将删除全部 ${schedules.size} 条排课，" +
+                    "但不会影响已签到的课时记录。\n此操作不可撤销。"
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        vm.deleteAllSchedules()
+                        showClearAllDialog = false
+                    }
+                ) {
+                    Text("清空全部", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearAllDialog = false }) {
+                    Text("取消")
+                }
             }
         )
     }

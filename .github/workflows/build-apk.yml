@@ -27,6 +27,15 @@ jobs:
       - name: 授予 gradlew 执行权限
         run: chmod +x ./gradlew
 
+      - name: 同步 versionName 与 Release tag
+        # 将 app/build.gradle.kts 中的 versionName 替换为 1.0.<run_number>
+        # 确保构建出的 APK 内嵌版本号与 Release tag (v1.0.<run_number>) 一致，
+        # 客户端通过语义化版本比较能正确判断是否需要更新。
+        run: |
+          sed -i 's/versionName = ".*"/versionName = "1.0.${{ github.run_number }}"/' app/build.gradle.kts
+          echo "已设置 versionName = 1.0.${{ github.run_number }}"
+          grep 'versionName' app/build.gradle.kts
+
       - name: 替换 settings.gradle.kts 为官方源
         # CI 环境在海外，使用国内镜像反而可能导致插件版本同步延迟，
         # 直接使用官方源（google/mavenCentral/gradlePluginPortal）最稳定。

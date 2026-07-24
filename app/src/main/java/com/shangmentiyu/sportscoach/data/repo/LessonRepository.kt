@@ -31,6 +31,14 @@ class LessonRepository(private val dao: LessonDao) {
     fun getTodayCount(): Flow<Int> = dao.countByDate(todayDateStr())
     fun getTotalCount(): Flow<Int> = dao.count()
 
+    /**
+     * 查询从指定日期起的所有课时（按日期升序、时间升序）。
+     * 用于学员列表"下一节课"显示：取每个学员的第一条记录即为下一节课。
+     *
+     * @param fromDate 起始日期 YYYY-MM-DD（含）
+     */
+    fun getFrom(fromDate: String): Flow<List<Lesson>> = dao.getFrom(fromDate)
+
     suspend fun getById(id: String): Lesson? = dao.getById(id)
 
     /** 一次性获取学员全部课时（非 Flow） */

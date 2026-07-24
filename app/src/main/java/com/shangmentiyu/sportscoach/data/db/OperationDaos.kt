@@ -102,6 +102,10 @@ interface ScheduleDao {
     @Query("DELETE FROM schedules WHERE id = :id")
     suspend fun deleteById(id: String)
 
+    /** 清空所有排课记录（课表管理"清空全部"功能） */
+    @Query("DELETE FROM schedules")
+    suspend fun deleteAll()
+
     /** 学员改名：级联更新 schedules 表的 studentName 字段 */
     @Query("UPDATE schedules SET studentName = :newName WHERE studentName = :oldName")
     suspend fun renameStudent(oldName: String, newName: String)

@@ -24,7 +24,7 @@ class UpdateCheckWorker(
 ) : CoroutineWorker(appContext, params) {
 
     companion object {
-        private const val NOTIFICATION_CHANNEL_ID = "update_channel"
+        private const val NOTIFICATION_CHANNEL_ID = "update_channel_v2"
         private const val NOTIFICATION_CHANNEL_NAME = "应用更新"
         private const val NOTIFICATION_ID_DOWNLOADING = 1001
         private const val NOTIFICATION_ID_READY = 1002
@@ -81,9 +81,10 @@ class UpdateCheckWorker(
             val channel = NotificationChannel(
                 NOTIFICATION_CHANNEL_ID,
                 NOTIFICATION_CHANNEL_NAME,
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
                 description = "应用更新检测与下载通知"
+                enableVibration(true)
             }
             val manager = applicationContext.getSystemService(
                 Context.NOTIFICATION_SERVICE
