@@ -1,10 +1,13 @@
 package com.shangmentiyu.sportscoach.ui.settings
 
 import android.app.Application
+import android.content.Intent
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.shangmentiyu.sportscoach.core.BackupManager
+import com.shangmentiyu.sportscoach.data.repo.BackupRepository
 import com.shangmentiyu.sportscoach.data.repo.LessonRepository
 import com.shangmentiyu.sportscoach.data.repo.SettingsRepository
 import com.shangmentiyu.sportscoach.data.repo.StudentRepository
@@ -29,7 +32,8 @@ class SettingsViewModel(
     private val app: Application,
     private val lessonRepo: LessonRepository,
     private val studentRepo: StudentRepository,
-    private val settingsRepo: SettingsRepository
+    private val settingsRepo: SettingsRepository,
+    private val backupRepo: BackupRepository
 ) : ViewModel() {
 
     val coach: StateFlow<String> = settingsRepo.coach
@@ -42,6 +46,14 @@ class SettingsViewModel(
 
     private val _statusMessage = MutableStateFlow<String?>(null)
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
+
+    /** 备份/恢复操作是否进行中（UI 据此禁用按钮、显示加载动画） */
+    private val _backupInProgress = MutableStateFlow(false)
+    val backupInProgress: StateFlow<Boolean> = _backupInProgress.asStateFlow()
+
+    /** 恢复成功后置为 true，UI 据此弹出"重启应用"确认对话框 */
+    private val _needRestart = MutableStateFlow(false)
+    val needRestart: StateFlow<Boolean> = _needRestart.asStateFlow()
 
     /** 自动保存防抖任务：连续输入时只保留最后一次写库 */
     private var saveJob: Job? = null
@@ -243,5 +255,79 @@ class SettingsViewModel(
     /** 更新状态消息（用于更新检查等场景） */
     fun updateStatus(message: String) {
         _statusMessage.value = message
+    }
+
+    // ==================== 数据备份与恢复 ====================
+
+    /**
+     * 执行整库备份到用户通过 SAF 选择的目标文件 Uri。
+     *
+     * 流程：
+     * 1. 标记进行中状态（UI 禁用按钮）
+     * 2. 调用 [BackupRepository.backup] 执行备份
+     * 3. 通过 [statusMessage] 反馈结果给 UI
+     *
+     * @param targetUri 用户通过 SAF CreateDocument 选择的目标文件 Uri
+     */
+    fun backupData(targetUri: Uri) {
+        viewModelScope.launch {
+            _backupInProgress.value = true
+            try {
+                val result = backupRepo.backup(targetUri)
+                _statusMessage.value = result.message
+            } finally {
+                _backupInProgress.value = false
+            }
+        }
+    }
+
+    /**
+     * 从用户通过 SAF 选择的备份文件恢复整库数据。
+     *
+     * 流程：
+     * 1. 标记进行中状态（UI 禁用按钮）
+     * 2. 调用 [BackupRepository.restore] 执行恢复
+     * 3. 成功时标记 [needRestart]，UI 据此引导用户重启应用
+     * 4. 失败时仅展示错误消息，不修改任何状态
+     *
+     * 警告：恢复会覆盖当前所有学员/课时包/排课/签到数据。
+     *
+     * @param sourceUri 用户通过 SAF OpenDocument 选择的备份文件 Uri
+     */
+    fun restoreData(sourceUri: Uri) {
+        viewModelScope.launch {
+            _backupInProgress.value = true
+            try {
+                val result = backupRepo.restore(sourceUri)
+                _statusMessage.value = result.message
+                if (result.success && result.needRestart) {
+                    _needRestart.value = true
+                }
+            } finally {
+                _backupInProgress.value = false
+            }
+        }
+    }
+
+    /**
+     * 重启应用以加载恢复后的新数据。
+     *
+     * 通过 Intent 重启 MainActivity，结束当前任务栈，确保所有旧 ViewModel 失效、
+     * 数据库重新打开、StateFlow 重新订阅，避免脏读。
+     */
+    fun restartApp() {
+        val intent = app.packageManager.getLaunchIntentForPackage(app.packageName)
+        intent?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        app.startActivity(intent)
+        // 杀掉当前进程，彻底清理旧 ViewModel 与数据库连接
+        android.os.Process.killProcess(android.os.Process.myPid())
+    }
+
+    /** 生成默认备份文件名（UI 在 SAF CreateDocument 时使用） */
+    fun generateBackupFileName(): String = BackupManager.generateBackupFileName()
+
+    /** UI 消费了 needRestart 事件后调用，重置标记 */
+    fun consumeNeedRestart() {
+        _needRestart.value = false
     }
 }

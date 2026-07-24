@@ -29,9 +29,12 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material3.AlertDialog
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -92,6 +95,8 @@ fun SettingsScreen() {
     val todayCount by vm.todayCount.collectAsState()
     val totalCount by vm.totalCount.collectAsState()
     val statusMessage by vm.statusMessage.collectAsState()
+    val backupInProgress by vm.backupInProgress.collectAsState()
+    val needRestart by vm.needRestart.collectAsState()
 
     // 检查更新协程作用域：用于同步检查更新的协程启动
     val checkScope = androidx.compose.runtime.rememberCoroutineScope()
@@ -99,6 +104,9 @@ fun SettingsScreen() {
     // 教练编辑对话框状态
     var showCoachDialog by remember { mutableStateOf(false) }
     var coachInput by remember { mutableStateOf("") }
+
+    // 恢复确认对话框：恢复会覆盖当前所有数据，需用户二次确认
+    var showRestoreConfirm by remember { mutableStateOf(false) }
 
     // 文件选择器（SAF 目录选择，直接传递 Uri 给 ViewModel）
     val exportDirLauncher = rememberLauncherForActivityResult(
@@ -138,6 +146,31 @@ fun SettingsScreen() {
                     android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             )
             vm.importStudents(it)
+        }
+    }
+
+    // 备份文件创建器：使用 SAF CreateDocument 让用户选择保存位置与文件名
+    // 默认文件名带时间戳，避免覆盖旧备份
+    val backupFileLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri: Uri? ->
+        uri?.let { vm.backupData(it) }
+    }
+
+    // 恢复文件选择器：使用 SAF OpenDocument 让用户选择 .smty_backup 备份文件
+    // 仅允许选择备份文件类型，避免误选其他文件导致恢复失败
+    val restoreFileLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri?.let {
+            // 持久化读权限，避免下次选择时丢失访问权
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    it,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+            vm.restoreData(it)
         }
     }
 
@@ -269,7 +302,64 @@ fun SettingsScreen() {
                     }
                 }
 
-                // 分组 4：应用更新（检查新版本 + 安装已下载的更新）
+                // 分组 4：数据备份与恢复（整库二进制备份，纯本地，不依赖网络）
+                // 备份内容：数据库文件（学员/课时包/排课/签到/训练周期等）+ 签到照片
+                // 备份格式：ZIP 压缩包，可保存到手机存储或网盘
+                IosSectionWrapper(text = "数据备份与恢复") {
+                    IosGroupedListCard {
+                        SettingsActionRow(
+                            icon = Icons.Filled.SaveAlt,
+                            iconBgColor = FeatureIconBlue,
+                            iconContentDescription = "备份数据",
+                            title = "一键备份所有数据",
+                            subtitle = "将学员/课时/签到/照片打包备份到手机或网盘",
+                            showTopDivider = false,
+                            onClick = {
+                                // 备份进行中时禁用，避免重复点击
+                                if (!backupInProgress) {
+                                    backupFileLauncher.launch(vm.generateBackupFileName())
+                                }
+                            }
+                        )
+                        SettingsActionRow(
+                            icon = Icons.Filled.Restore,
+                            iconBgColor = FeatureIconOrange,
+                            iconContentDescription = "恢复数据",
+                            title = "从备份文件恢复",
+                            subtitle = "覆盖当前所有数据，恢复前请先备份",
+                            showTopDivider = true,
+                            onClick = {
+                                // 恢复会覆盖当前数据，弹出二次确认对话框
+                                if (!backupInProgress) {
+                                    showRestoreConfirm = true
+                                }
+                            }
+                        )
+                        // 备份/恢复进行中时显示加载动画
+                        if (backupInProgress) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    "正在处理，请稍候…",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // 分组 5：应用更新（检查新版本 + 安装已下载的更新）
                 IosSectionWrapper(text = "应用更新") {
                     IosGroupedListCard {
                         SettingsActionRow(
@@ -320,7 +410,7 @@ fun SettingsScreen() {
                     }
                 }
 
-                // 分组 5：关于
+                // 分组 6：关于
                 IosSectionWrapper(text = "关于") {
                     IosGroupedListCard {
                         Row(
@@ -434,6 +524,73 @@ fun SettingsScreen() {
                     },
                     dismissButton = {
                         OutlinedButton(onClick = { showCoachDialog = false }) { Text("取消") }
+                    }
+                )
+            }
+
+            // 恢复前二次确认对话框：恢复会覆盖当前所有学员/课时/签到数据
+            // 必须让用户明确知晓风险，避免误操作导致数据丢失
+            if (showRestoreConfirm) {
+                GlassAlertDialog(
+                    onDismissRequest = { showRestoreConfirm = false },
+                    title = "确认恢复数据？",
+                    content = {
+                        Column {
+                            Text(
+                                "恢复操作将覆盖当前所有学员、课时包、排课、签到记录与照片。",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(Modifier.height(Spacing.sm))
+                            Text(
+                                "建议：恢复前请先点击\"一键备份所有数据\"创建当前数据的备份，以防万一。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Spacer(Modifier.height(Spacing.sm))
+                            Text(
+                                "恢复成功后应用将自动重启以加载新数据。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        Button(onClick = {
+                            showRestoreConfirm = false
+                            // 用户确认后弹出文件选择器
+                            // 使用 arrayOf("*/*") 让用户可选择任意位置（网盘/本地）的备份文件
+                            restoreFileLauncher.launch(arrayOf("*/*"))
+                        }) { Text("我已知晓，选择备份文件") }
+                    },
+                    dismissButton = {
+                        OutlinedButton(onClick = { showRestoreConfirm = false }) { Text("取消") }
+                    }
+                )
+            }
+
+            // 恢复成功后重启确认对话框：让用户主动确认重启，避免突然杀进程导致用户困惑
+            if (needRestart) {
+                GlassAlertDialog(
+                    onDismissRequest = {
+                        // 不允许点外部关闭：必须用户主动确认重启，否则数据已恢复但 App 仍持有旧 ViewModel
+                    },
+                    title = "恢复成功",
+                    content = {
+                        Text(
+                            "数据已成功恢复，需要重启应用以加载新数据。点击\"立即重启\"将关闭并重新打开应用。",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    },
+                    confirmButton = {
+                        Button(onClick = {
+                            vm.consumeNeedRestart()
+                            vm.restartApp()
+                        }) { Text("立即重启") }
+                    },
+                    dismissButton = {
+                        // 不提供取消按钮：数据已覆盖，旧 ViewModel 已失效，必须重启
                     }
                 )
             }

@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.shangmentiyu.sportscoach.data.db.AppDatabase
+import com.shangmentiyu.sportscoach.data.repo.BackupRepository
 import com.shangmentiyu.sportscoach.data.repo.LessonRepository
 import com.shangmentiyu.sportscoach.data.repo.OperationRepository
 import com.shangmentiyu.sportscoach.data.repo.ParentReportRepository
@@ -42,6 +43,9 @@ class AppViewModelFactory(private val app: Application) : ViewModelProvider.Fact
     val memoryRepo: com.shangmentiyu.sportscoach.data.repo.ScheduleMemoryRepository by lazy {
         com.shangmentiyu.sportscoach.data.repo.ScheduleMemoryRepository(AppDatabase.getDatabase(app).scheduleMemoryDao())
     }
+    val backupRepo: BackupRepository by lazy {
+        BackupRepository(app)
+    }
 
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -55,7 +59,7 @@ class AppViewModelFactory(private val app: Application) : ViewModelProvider.Fact
             modelClass.isAssignableFrom(com.shangmentiyu.sportscoach.ui.summary.SummaryViewModel::class.java) ->
                 com.shangmentiyu.sportscoach.ui.summary.SummaryViewModel(lessonRepo, studentRepo) as T
             modelClass.isAssignableFrom(com.shangmentiyu.sportscoach.ui.settings.SettingsViewModel::class.java) ->
-                com.shangmentiyu.sportscoach.ui.settings.SettingsViewModel(app, lessonRepo, studentRepo, settingsRepo) as T
+                com.shangmentiyu.sportscoach.ui.settings.SettingsViewModel(app, lessonRepo, studentRepo, settingsRepo, backupRepo) as T
             modelClass.isAssignableFrom(com.shangmentiyu.sportscoach.ui.growth.GrowthViewModel::class.java) ->
                 com.shangmentiyu.sportscoach.ui.growth.GrowthViewModel(studentRepo, lessonRepo) as T
             modelClass.isAssignableFrom(com.shangmentiyu.sportscoach.ui.training.TrainingPlanViewModel::class.java) ->

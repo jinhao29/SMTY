@@ -221,5 +221,44 @@ abstract class AppDatabase : RoomDatabase() {
                 instance
             }
         }
+
+        /**
+         * 关闭并重置数据库单例（仅用于整库备份/恢复流程）。
+         *
+         * 调用时机：
+         * - 备份：在复制数据库文件前调用，确保所有 WAL 日志刷盘，避免备份到不完整的数据
+         * - 恢复：在覆盖数据库文件前调用，释放文件锁，避免 "database is locked" 错误
+         *
+         * 调用后下次访问 [getDatabase] 会重新创建实例并打开数据库连接。
+         * 注意：调用后所有持有旧 Dao / Repository 引用的 ViewModel 都会失效，
+         * 恢复数据后必须重启 App 让 ViewModel 重新初始化。
+         *
+         * @param context 上下文（用于触发 WAL checkpoint）
+         */
+        fun closeAndResetInstance(context: Context) {
+            synchronized(this) {
+                INSTANCE?.let { db ->
+                    try {
+                        // 强制将 WAL 日志写入主数据库文件，确保备份/覆盖的是完整数据
+                        // 使用 raw query 触发 checkpoint，避免备份到残缺数据导致学员/课程丢失
+                        db.openHelper.writableDatabase.query("PRAGMA wal_checkpoint(FULL)").use { it.moveToFirst() }
+                    } catch (e: Exception) {
+                        // checkpoint 失败不阻断流程，仍尝试关闭，避免文件锁死
+                    }
+                    try {
+                        db.close()
+                    } catch (e: Exception) {
+                        // 忽略关闭异常，单例仍需重置
+                    }
+                }
+                INSTANCE = null
+            }
+        }
+
+        /**
+         * 数据库文件名（用于备份/恢复定位文件）。
+         * Room 默认会在 databasePath 下生成 <dbName>、<dbName>-wal、<dbName>-shm 三个文件。
+         */
+        const val DATABASE_NAME = "sports_coach_db"
     }
 }
