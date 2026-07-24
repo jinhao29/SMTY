@@ -17,6 +17,12 @@
 -dontwarn javax.annotation.**
 -dontwarn org.antlr.**
 -dontwarn org.objenesis.**
+# Android 不含 AWT（POI 图表库引用 java.awt.Shape 等）
+-dontwarn java.awt.**
+# POI 数字签名相关依赖（App 不使用数字签名功能，运行时不需要）
+-dontwarn org.etsi.**
+-dontwarn org.w3.**
+-dontwarn com.graphbuilder.**
 
 # ---------- Room 数据库（实体与 DAO 实现由 KSP 生成，需保留） ----------
 -keep class * extends androidx.room.RoomDatabase { *; }
