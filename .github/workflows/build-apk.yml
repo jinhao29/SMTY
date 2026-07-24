@@ -24,6 +24,46 @@ jobs:
       - name: 授予 gradlew 执行权限
         run: chmod +x ./gradlew
 
+      - name: 替换 settings.gradle.kts 为官方源
+        # CI 环境在海外，使用国内镜像反而可能导致插件版本同步延迟，
+        # 直接使用官方源（google/mavenCentral/gradlePluginPortal）最稳定。
+        run: |
+          cat > settings.gradle.kts << 'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          plugins {
+              id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+
+          rootProject.name = "SportsCoach"
+          include(":app")
+          EOF
+
+      - name: 替换 gradle-wrapper.properties 为官方下载源
+        # CI 环境使用腾讯云镜像可能不稳定，改用官方 Gradle 发行版下载源
+        run: |
+          cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
+          distributionBase=GRADLE_USER_HOME
+          distributionPath=wrapper/dists
+          distributionUrl=https\://services.gradle.org/distributions/gradle-9.5.0-all.zip
+          networkTimeout=60000
+          validateDistributionUrl=true
+          zipStoreBase=GRADLE_USER_HOME
+          zipStorePath=wrapper/dists
+          EOF
+
       - name: 构建 Release APK
         # 项目 build.gradle.kts 中 release 构建类型已配置 debug 签名，
         # 可直接生成可安装的 release APK（个人使用，无需正式签名）
