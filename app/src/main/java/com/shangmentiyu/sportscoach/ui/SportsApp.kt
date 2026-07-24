@@ -1,18 +1,26 @@
 package com.shangmentiyu.sportscoach.ui
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SportsScore
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -22,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -47,6 +56,10 @@ import com.shangmentiyu.sportscoach.ui.theme.appSurface
 import com.shangmentiyu.sportscoach.ui.training.TrainingPlanScreen
 import com.shangmentiyu.sportscoach.ui.operation.OperationScreen
 import com.shangmentiyu.sportscoach.ui.schedule.ScheduleScreen
+import androidx.compose.foundation.background
+import androidx.compose.material.icons.filled.Download
+import com.shangmentiyu.sportscoach.update.UpdateInstaller
+import com.shangmentiyu.sportscoach.update.UpdateProgressBus
 
 /** 底部导航项 */
 data class BottomItem(val route: String, val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
@@ -67,7 +80,12 @@ fun SportsApp() {
         Routes.HOME, Routes.SCORE, Routes.SETTINGS
     )
 
-    Scaffold(
+    // 更新下载进度订阅：来自 UpdateProgressBus（Worker → UI 跨进程通信）
+    val updateProgress by UpdateProgressBus.progress.collectAsState()
+    val context = LocalContext.current
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
         containerColor = appGroupedBackground(),
         bottomBar = {
             if (showBottomBar) {
@@ -261,6 +279,128 @@ fun SportsApp() {
                     onOpenLesson = { lessonId -> navController.navigate(Routes.lesson(lessonId)) }
                 )
             }
+        }
+    }
+
+        // === 更新下载进度浮层 ===
+        // 订阅 UpdateProgressBus，前台时实时展示下载进度/完成/失败
+        when (val p = updateProgress) {
+            is UpdateProgressBus.UpdateProgress.Downloading -> {
+                // 仅在 1~99% 时显示浮层（0% 与 100% 由通知承载，避免闪烁）
+                if (p.percent in 1..99) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.35f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color.White,
+                            tonalElevation = 6.dp
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                CircularProgressIndicator(
+                                    progress = { p.percent / 100f },
+                                    modifier = Modifier.size(48.dp),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    strokeWidth = 4.dp
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                Text(
+                                    text = "正在下载新版本 ${p.version}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.Black
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = "${p.percent}%",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.Black
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            is UpdateProgressBus.UpdateProgress.Done -> {
+                // 下载完成：触发系统安装器，重置总线
+                LaunchedEffect(Unit) {
+                    runCatching { UpdateInstaller.installApk(context) }
+                    UpdateProgressBus.reset()
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.35f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = Color.White,
+                        tonalElevation = 6.dp
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Download,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = "新版本 ${p.version} 下载完成，正在启动安装…",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.Black
+                            )
+                        }
+                    }
+                }
+            }
+            is UpdateProgressBus.UpdateProgress.Failed -> {
+                // 下载失败：短暂提示后重置总线（不阻塞用户操作）
+                LaunchedEffect(Unit) {
+                    kotlinx.coroutines.delay(2500)
+                    UpdateProgressBus.reset()
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.35f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = Color.White,
+                        tonalElevation = 6.dp
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "更新下载失败",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFFFF3B30)
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = p.message,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF3C3C43)
+                            )
+                        }
+                    }
+                }
+            }
+            UpdateProgressBus.UpdateProgress.Idle -> { /* 无更新进行中，不显示浮层 */ }
         }
     }
 }

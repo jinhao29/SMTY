@@ -1,9 +1,14 @@
 package com.shangmentiyu.sportscoach.data.repo
 
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.PagingData
+import androidx.paging.map
 import com.shangmentiyu.sportscoach.data.db.LessonDao
 import com.shangmentiyu.sportscoach.data.model.Lesson
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -30,6 +35,52 @@ class LessonRepository(private val dao: LessonDao) {
     fun getTodayLessons(): Flow<List<Lesson>> = dao.getByDate(todayDateStr())
     fun getTodayCount(): Flow<Int> = dao.countByDate(todayDateStr())
     fun getTotalCount(): Flow<Int> = dao.count()
+
+    /**
+     * 分页加载全部历史课时（按日期降序、时间降序）。
+     *
+     * 使用 Paging 3 + Room 的 PagingSource 集成：
+     * - 每页默认 30 条，预取距离 15 条（滑动到底部前提前加载下一页）
+     * - Room 自动管理 PagingSource 的失效与重新查询（数据变更时通过 invalidation 回调触发）
+     * - 命中 idx_lessons_date_time_asc 索引的反向扫描，避免全表排序
+     *
+     * 适用场景：
+     * - 历史课时列表页（"滑动到底部再加载下一页"）
+     * - 大数据量场景（5000+ 条记录）下避免一次性加载导致内存峰值与卡顿
+     *
+     * 注意：当前 GrowthScreen 等基于 Flow<List<Lesson>> 的页面未接入此分页接口，
+     * 因为它们需要全量数据做按月分组聚合，强行换 Paging 会破坏分组 UI。
+     * 此接口预留给未来新增的"纯线性历史课时列表"页面使用。
+     *
+     * @return Flow<PagingData<Lesson>>，UI 通过 collectAsLazyPagingItems() 订阅
+     */
+    fun pagedAllLessons(): Flow<PagingData<Lesson>> = Pager(
+        config = PagingConfig(
+            pageSize = 30,
+            prefetchDistance = 15,
+            initialLoadSize = 60,
+            enablePlaceholders = false
+        ),
+        pagingSourceFactory = { dao.pagingAll() }
+    ).flow.map { it.map { lesson -> lesson } }
+
+    /**
+     * 分页加载指定学员的历史课时（按日期降序、时间降序）。
+     *
+     * 命中 idx_lessons_student_date_time 复合索引，避免全表扫描。
+     *
+     * @param name 学员姓名
+     * @return Flow<PagingData<Lesson>>，UI 通过 collectAsLazyPagingItems() 订阅
+     */
+    fun pagedLessonsByStudent(name: String): Flow<PagingData<Lesson>> = Pager(
+        config = PagingConfig(
+            pageSize = 30,
+            prefetchDistance = 15,
+            initialLoadSize = 60,
+            enablePlaceholders = false
+        ),
+        pagingSourceFactory = { dao.pagingByStudent(name) }
+    ).flow.map { it.map { lesson -> lesson } }
 
     /**
      * 查询从指定日期起的所有课时（按日期升序、时间升序）。

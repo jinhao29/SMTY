@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 启动屏背景（深色模式）：纯黑底色，与 NightBackground #FF000000 一致。 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/launch_background_dark" />
+</layer-list>

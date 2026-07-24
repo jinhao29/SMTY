@@ -45,16 +45,20 @@ class BackupRepository(private val context: Context) {
      * 3. 返回结果（备份成功不需要重启 App）
      *
      * @param targetUri 用户通过 SAF 选择的目标文件 Uri
+     * @param onProgress 进度回调（可选，在 IO 线程被调用，调用方负责线程切换）
      * @return 备份结果
      */
-    suspend fun backup(targetUri: Uri): Result = withContext(Dispatchers.IO) {
+    suspend fun backup(
+        targetUri: Uri,
+        onProgress: BackupManager.OnProgress? = null
+    ): Result = withContext(Dispatchers.IO) {
         try {
             val outputStream = BackupManager.openBackupOutputStream(context, targetUri)
             if (outputStream == null) {
                 return@withContext Result(false, "无法访问目标文件，请检查存储权限")
             }
             outputStream.use { os ->
-                val ok = BackupManager.backup(context, os)
+                val ok = BackupManager.backup(context, os, onProgress)
                 if (ok) {
                     Result(true, "备份成功，数据已保存到所选位置")
                 } else {
@@ -77,16 +81,20 @@ class BackupRepository(private val context: Context) {
      * 警告：恢复会覆盖当前所有学员/课时包/排课/签到数据，请用户先确认。
      *
      * @param sourceUri 用户通过 SAF 选择的备份文件 Uri
+     * @param onProgress 进度回调（可选，在 IO 线程被调用，调用方负责线程切换）
      * @return 恢复结果（成功时 needRestart=true）
      */
-    suspend fun restore(sourceUri: Uri): Result = withContext(Dispatchers.IO) {
+    suspend fun restore(
+        sourceUri: Uri,
+        onProgress: BackupManager.OnProgress? = null
+    ): Result = withContext(Dispatchers.IO) {
         try {
             val inputStream = BackupManager.openBackupInputStream(context, sourceUri)
             if (inputStream == null) {
                 return@withContext Result(false, "无法访问备份文件，请检查文件是否存在")
             }
             inputStream.use { ins ->
-                val ok = BackupManager.restore(context, ins)
+                val ok = BackupManager.restore(context, ins, onProgress)
                 if (ok) {
                     Result(
                         success = true,
@@ -99,6 +107,35 @@ class BackupRepository(private val context: Context) {
             }
         } catch (e: Exception) {
             Result(false, "恢复异常：${e.message ?: "未知错误"}")
+        }
+    }
+
+    /**
+     * 执行整库备份到 App 内部缓存文件（用于"恢复前自动安全备份"）。
+     *
+     * 与 [backup] 的区别：目标为 App 内部缓存目录下的临时文件，
+     * 不需要用户通过 SAF 选择，便于在恢复前自动创建安全网。
+     *
+     * @param cacheFile App 内部缓存文件（调用方负责路径管理）
+     * @param onProgress 进度回调
+     * @return 备份结果
+     */
+    suspend fun backupToCache(
+        cacheFile: java.io.File,
+        onProgress: BackupManager.OnProgress? = null
+    ): Result = withContext(Dispatchers.IO) {
+        try {
+            cacheFile.parentFile?.mkdirs()
+            java.io.FileOutputStream(cacheFile).use { fos ->
+                val ok = BackupManager.backup(context, fos, onProgress)
+                if (ok) {
+                    Result(true, "自动安全备份完成")
+                } else {
+                    Result(false, "自动安全备份失败")
+                }
+            }
+        } catch (e: Exception) {
+            Result(false, "自动备份异常：${e.message ?: "未知错误"}")
         }
     }
 }

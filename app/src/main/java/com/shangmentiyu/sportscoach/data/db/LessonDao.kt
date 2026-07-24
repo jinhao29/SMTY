@@ -1,5 +1,6 @@
 package com.shangmentiyu.sportscoach.data.db
 
+import androidx.paging.PagingSource
 import androidx.room.*
 import com.shangmentiyu.sportscoach.data.model.Lesson
 import kotlinx.coroutines.flow.Flow
@@ -8,6 +9,25 @@ import kotlinx.coroutines.flow.Flow
 interface LessonDao {
     @Query("SELECT * FROM lessons ORDER BY date DESC, time DESC")
     fun getAll(): Flow<List<Lesson>>
+
+    /**
+     * 分页查询全部课时（按日期降序、时间降序）。
+     * 用于历史课时列表，配合 Paging 3 实现"滑动到底部再加载下一页"，
+     * 避免一次性加载 5000+ 条记录导致内存峰值与 Compose 重组卡顿。
+     *
+     * 使用 idx_lessons_date_time_asc 索引的反向扫描。
+     */
+    @Query("SELECT * FROM lessons ORDER BY date DESC, time DESC")
+    fun pagingAll(): PagingSource<Int, Lesson>
+
+    /**
+     * 按学员分页查询课时（按日期降序、时间降序）。
+     * 用于学员详情页历史课时列表，避免学员课时记录过多时一次性加载。
+     *
+     * 使用 idx_lessons_student_date_time 索引。
+     */
+    @Query("SELECT * FROM lessons WHERE studentName = :name ORDER BY date DESC, time DESC")
+    fun pagingByStudent(name: String): PagingSource<Int, Lesson>
 
     @Query("SELECT * FROM lessons WHERE studentName = :name ORDER BY date DESC, time DESC")
     fun getByStudent(name: String): Flow<List<Lesson>>

@@ -1,6 +1,7 @@
 package com.shangmentiyu.sportscoach.data.model
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /** 学员实体 */
@@ -19,8 +20,26 @@ data class Student(
     val updatedAt: Long = System.currentTimeMillis()
 )
 
-/** 课堂记录实体 */
-@Entity(tableName = "lessons")
+/**
+ * 课堂记录实体
+ *
+ * 索引设计（v16 引入，覆盖所有高频查询路径）：
+ * - idx_lessons_student_date_time：getByStudent（学员详情历史列表）
+ * - idx_lessons_date：getByDate / countByDate（首页今日课时、统计）
+ * - idx_lessons_date_time_asc：getFrom（学员列表"下一节课"查询）
+ * - idx_lessons_student_date_time_unique：countByStudentDateTime（长期排课查重，唯一索引）
+ * - idx_lessons_student_date_pkg：countUnconsumedFrom（长期排课课时包余额计算）
+ */
+@Entity(
+    tableName = "lessons",
+    indices = [
+        Index(value = ["studentName", "date", "time"], name = "idx_lessons_student_date_time"),
+        Index(value = ["date"], name = "idx_lessons_date"),
+        Index(value = ["date", "time"], name = "idx_lessons_date_time_asc"),
+        Index(value = ["studentName", "date", "time"], name = "idx_lessons_student_date_time_unique", unique = true),
+        Index(value = ["studentName", "date", "packageId"], name = "idx_lessons_student_date_pkg")
+    ]
+)
 data class Lesson(
     @PrimaryKey val id: String,           // UUID前8位
     val date: String,                     // YYYY-MM-DD

@@ -55,6 +55,18 @@ object BackupManager {
     private const val PHOTOS_DIR_NAME = "SignPhotos"
 
     /**
+     * 进度回调签名。
+     *
+     * @param phase 当前阶段标识："prepare" / "db" / "photos" / "zip" / "cleanup" / "done"
+     * @param current 已处理条目数（从 1 开始）
+     * @param total 当前阶段总条目数（未知时为 0）
+     * @param message 可读进度文案，UI 可直接展示
+     */
+    fun interface OnProgress {
+        fun onProgress(phase: String, current: Int, total: Int, message: String)
+    }
+
+    /**
      * 生成默认备份文件名：smty_backup_YYYYMMDD_HHmmss
      *
      * @return 形如 "smty_backup_20260725_143022"
@@ -76,10 +88,16 @@ object BackupManager {
      *
      * @param context 上下文（用于定位数据库文件路径与照片目录）
      * @param outputStream 备份文件的输出流（由调用方负责关闭）
+     * @param onProgress 进度回调（可选，null 表示不回调，由调用方在 IO 线程安全调用）
      * @return true=备份成功；false=备份失败（IO 异常等）
      */
-    fun backup(context: Context, outputStream: OutputStream): Boolean {
+    fun backup(
+        context: Context,
+        outputStream: OutputStream,
+        onProgress: OnProgress? = null
+    ): Boolean {
         // 1. 关闭数据库，触发 WAL checkpoint，确保所有学员/课程数据写入主 db 文件
+        onProgress?.onProgress("prepare", 0, 0, "正在准备数据…")
         AppDatabase.closeAndResetInstance(context)
 
         try {
@@ -90,22 +108,36 @@ object BackupManager {
                     ZIP_ENTRY_DB_WAL to File(context.getDatabasePath(AppDatabase.DATABASE_NAME + "-wal").absolutePath),
                     ZIP_ENTRY_DB_SHM to File(context.getDatabasePath(AppDatabase.DATABASE_NAME + "-shm").absolutePath)
                 )
+                val dbTotal = dbFiles.count { it.second.exists() }
+                var dbDone = 0
                 for ((entryName, file) in dbFiles) {
                     if (file.exists()) {
                         putFileEntry(zos, entryName, file)
+                        dbDone++
+                        onProgress?.onProgress(
+                            "db", dbDone, dbTotal,
+                            "正在备份数据库文件（$dbDone/$dbTotal）"
+                        )
                     }
                 }
 
                 // 3. 写入签到照片目录
                 val photosDir = File(context.filesDir, PHOTOS_DIR_NAME)
                 if (photosDir.exists() && photosDir.isDirectory) {
-                    photosDir.listFiles()?.forEach { photoFile ->
-                        if (photoFile.isFile) {
-                            putFileEntry(zos, ZIP_ENTRY_PHOTOS_DIR + photoFile.name, photoFile)
-                        }
+                    val photos = photosDir.listFiles()?.filter { it.isFile } ?: emptyList()
+                    val total = photos.size
+                    photos.forEachIndexed { idx, photoFile ->
+                        putFileEntry(zos, ZIP_ENTRY_PHOTOS_DIR + photoFile.name, photoFile)
+                        onProgress?.onProgress(
+                            "photos", idx + 1, total,
+                            "正在备份签到照片（${idx + 1}/$total）"
+                        )
                     }
                 }
+
+                onProgress?.onProgress("zip", 0, 0, "正在压缩备份文件…")
             }
+            onProgress?.onProgress("done", 0, 0, "备份完成")
             return true
         } catch (e: Exception) {
             return false
@@ -129,14 +161,21 @@ object BackupManager {
      *
      * @param context 上下文（用于定位数据库文件路径与照片目录）
      * @param inputStream 备份文件的输入流（由调用方负责关闭）
+     * @param onProgress 进度回调（可选，null 表示不回调）
      * @return true=恢复成功；false=恢复失败（IO 异常、备份格式错误等）
      */
-    fun restore(context: Context, inputStream: InputStream): Boolean {
+    fun restore(
+        context: Context,
+        inputStream: InputStream,
+        onProgress: OnProgress? = null
+    ): Boolean {
         // 1. 关闭数据库，释放文件锁
+        onProgress?.onProgress("prepare", 0, 0, "正在准备恢复…")
         AppDatabase.closeAndResetInstance(context)
 
         try {
             // 2. 清空当前数据库文件（避免恢复后残留旧数据）
+            onProgress?.onProgress("cleanup", 0, 0, "正在清理旧数据…")
             listOf("", "-wal", "-shm").forEach { suffix ->
                 val file = context.getDatabasePath(AppDatabase.DATABASE_NAME + suffix)
                 if (file.exists()) {
@@ -150,26 +189,32 @@ object BackupManager {
                 photosDir.listFiles()?.forEach { it.delete() }
             }
 
-            // 4. 从 ZIP 解包
+            // 4. 单次扫描 ZIP，按条目索引回报进度（total=0 表示未知）
+            onProgress?.onProgress("extract", 0, 0, "正在恢复数据…")
+            var entryIdx = 0
             ZipInputStream(inputStream).use { zis ->
                 var entry = zis.nextEntry
                 while (entry != null) {
+                    entryIdx++
                     when {
                         // 数据库文件
                         entry.name == ZIP_ENTRY_DB -> {
                             val target = context.getDatabasePath(AppDatabase.DATABASE_NAME)
                             target.parentFile?.mkdirs()
                             extractFile(zis, target)
+                            onProgress?.onProgress("extract", entryIdx, 0, "已恢复数据库主文件")
                         }
                         // WAL 日志
                         entry.name == ZIP_ENTRY_DB_WAL -> {
                             val target = context.getDatabasePath(AppDatabase.DATABASE_NAME + "-wal")
                             extractFile(zis, target)
+                            onProgress?.onProgress("extract", entryIdx, 0, "已恢复 WAL 日志")
                         }
                         // 共享内存
                         entry.name == ZIP_ENTRY_DB_SHM -> {
                             val target = context.getDatabasePath(AppDatabase.DATABASE_NAME + "-shm")
                             extractFile(zis, target)
+                            onProgress?.onProgress("extract", entryIdx, 0, "已恢复 SHM 内存")
                         }
                         // 签到照片
                         entry.name.startsWith(ZIP_ENTRY_PHOTOS_DIR) -> {
@@ -178,6 +223,10 @@ object BackupManager {
                                 val target = File(context.filesDir, "$PHOTOS_DIR_NAME/$photoName")
                                 target.parentFile?.mkdirs()
                                 extractFile(zis, target)
+                                onProgress?.onProgress(
+                                    "extract", entryIdx, 0,
+                                    "正在恢复签到照片（第 $entryIdx 项）"
+                                )
                             }
                         }
                     }
@@ -185,6 +234,7 @@ object BackupManager {
                     entry = zis.nextEntry
                 }
             }
+            onProgress?.onProgress("done", entryIdx, entryIdx, "恢复完成")
             return true
         } catch (e: Exception) {
             return false

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 启动屏底色：明亮模式白色，与 appBackground() 保持一致 -->
+    <color name="launch_background_light">#FFFFFFFF</color>
+    <!-- 启动屏底色：深色模式纯黑，与 NightBackground 保持一致 -->
+    <color name="launch_background_dark">#FF000000</color>
+</resources>

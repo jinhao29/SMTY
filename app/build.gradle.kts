@@ -81,6 +81,9 @@ dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    // lifecycle-process：提供 ProcessLifecycleOwner，用于监听应用前后台生命周期
+    // 启动优化时用它把 WorkManager 初始化延迟到应用前台，避免冷启动阻塞首帧
+    implementation("androidx.lifecycle:lifecycle-process:2.8.7")
     implementation("androidx.activity:activity-compose:1.9.3")
 
     // Compose
@@ -94,7 +97,13 @@ dependencies {
     // Room 数据库（2.7.1 原生支持 KSP2，解决 Kotlin 2.2.10 + KSP 2.3.2 兼容性问题）
     implementation("androidx.room:room-runtime:2.7.1")
     implementation("androidx.room:room-ktx:2.7.1")
+    // room-paging：Room 与 Paging 3 集成，自动处理分页查询
+    implementation("androidx.room:room-paging:2.7.1")
     ksp("androidx.room:room-compiler:2.7.1")
+
+    // Paging 3：分页加载历史课时列表，避免一次性加载 5000+ 条记录导致内存峰值与卡顿
+    implementation("androidx.paging:paging-runtime-ktx:3.3.5")
+    implementation("androidx.paging:paging-compose:3.3.5")
 
     // 数据存储
     implementation("androidx.datastore:datastore-preferences:1.1.1")

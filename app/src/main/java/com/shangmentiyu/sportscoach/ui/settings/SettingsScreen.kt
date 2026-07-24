@@ -96,6 +96,7 @@ fun SettingsScreen() {
     val totalCount by vm.totalCount.collectAsState()
     val statusMessage by vm.statusMessage.collectAsState()
     val backupInProgress by vm.backupInProgress.collectAsState()
+    val backupProgress by vm.backupProgress.collectAsState()
     val needRestart by vm.needRestart.collectAsState()
 
     // 检查更新协程作用域：用于同步检查更新的协程启动
@@ -335,8 +336,15 @@ fun SettingsScreen() {
                                 }
                             }
                         )
-                        // 备份/恢复进行中时显示加载动画
+                        // 备份/恢复进行中时显示加载动画与具体进度文案
                         if (backupInProgress) {
+                            val progressMsg = when (val p = backupProgress) {
+                                is SettingsViewModel.BackupProgress.Working -> {
+                                    if (p.total > 0) "${p.message}（${p.current}/${p.total}）"
+                                    else p.message
+                                }
+                                else -> "正在处理，请稍候…"
+                            }
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -350,7 +358,7 @@ fun SettingsScreen() {
                                     color = MaterialTheme.colorScheme.primary
                                 )
                                 Text(
-                                    "正在处理，请稍候…",
+                                    progressMsg,
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                                 )

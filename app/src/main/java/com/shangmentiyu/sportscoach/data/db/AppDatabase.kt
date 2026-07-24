@@ -19,7 +19,7 @@ import com.shangmentiyu.sportscoach.data.model.TrainingCycle
 
 @Database(
     entities = [Student::class, Lesson::class, LessonPackage::class, Coach::class, Schedule::class, ParentReport::class, TrainingCycle::class, BodyMetricHistory::class, ScheduleMemory::class],
-    version = 15,
+    version = 16,
     exportSchema = false
 )
 @TypeConverters(com.shangmentiyu.sportscoach.data.model.Converters::class)
@@ -205,6 +205,29 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v15 → v16：lessons 表新增 5 个索引，覆盖所有高频查询路径。
+         *
+         * 索引设计依据（按查询频率从高到低）：
+         * - idx_lessons_date：首页今日课时、统计计数（最高频）
+         * - idx_lessons_student_date_time：学员详情历史列表
+         * - idx_lessons_date_time_asc：学员列表"下一节课"查询
+         * - idx_lessons_student_date_time_unique：长期排课查重（唯一索引，防重复插入）
+         * - idx_lessons_student_date_pkg：长期排课课时包余额计算
+         *
+         * 全部使用 IF NOT EXISTS，确保重复迁移不会报错。
+         * 不修改任何表结构，不删除任何数据，仅加速查询。
+         */
+        private val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS idx_lessons_student_date_time ON lessons(studentName, date, time)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS idx_lessons_date ON lessons(date)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS idx_lessons_date_time_asc ON lessons(date, time)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS idx_lessons_student_date_time_unique ON lessons(studentName, date, time)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS idx_lessons_student_date_pkg ON lessons(studentName, date, packageId)")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -212,7 +235,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "sports_coach_db"
                 )
-                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15)
+                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16)
                     // 仅在降级（用户从高版本回滚到低版本）时清库重建；
                     // 升级路径必须通过显式 Migration 完成，避免迁移失败时误删学员数据。
                     .fallbackToDestructiveMigrationOnDowngrade()

@@ -5,5 +5,8 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowLightNavigationBar">true</item>
+        <!-- 启动屏背景：消除冷启动白屏，与 appBackground() 色值无缝衔接。
+             视觉效果不变，只是把系统默认白底替换为品牌底色。 -->
+        <item name="android:windowBackground">@drawable/launch_screen</item>
     </style>
 </resources>

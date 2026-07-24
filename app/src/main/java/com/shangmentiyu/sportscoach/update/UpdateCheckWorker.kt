@@ -44,6 +44,10 @@ class UpdateCheckWorker(
                     // 2. 有新版本，发送下载中通知
                     createNotificationChannel()
                     showDownloadingNotification(updateResult.tagName)
+                    // 同步推送 UI 进度总线：App 在前台时立即显示下载进度浮层
+                    UpdateProgressBus.emit(
+                        UpdateProgressBus.UpdateProgress.Downloading(0, updateResult.tagName)
+                    )
 
                     // 3. 下载 APK（带进度回调）
                     val apkFile = UpdateInstaller.getApkFile(applicationContext)
@@ -52,16 +56,28 @@ class UpdateCheckWorker(
                         destFile = apkFile,
                         onProgress = { progress ->
                             updateDownloadingProgress(progress)
+                            // 同步 UI 进度总线：每次进度回调都推送，UI 实时刷新
+                            UpdateProgressBus.emit(
+                                UpdateProgressBus.UpdateProgress.Downloading(progress, updateResult.tagName)
+                            )
                         }
                     )
 
                     if (success) {
                         // 4. 下载完成，发送可安装通知
                         showReadyNotification(updateResult.tagName)
+                        // 同步 UI 进度总线：UI 据此隐藏进度浮层并触发安装
+                        UpdateProgressBus.emit(
+                            UpdateProgressBus.UpdateProgress.Done(updateResult.tagName)
+                        )
                         Result.success()
                     } else {
                         // 下载失败
                         showFailedNotification()
+                        // 同步 UI 进度总线：UI 据此展示失败消息
+                        UpdateProgressBus.emit(
+                            UpdateProgressBus.UpdateProgress.Failed("下载失败，将在下次自动重试")
+                        )
                         Result.retry()
                     }
                 }
@@ -71,6 +87,9 @@ class UpdateCheckWorker(
                 }
             }
         } catch (e: Exception) {
+            UpdateProgressBus.emit(
+                UpdateProgressBus.UpdateProgress.Failed(e.message ?: "更新检查异常")
+            )
             Result.retry()
         }
     }
