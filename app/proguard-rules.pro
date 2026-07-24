@@ -11,6 +11,12 @@
 -dontwarn org.apache.poi.**
 -dontwarn org.apache.xmlbeans.**
 -dontwarn org.openxmlformats.**
+# POI 传递依赖中可能缺失的注解类（仅编译期使用，运行时不需要）
+-dontwarn aQute.bnd.annotation.**
+-dontwarn org.apache.logging.log4j.**
+-dontwarn javax.annotation.**
+-dontwarn org.antlr.**
+-dontwarn org.objenesis.**
 
 # ---------- Room 数据库（实体与 DAO 实现由 KSP 生成，需保留） ----------
 -keep class * extends androidx.room.RoomDatabase { *; }
