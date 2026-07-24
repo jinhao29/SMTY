@@ -9,6 +9,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # 授予 GITHUB_TOKEN 写入权限（创建 Release 和上传资源必需）
+    permissions:
+      contents: write
 
     steps:
       - name: 检出代码
