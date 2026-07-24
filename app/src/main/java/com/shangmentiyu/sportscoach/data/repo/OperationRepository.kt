@@ -245,6 +245,47 @@ class OperationRepository(
     }
 
     /**
+     * 一次性获取学员所有活跃课时包（非 Flow，用于长期排课批量计算）。
+     *
+     * 活跃判定：status == "活跃" && !isExhausted && !isExpired
+     * 注意：此处不过滤 purchaseDate / expireDate，由调用方按日期判断是否生效，
+     * 因为同一学员可能在排课周内中途新增课时包（如周一买的课周五才生效）。
+     *
+     * @param studentName 学员姓名
+     * @return 活跃课时包列表（按购买日期升序）
+     */
+    suspend fun getActivePackagesByStudent(studentName: String): List<LessonPackage> {
+        return pkgDao.getByStudent(studentName).first()
+            .filter { it.status == "活跃" && !it.isExhausted && !it.isExpired }
+            .sortedBy { it.purchaseDate }
+    }
+
+    /**
+     * 计算学员在指定日期"有效"的课时包剩余总课时。
+     *
+     * 有效判定（同时满足）：
+     * - status == "活跃" && !isExhausted && !isExpired
+     * - purchaseDate <= dateStr（购买日期不晚于排课日期）
+     * - expireDate 为空 OR expireDate >= dateStr（未过期）
+     *
+     * 这是长期排课"按课时包日期范围排课"的核心：
+     * 学员 24 号买的课，21 号排课时 effectiveRemaining = 0，自动跳过；
+     * 25 号排课时 effectiveRemaining = 课时包剩余，正常生成。
+     *
+     * @param studentName 学员姓名
+     * @param dateStr 待排课日期 YYYY-MM-DD
+     * @return 该日期有效课时包的剩余总课时
+     */
+    suspend fun getEffectiveRemainingLessons(studentName: String, dateStr: String): Int {
+        return getActivePackagesByStudent(studentName)
+            .filter { pkg ->
+                pkg.purchaseDate <= dateStr &&
+                    (pkg.expireDate.isBlank() || pkg.expireDate >= dateStr)
+            }
+            .sumOf { it.remainingLessons }
+    }
+
+    /**
      * 根据长期排课 Schedule 生成一条课时记录（Lesson）。
      *
      * 约定：

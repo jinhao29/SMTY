@@ -2,6 +2,7 @@ package com.shangmentiyu.sportscoach.ui.schedule
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -22,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
@@ -99,6 +102,13 @@ fun ScheduleScreen(
     var isCreate by remember { mutableStateOf(true) }
     var prefillDay by remember { mutableStateOf<Int?>(null) }
     var showClearAllDialog by remember { mutableStateOf(false) }
+
+    // 长按课程卡片弹出"修改/删除"操作菜单
+    // 用户需求：周课表支持指定某一天课表某一节课的修改删除
+    // 点击 = 进入编辑；长按 = 弹出操作菜单（修改 / 删除该节课）
+    var actionTargetSchedule by remember { mutableStateOf<Schedule?>(null) }
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+    var pendingDeleteSchedule by remember { mutableStateOf<Schedule?>(null) }
 
     val dateFmt = remember { SimpleDateFormat("MM-dd", Locale.getDefault()) }
     val weekFmt = remember { SimpleDateFormat("yyyy年MM月dd日", Locale.getDefault()) }
@@ -198,10 +208,15 @@ fun ScheduleScreen(
                         dateLabel = dateFmt.format(date),
                         daySchedules = daySchedules,
                         onScheduleClick = { s ->
+                            // 点击 = 进入编辑（保留原行为）
                             isCreate = false
                             prefillDay = null
                             vm.startEdit(s.id)
                             showEditDialog = true
+                        },
+                        onScheduleLongClick = { s ->
+                            // 长按 = 弹出操作菜单（修改 / 删除该节课）
+                            actionTargetSchedule = s
                         },
                         onAddNew = {
                             isCreate = true
@@ -213,6 +228,149 @@ fun ScheduleScreen(
                 }
             }
         }
+    }
+
+    // 长按课程卡片弹出的操作菜单（修改 / 删除该节课）
+    // 用户需求：周课表支持指定某一天课表某一节课的修改删除
+    actionTargetSchedule?.let { target ->
+        AlertDialog(
+            onDismissRequest = { actionTargetSchedule = null },
+            title = {
+                Text(
+                    "课程操作",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        "学员：${target.studentName}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        "时间：${target.startTime}" +
+                            if (target.lessonType.isNotBlank()) " · ${target.lessonType}" else "",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                    if (target.location.isNotBlank()) {
+                        Text(
+                            "地点：${target.location}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+                    Spacer(Modifier.height(Spacing.sm))
+                    Text(
+                        "请选择操作",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        // 修改：进入编辑对话框
+                        val s = target
+                        actionTargetSchedule = null
+                        isCreate = false
+                        prefillDay = null
+                        vm.startEdit(s.id)
+                        showEditDialog = true
+                    }
+                ) {
+                    Icon(
+                        Icons.Filled.Edit,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(Spacing.xs))
+                    Text("修改")
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(
+                        onClick = {
+                            // 删除：弹出二次确认
+                            pendingDeleteSchedule = target
+                            actionTargetSchedule = null
+                            showDeleteConfirmDialog = true
+                        }
+                    ) {
+                        Icon(
+                            Icons.Filled.DeleteSweep,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(Modifier.width(Spacing.xs))
+                        Text(
+                            "删除",
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                    TextButton(onClick = { actionTargetSchedule = null }) {
+                        Text("取消")
+                    }
+                }
+            }
+        )
+    }
+
+    // 删除课程二次确认对话框
+    // 避免长按误触导致课程被直接删除
+    if (showDeleteConfirmDialog && pendingDeleteSchedule != null) {
+        val toDelete = pendingDeleteSchedule!!
+        AlertDialog(
+            onDismissRequest = {
+                showDeleteConfirmDialog = false
+                pendingDeleteSchedule = null
+            },
+            title = {
+                Text(
+                    "删除课程",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    buildString {
+                        append("确认删除以下课程吗？\n\n")
+                        append("学员：${toDelete.studentName}\n")
+                        append("时间：${toDelete.startTime}")
+                        if (toDelete.lessonType.isNotBlank()) {
+                            append(" · ${toDelete.lessonType}")
+                        }
+                        append("\n\n此操作不可撤销。")
+                    }
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        vm.deleteSchedule(toDelete.id)
+                        showDeleteConfirmDialog = false
+                        pendingDeleteSchedule = null
+                    }
+                ) {
+                    Text(
+                        "删除",
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showDeleteConfirmDialog = false
+                    pendingDeleteSchedule = null
+                }) {
+                    Text("取消")
+                }
+            }
+        )
     }
 
     // 编辑/新建对话框
@@ -270,7 +428,8 @@ fun ScheduleScreen(
  * @param dayName 周几文本（如 "周一"）
  * @param dateLabel 日期文本（如 "03-04"）
  * @param daySchedules 当天所有课程（按时间升序）
- * @param onScheduleClick 点击课程卡片
+ * @param onScheduleClick 点击课程卡片（进入编辑）
+ * @param onScheduleLongClick 长按课程卡片（弹出修改/删除菜单）
  * @param onAddNew 点击新增
  */
 @Composable
@@ -279,6 +438,7 @@ private fun DayColumn(
     dateLabel: String,
     daySchedules: List<Schedule>,
     onScheduleClick: (Schedule) -> Unit,
+    onScheduleLongClick: (Schedule) -> Unit,
     onAddNew: () -> Unit
 ) {
     Column(
@@ -337,7 +497,8 @@ private fun DayColumn(
                 items(daySchedules, key = { it.id }) { s ->
                     ScheduleBlock(
                         schedule = s,
-                        onClick = { onScheduleClick(s) }
+                        onClick = { onScheduleClick(s) },
+                        onLongClick = { onScheduleLongClick(s) }
                     )
                 }
             }
@@ -375,13 +536,20 @@ private fun DayColumn(
 /**
  * 单个课程方块：左侧色条 + 时间 + 学员 + 地点。
  *
+ * 交互：
+ * - 点击：进入编辑（[onClick]）
+ * - 长按：弹出操作菜单（[onLongClick]），用于"修改/删除该节课"
+ *
  * @param schedule 课程数据
  * @param onClick 点击回调
+ * @param onLongClick 长按回调
  */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun ScheduleBlock(
     schedule: Schedule,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
     val accentColor = scheduleColor(schedule.color)
     val inactiveAlpha = if (schedule.isActive) 1f else 0.45f
@@ -391,7 +559,10 @@ private fun ScheduleBlock(
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(MaterialTheme.colorScheme.background.copy(alpha = inactiveAlpha))
-            .clickable(onClick = onClick)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
             .padding(end = 6.dp),
         verticalAlignment = Alignment.Top
     ) {

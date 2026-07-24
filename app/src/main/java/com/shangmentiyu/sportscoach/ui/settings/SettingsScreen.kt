@@ -57,7 +57,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
 import com.shangmentiyu.sportscoach.update.UpdateManager
+import com.shangmentiyu.sportscoach.update.UpdateResult
 import com.shangmentiyu.sportscoach.BuildConfig
+import kotlinx.coroutines.launch
 import com.shangmentiyu.sportscoach.ui.theme.FeatureIconBlue
 import com.shangmentiyu.sportscoach.ui.theme.FeatureIconGreen
 import com.shangmentiyu.sportscoach.ui.theme.FeatureIconOrange
@@ -90,6 +92,9 @@ fun SettingsScreen() {
     val todayCount by vm.todayCount.collectAsState()
     val totalCount by vm.totalCount.collectAsState()
     val statusMessage by vm.statusMessage.collectAsState()
+
+    // 检查更新协程作用域：用于同步检查更新的协程启动
+    val checkScope = androidx.compose.runtime.rememberCoroutineScope()
 
     // 教练编辑对话框状态
     var showCoachDialog by remember { mutableStateOf(false) }
@@ -272,11 +277,29 @@ fun SettingsScreen() {
                             iconBgColor = FeatureIconGreen,
                             iconContentDescription = "检查更新",
                             title = "检查更新",
-                            subtitle = "当前版本 v${BuildConfig.VERSION_NAME} · 点击检查新版本",
+                            subtitle = "当前版本 v${BuildConfig.VERSION_NAME} · 点击立即检查",
                             showTopDivider = false,
                             onClick = {
-                                UpdateManager.checkNow(context)
-                                vm.updateStatus("正在后台检查更新，结果将以通知形式推送…")
+                                // 同步检查：直接调用 UpdateChecker，立即显示结果，
+                                // 失败时携带 HTTP 状态码等错误信息，便于诊断
+                                // （如私有仓库 404、网络异常等）
+                                vm.updateStatus("正在检查更新…")
+                                checkScope.launch {
+                                    val result = UpdateManager.checkNowSync()
+                                    val msg = when (result) {
+                                        is UpdateResult.UpToDate ->
+                                            "已是最新版本 (v${BuildConfig.VERSION_NAME})"
+                                        is UpdateResult.NewVersionAvailable ->
+                                            "发现新版本 ${result.tagName}，正在后台下载，下载完成后会弹出通知"
+                                        is UpdateResult.Error ->
+                                            "检查失败：${result.message}"
+                                    }
+                                    vm.updateStatus(msg)
+                                    // 若有新版本，触发后台下载（沿用原 WorkManager 流程）
+                                    if (result is UpdateResult.NewVersionAvailable) {
+                                        UpdateManager.checkNow(context)
+                                    }
+                                }
                             }
                         )
                         SettingsActionRow(

@@ -190,7 +190,10 @@ class OperationViewModel(
      * - 仅对本周（_weekStart 起算 7 天内）的每个长期排课生成一次
      * - 同一学员+同一日期+同一 startTime 已存在 Lesson 时跳过，避免重复
      * - 自动生成的 Lesson 标记 lessonType = "长期自动"，便于区分手动签到
-     * - 关联课时包余额：学员剩余课时包余额 > 未来未消课课时数时才生成，
+     * - 关联课时包日期范围：仅当学员在 dateStr 当天有"有效课时包"
+     *   （purchaseDate <= dateStr <= expireDate）时才排课，
+     *   避免学员 24 号买的课在 21 号就被排课
+     * - 关联课时包余额：有效课时包剩余 > 从 dateStr 起未消课课时数时才生成，
      *   确保排课精确到最后一节课，余额用完后停止生成
      */
     fun ensureLongTermLessonsForWeek() {
@@ -206,9 +209,11 @@ class OperationViewModel(
             }
             val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
             val todayStr = sdf.format(cal.time)
-            // 学员可用课时缓存：remaining(余额) - pending(已存在未消课) - generated(本次新生成)
-            // 初始化时查询一次，之后每生成一节课 generated+1，避免重复查询数据库
-            val remainingMap = mutableMapOf<String, Int>()
+
+            // 学员活跃课时包缓存：一次性查出，避免在循环内重复查库
+            // key = 学员姓名，value = 该学员所有活跃课时包列表（已按 purchaseDate 升序）
+            val activePackagesCache = mutableMapOf<String, List<com.shangmentiyu.sportscoach.data.model.LessonPackage>>()
+
             // 遍历本周 7 天
             for (offset in 0..6) {
                 val dayCal = Calendar.getInstance().apply {
@@ -222,19 +227,27 @@ class OperationViewModel(
                     if (opRepo.hasLessonForScheduleOnDate(sched.studentName, dateStr, sched.startTime)) {
                         return@forEach
                     }
-                    // 余额检查：仅对今天及以后的日期检查（过去日期不消耗未来余额）
+                    // 余额检查：仅对今天及以后的日期检查
+                    // 过去日期即使没买课也保留已排课记录（历史数据不回溯删除）
                     if (dateStr >= todayStr) {
-                        val available = remainingMap.getOrPut(sched.studentName) {
-                            val summary = opRepo.getRemainingSummary(sched.studentName)
-                            val pending = opRepo.countUnconsumedLessonsFrom(sched.studentName, todayStr)
-                            summary.totalRemaining - pending
+                        // 取该学员所有活跃课时包（缓存）
+                        val activePkgs = activePackagesCache.getOrPut(sched.studentName) {
+                            opRepo.getActivePackagesByStudent(sched.studentName)
                         }
+                        // 过滤出在 dateStr 当天生效的课时包
+                        // 条件：purchaseDate <= dateStr 且（expireDate 为空或 expireDate >= dateStr）
+                        val effectivePkgs = activePkgs.filter { pkg ->
+                            pkg.purchaseDate <= dateStr &&
+                                (pkg.expireDate.isBlank() || pkg.expireDate >= dateStr)
+                        }
+                        val effectiveRemaining = effectivePkgs.sumOf { it.remainingLessons }
+                        // 从 dateStr 起未消课的课时数（含本次循环中已生成的，因 generate 后会写入 DB）
+                        val pending = opRepo.countUnconsumedLessonsFrom(sched.studentName, dateStr)
+                        val available = effectiveRemaining - pending
                         if (available <= 0) {
-                            // 余额已用完，跳过此学员的后续排课
+                            // 当天无有效课时包或余额已用完，跳过
                             return@forEach
                         }
-                        // 生成后扣减可用额度
-                        remainingMap[sched.studentName] = available - 1
                     }
                     opRepo.generateLongTermLesson(sched, dateStr)
                 }

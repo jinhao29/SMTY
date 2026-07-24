@@ -58,11 +58,11 @@ object UpdateManager {
     }
 
     /**
-     * 立即执行一次更新检查。
+     * 立即执行一次更新检查（后台异步，无返回值）。
      *
      * 适用场景：
      * - 应用首次启动
-     * - 用户点击"检查更新"按钮
+     * - 用户点击"检查更新"按钮（旧版，无反馈）
      *
      * @param context 上下文
      */
@@ -81,6 +81,21 @@ object UpdateManager {
             oneShotRequest
         )
     }
+
+    /**
+     * 同步检查更新（挂起函数，直接返回检查结果）。
+     *
+     * 适用场景：
+     * - 设置页"检查更新"按钮：用户点击后立即看到结果（成功/失败/已是最新）
+     * - 失败时携带详细错误信息（HTTP 状态码、网络异常等），便于诊断
+     *
+     * 与 [checkNow] 区别：
+     * - checkNow 投递到 WorkManager 后台执行，无返回值，仅通过通知反馈
+     * - checkNowSync 直接在调用协程中执行，立即返回 UpdateResult
+     *
+     * @return 更新检查结果
+     */
+    suspend fun checkNowSync(): UpdateResult = UpdateChecker.checkForUpdate()
 
     /**
      * 手动触发安装（用户点击"检查更新"且 APK 已下载时调用）。

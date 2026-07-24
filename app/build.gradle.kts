@@ -1,16 +1,8 @@
-import java.util.Properties
-
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
-}
-
-// 读取 local.properties（包含 GITHUB_TOKEN 等本地配置，已在 .gitignore 中）
-val localProps = Properties().apply {
-    val f = rootProject.file("local.properties")
-    if (f.exists()) f.inputStream().use { load(it) }
 }
 
 android {
@@ -28,14 +20,7 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
-
-        // 注入 GitHub Token 到 BuildConfig，用于 App 运行时访问私有仓库的 Release 信息
-        // Token 从 local.properties 读取，不会进入 Git 仓库
-        buildConfigField(
-            "String",
-            "GITHUB_TOKEN",
-            "\"${localProps.getProperty("GITHUB_TOKEN", "")}\""
-        )
+        // 仓库已改为 public，自动更新无需任何 Token
     }
 
     buildTypes {
@@ -66,7 +51,7 @@ android {
 
     buildFeatures {
         compose = true
-        // 启用 BuildConfig 生成，使 BuildConfig.GITHUB_TOKEN 可用
+        // 启用 BuildConfig 生成，使 BuildConfig.VERSION_NAME 等字段可用
         buildConfig = true
     }
 

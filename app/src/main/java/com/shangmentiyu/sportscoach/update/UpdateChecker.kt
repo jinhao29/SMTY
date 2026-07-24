@@ -4,7 +4,6 @@ import com.google.gson.Gson
 import com.shangmentiyu.sportscoach.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
@@ -21,10 +20,10 @@ import java.util.concurrent.TimeUnit
  *
  * 使用 OkHttp + Gson，所有网络操作在 IO 线程执行。
  *
- * 修复要点：
- * - 添加 User-Agent 头（GitHub API 必需，缺失返回 403）
- * - 通过 Interceptor 在所有请求（含重定向）上附加 Authorization 头，
- *   解决私有仓库 APK 下载跨域重定向导致的 401 问题
+ * 设计说明：
+ * - 仓库已改为 public，无需任何认证 Token
+ * - 仅需 User-Agent 头（GitHub API 强制要求，缺失返回 403）
+ * - 下载链路为公开的 objects.githubusercontent.com，匿名访问即可
  */
 object UpdateChecker {
 
@@ -38,41 +37,23 @@ object UpdateChecker {
     private const val API_LATEST_RELEASE =
         "https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/releases/latest"
 
-    /** User-Agent 标识（GitHub API 要求所有请求携带） */
+    /** User-Agent 标识（GitHub API 要求所有请求携带，缺失返回 403） */
     private const val USER_AGENT = "SMTY-Android-App/${BuildConfig.VERSION_NAME}"
 
-    /**
-     * 认证拦截器：为所有请求（含重定向到 objects.githubusercontent.com 的下载请求）
-     * 附加 Authorization 和 User-Agent 头。
-     *
-     * 这是修复私有仓库 APK 下载失败的关键：
-     * GitHub Release 的 browser_download_url 会 302 重定向到
-     * objects.githubusercontent.com，OkHttp 默认不在跨域重定向时带 Authorization，
-     * 导致重定向请求返回 401。本拦截器确保每个请求都带认证。
-     */
-    private val authInterceptor = Interceptor { chain ->
-        val original = chain.request()
-        val builder = original.newBuilder()
-            .header("User-Agent", USER_AGENT)
-        // 仅当请求目标为 github.com 或 objects.githubusercontent.com 时附加 Token
-        val host = original.url.host
-        if (host == "api.github.com" || host == "github.com" ||
-            host == "objects.githubusercontent.com" || host.endsWith(".githubusercontent.com")
-        ) {
-            builder.header("Authorization", "token ${BuildConfig.GITHUB_TOKEN}")
-            builder.header("Accept", "application/octet-stream")
-        }
-        chain.proceed(builder.build())
-    }
-
-    /** OkHttp 客户端（带超时配置 + 认证拦截器） */
+    /** OkHttp 客户端（带超时配置 + User-Agent 拦截器） */
     private val httpClient by lazy {
         OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
-            .followRedirects(true)          // 自动跟随重定向
+            .followRedirects(true)          // 自动跟随重定向到 CDN
             .followSslRedirects(true)
-            .addInterceptor(authInterceptor) // 所有请求都附加认证头
+            .addInterceptor { chain ->
+                // 为所有请求附加 User-Agent（GitHub API 强制要求）
+                val req = chain.request().newBuilder()
+                    .header("User-Agent", USER_AGENT)
+                    .build()
+                chain.proceed(req)
+            }
             .build()
     }
 
@@ -108,11 +89,6 @@ object UpdateChecker {
      */
     suspend fun checkForUpdate(): UpdateResult = withContext(Dispatchers.IO) {
         try {
-            // Token 为空时直接报错（避免 403 误判）
-            if (BuildConfig.GITHUB_TOKEN.isBlank()) {
-                return@withContext UpdateResult.Error("GITHUB_TOKEN 未配置")
-            }
-
             val request = Request.Builder()
                 .url(API_LATEST_RELEASE)
                 .header("Accept", "application/vnd.github+json")
@@ -143,9 +119,6 @@ object UpdateChecker {
                 }
 
                 // 版本比较：语义化版本比较（serverVersion > localVersion 才提示更新）
-                // 修复原逻辑仅做字符串相等比较的问题：
-                // 1. 避免本地版本更高时仍误报更新
-                // 2. 正确处理 "1.0.10" > "1.0.9"（字符串比较会得到相反结果）
                 val serverVersion = release.tagName.removePrefix("v").trim()
                 val localVersion = BuildConfig.VERSION_NAME.trim()
                 if (compareVersions(serverVersion, localVersion) > 0) {
@@ -166,8 +139,7 @@ object UpdateChecker {
     /**
      * 下载 APK 文件到指定目录。
      *
-     * 认证由 authInterceptor 统一处理，重定向到 objects.githubusercontent.com
-     * 时也会自动附加 Authorization 头。
+     * 公开仓库的下载链路无需认证，OkHttp 自动跟随重定向到 CDN。
      *
      * @param downloadUrl APK 下载直链
      * @param destFile 目标文件
