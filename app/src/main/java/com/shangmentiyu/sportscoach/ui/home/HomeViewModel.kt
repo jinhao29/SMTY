@@ -8,6 +8,7 @@ import com.shangmentiyu.sportscoach.data.model.Lesson
 import com.shangmentiyu.sportscoach.data.model.Student
 import com.shangmentiyu.sportscoach.data.repo.LessonRepository
 import com.shangmentiyu.sportscoach.data.repo.OperationRepository
+import com.shangmentiyu.sportscoach.data.repo.SettingsRepository
 import com.shangmentiyu.sportscoach.data.repo.StudentRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -42,8 +43,299 @@ class HomeViewModel(
     private val studentRepo: StudentRepository,
     private val lessonRepo: LessonRepository,
     private val opRepo: OperationRepository,
-    private val db: AppDatabase
+    private val db: AppDatabase,
+    private val settingsRepo: SettingsRepository? = null,
+    /**
+     * === v5 新增：精彩瞬间上传器（手机→PC 双向传输） ===
+     * 由 [com.shangmentiyu.sportscoach.ui.AppViewModelFactory] 注入。
+     * null 时调用 [uploadMoment] 直接返回失败，不影响应用启动。
+     */
+    private val momentUploader: com.shangmentiyu.sportscoach.core.MomentUploader? = null,
+    /**
+     * === v5 新增：备份仓储（用于"同步横幅"一键同步触发） ===
+     * 由 [com.shangmentiyu.sportscoach.ui.AppViewModelFactory] 注入。
+     * null 时调用 [triggerBackupSync] 直接返回失败，不影响应用启动。
+     */
+    private val backupRepo: com.shangmentiyu.sportscoach.data.repo.BackupRepository? = null,
+    /**
+     * === v5 新增：Application 上下文（用于触发同步时获取 cacheDir） ===
+     * 由 [com.shangmentiyu.sportscoach.ui.AppViewModelFactory] 注入。
+     * 不用于业务逻辑，仅用于生成临时备份文件路径。
+     */
+    private val app: android.app.Application? = null
 ) : ViewModel() {
+
+    // === 修复：将 _toast 与 appExceptionHandler 提前到 init 块之前 ===
+    // 原因：Kotlin 按声明顺序初始化，init 块在第 48 行调用 safeLaunch 时，
+    // appExceptionHandler（原第 195 行）尚未初始化，导致 viewModelScope.launch(null)
+    // 触发 CoroutineContext.fold 的 NPE（"Attempt to invoke interface method
+    // 'java.lang.Object kotlin.coroutines.CoroutineContext.fold(...)' on a null object reference"）。
+    // 解决：把异常处理器与 toast sink 的声明移到 init 块之前，确保初始化时已有值。
+    private val _toast = MutableStateFlow<String?>(null)
+    val toast: StateFlow<String?> = _toast.asStateFlow()
+
+    /**
+     * === v24 优化4：全局协程异常捕获 ===
+     *
+     * 应用级异常处理器：拦截签到 / 消课 / 学员增删 / 数据库事务等过程中
+     * 可能出现的 SQLite 异常、IO 异常，避免 App 闪退。
+     * - 异常落盘：通过 [com.shangmentiyu.sportscoach.core.CrashHandler.writeLog]
+     * - UI 反馈：通过 [_toast] 推送轻量提示
+     */
+    private val appExceptionHandler =
+        com.shangmentiyu.sportscoach.core.CoroutineExt.createAppExceptionHandler(
+            toastSink = _toast,
+            contextTag = "HomeViewModel"
+        )
+
+    /**
+     * 安全启动协程：自动挂载 [appExceptionHandler]，未捕获异常不会导致 App 崩溃。
+     * 闭包签名兼容 [viewModelScope.launch]，便于直接替换。
+     */
+    private fun safeLaunch(block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) {
+        viewModelScope.launch(appExceptionHandler) {
+            try {
+                block(this)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            }
+        }
+    }
+
+    init {
+        // === v28 优化1：App 启动时自动触发冷热数据迁移检查 ===
+        // 触发条件：lessons 表 > 2000 条 + 存在 365 天前的旧记录
+        // 仅在后台异步执行，不阻塞 UI；失败仅写日志，不影响用户体验
+        safeLaunch {
+            try {
+                val result = opRepo.maybeAutoArchiveIfNeeded()
+                if (result.archivedCount > 0) {
+                    android.util.Log.i("HomeViewModel",
+                        "自动归档完成：${result.message}")
+                    // 归档后刷新今日课时统计（todayCount / totalCount 自动回流）
+                    toast("已自动归档 ${result.archivedCount} 条历史课时")
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("HomeViewModel",
+                    "自动归档检查失败：${e.message}")
+            }
+        }
+
+        // === v31 优化3：初始化全局语音播报状态 ===
+        // - 从 DataStore 异步读取上次设置
+        // - 设置到 VoiceAnnouncer 单例，sign() 调用时直接生效
+        // - 失败不影响应用启动
+        if (settingsRepo != null) {
+            safeLaunch {
+                try {
+                    val enabled = settingsRepo.getVoiceModeEnabled()
+                    com.shangmentiyu.sportscoach.util.VoiceAnnouncer.setEnabled(enabled)
+                } catch (e: Exception) {
+                    android.util.Log.w("HomeViewModel",
+                        "语音模式初始化失败：${e.message}")
+                }
+            }
+        }
+
+        // === v5 新增：启动 LAN 同步握手探测 ===
+        // 每 15 秒探测一次 PC 端 HTTP /health 端点
+        // 在线时显示绿色"双端已握手"横幅，离线时隐藏
+        startSyncHandshakeLoop()
+    }
+
+    // ============================================================
+    // === v5 新增：局域网同步握手状态（顶部横幅） ===
+    // ============================================================
+
+    /**
+     * PC 端握手状态枚举。
+     *
+     * - [Unknown]：尚未探测（应用刚启动）
+     * - [Online]：PC 端接收服务在线，可推送备份与精彩瞬间
+     * - [Offline]：PC 端不可达或未配置 IP
+     * - [Syncing]：正在执行备份并推送（短暂状态，结束后回到 [Online] 或 [Offline]）
+     */
+    enum class SyncHandshakeState {
+        Unknown, Online, Offline, Syncing
+    }
+
+    /**
+     * 同步握手状态：HomeScreen 顶部"同步横幅"据此渲染颜色与文案。
+     *
+     * 探测策略：
+     * - 每 15 秒后台调用 [MomentUploader.pingDesktop]
+     * - 失败时自动回退到 [SyncHandshakeState.Offline]
+     * - 不会阻塞 UI；探测仅在 viewModelScope 内执行，ViewModel 销毁时自动取消
+     */
+    private val _syncHandshake = MutableStateFlow(SyncHandshakeState.Unknown)
+    val syncHandshake: StateFlow<SyncHandshakeState> = _syncHandshake.asStateFlow()
+
+    /**
+     * 启动后台握手探测循环（每 15 秒一次）。
+     *
+     * 设计要点：
+     * - 使用 [kotlinx.coroutines.delay] 而非 Thread.sleep，避免阻塞线程
+     * - 单次 ping 超时 2.5 秒（[MomentUploader.pingDesktop] 内部配置）
+     * - 探测失败时设置 [SyncHandshakeState.Offline]，下次循环继续尝试
+     * - 仅当 [momentUploader] 非空时启动，否则保持 [Unknown]
+     */
+    private fun startSyncHandshakeLoop() {
+        val uploader = momentUploader ?: return
+        safeLaunch {
+            while (true) {
+                val online = try {
+                    uploader.pingDesktop()
+                } catch (_: Exception) {
+                    false
+                }
+                // Syncing 状态由 triggerBackupSync 临时设置，结束后会被覆盖
+                if (_syncHandshake.value != SyncHandshakeState.Syncing) {
+                    _syncHandshake.value =
+                        if (online) SyncHandshakeState.Online
+                        else SyncHandshakeState.Offline
+                }
+                kotlinx.coroutines.delay(15_000L)
+            }
+        }
+    }
+
+    /**
+     * 触发"一键同步"：备份到缓存 → 推送到 PC 端。
+     *
+     * 调用时机：HomeScreen 顶部"同步横幅"点击。
+     *
+     * 流程：
+     * 1. 检查 [backupRepo] 是否注入（设置页未注入时返回失败）
+     * 2. 临时设置 [SyncHandshakeState.Syncing]，UI 显示"同步中…"
+     * 3. 调用 [BackupRepository.backupToCache] 在 IO 线程生成 ZIP
+     * 4. 调用 [com.shangmentiyu.sportscoach.core.SyncManager] 推送到 PC 端
+     * 5. 推送完成后立即探测一次，更新握手状态
+     *
+     * 失败场景：
+     * - [backupRepo] 未注入
+     * - 备份失败
+     * - 推送失败（PC 端未启动 / 鉴权失败）
+     */
+    fun triggerBackupSync() {
+        val repo = backupRepo
+        if (repo == null) {
+            _toast.value = "未启用桌面同步，请在设置中配置"
+            return
+        }
+        if (_syncHandshake.value == SyncHandshakeState.Syncing) {
+            _toast.value = "正在同步中，请稍候…"
+            return
+        }
+        _syncHandshake.value = SyncHandshakeState.Syncing
+        safeLaunch {
+            try {
+                // 1. 备份到缓存目录
+                val cacheDir = app?.cacheDir
+                if (cacheDir == null) {
+                    _toast.value = "应用上下文未初始化"
+                    _syncHandshake.value = SyncHandshakeState.Offline
+                    return@safeLaunch
+                }
+                val cacheFile = java.io.File(
+                    cacheDir,
+                    "sync_${System.currentTimeMillis()}.zip"
+                )
+                val backupRes = repo.backupToCache(cacheFile)
+                if (!backupRes.success) {
+                    _toast.value = backupRes.message
+                    _syncHandshake.value = SyncHandshakeState.Offline
+                    return@safeLaunch
+                }
+                // 2. 推送到 PC 端（通过 SyncManager）
+                val pushRes = repo.pushToDesktop(
+                    android.net.Uri.fromFile(cacheFile)
+                )
+                _toast.value = if (pushRes.success) {
+                    "已同步到 PC 端"
+                } else {
+                    "本地备份成功，但推送失败：${pushRes.message}"
+                }
+                // 3. 立即探测一次
+                val online = momentUploader?.pingDesktop() ?: false
+                _syncHandshake.value =
+                    if (online) SyncHandshakeState.Online
+                    else SyncHandshakeState.Offline
+                // 4. 清理临时缓存文件
+                try {
+                    if (cacheFile.exists()) cacheFile.delete()
+                } catch (_: Exception) {
+                    // 清理失败不影响主流程
+                }
+            } catch (e: Exception) {
+                _toast.value = "同步异常：${e.message ?: "未知错误"}"
+                _syncHandshake.value = SyncHandshakeState.Offline
+            }
+        }
+    }
+
+    /**
+     * 上传学员精彩瞬间照片到桌面端（手机→PC 双向传输）。
+     *
+     * 调用时机：PreClassTab 卡片"上传精彩瞬间"按钮 →
+     * 通过 ActivityResultContracts.PickVisualMedia 选择照片后调用。
+     *
+     * @param photoUri 图库返回的照片 Uri
+     * @param studentName 学员姓名（用于服务端命名）
+     * @return 上传结果消息（成功 / 失败提示，UI 直接 Toast）
+     */
+    suspend fun uploadMoment(photoUri: android.net.Uri, studentName: String): String {
+        val uploader = momentUploader
+            ?: return "未启用桌面同步，请在设置中配置"
+        return try {
+            val res = uploader.upload(photoUri, studentName)
+            if (res.success) {
+                "已上传到 PC 端"
+            } else {
+                res.message
+            }
+        } catch (e: Exception) {
+            "上传异常：${e.message ?: "未知错误"}"
+        }
+    }
+
+    // ==================== v31 优化3：离线语音播报模式 ====================
+
+    /**
+     * 语音播报模式开关（持久化到 DataStore）。
+     *
+     * - 默认关闭：教练在学员列表 Tab 顶部手动开启
+     * - 开启后 [sign] 方法在签到成功后通过 VoiceAnnouncer 播报：
+     *   "学员 [姓名] 已签到，剩余 [X] 节课"
+     * - 户外场景下教练无需看屏幕即可知道签到结果与剩余课时
+     * - 设置写入 DataStore 后，应用重启自动恢复上次状态
+     */
+    val voiceModeEnabled: StateFlow<Boolean> =
+        (settingsRepo?.voiceModeEnabled ?: kotlinx.coroutines.flow.flowOf(false))
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    /**
+     * 切换语音播报模式开关。
+     *
+     * - 立即同步到 VoiceAnnouncer 单例（下一次 sign() 即时生效）
+     * - 异步持久化到 DataStore（应用重启后恢复）
+     * - 调用方：StudentListTab 顶部的 FilterChip 开关
+     */
+    fun setVoiceMode(enabled: Boolean) {
+        // 立即生效（避免 UI 点击后到 DataStore 写入完成间的延迟）
+        com.shangmentiyu.sportscoach.util.VoiceAnnouncer.setEnabled(enabled)
+        // 持久化（失败不影响本次切换）
+        if (settingsRepo == null) return
+        safeLaunch {
+            try {
+                settingsRepo.setVoiceModeEnabled(enabled)
+            } catch (e: Exception) {
+                android.util.Log.w("HomeViewModel",
+                    "语音模式持久化失败：${e.message}")
+            }
+        }
+    }
+
+
 
     val students: StateFlow<List<Student>> = studentRepo.getAllStudents()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -57,6 +349,37 @@ class HomeViewModel(
     /** 续费提醒列表（按学员聚合） */
     val renewalAlerts: StateFlow<List<OperationRepository.RenewalAlert>> = opRepo.getRenewalAlerts()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /**
+     * === v25 优化1：全局到期预警课时包列表 ===
+     *
+     * 监听 7 天内即将到期的活跃课时包，用于首页顶部横幅展示。
+     * 列表按到期天数升序，最快过期的排最前。
+     */
+    val expiringPackages: StateFlow<List<com.shangmentiyu.sportscoach.data.model.LessonPackage>> =
+        opRepo.getExpiringPackages(daysThreshold = 7)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /**
+     * === v25 优化1：预警横幅文案（聚合首条最紧急的预警，用于顶部横幅） ===
+     *
+     * 取到期最近的一条课时包生成提醒文案，例：
+     * "【提醒】陈书楠的「15次全能卡」将于 3 天后过期，剩余 5 节课，建议尽快安排！"
+     *
+     * 无预警时返回 null，UI 据此隐藏横幅。
+     */
+    val expiringBannerText: StateFlow<String?> = expiringPackages
+        .map { list ->
+            val pkg = list.firstOrNull() ?: return@map null
+            val days = pkg.daysToExpiry()
+            val daysText = when {
+                days <= 0 -> "今日到期"
+                days == 1 -> "明日到期"
+                else -> "将于 ${days} 天后过期"
+            }
+            "【提醒】${pkg.studentName}的「${pkg.name}」$daysText，剩余 ${pkg.remainingLessons} 节课，建议尽快安排！"
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     /** 学员姓名 → 剩余课时总数（用于列表徽章显示） */
     val remainingMap: StateFlow<Map<String, Int>> = opRepo.getAllPackages()
@@ -74,12 +397,55 @@ class HomeViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /**
+     * === v28 优化6：今日排课数（用于首页 Tab 红点/数字角标） ===
+     *
+     * 数据来源：schedules 表中 isActive=1 且 dayOfWeek 等于今日星期几的排课。
+     * 由于排课是周期性（按周几重复），今日排课数即"今天本应上的课节数"。
+     *
+     * 与 [todayLessons] 区别：
+     * - [todayScheduleCount] 表示"今日应到"（基于周期性排课）
+     * - [todayLessons] 表示"今日已签到"（基于 lessons 表 date=today）
+     * - 差值即为"未签到数"，用于 Tab 角标显示
+     */
+    val todayScheduleCount: StateFlow<Int> = opRepo.getSchedulesByDay(todayDayOfWeek())
+        .map { it.size }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    /**
+     * === v28 优化6：今日未签到数（用于 Tab 角标数字显示） ===
+     *
+     * 计算公式：max(0, [todayScheduleCount] - [todayLessons].size)
+     *
+     * 含义：今天本应签到 N 节课，已签到 M 节，还有 N-M 节未签到。
+     * 当该值 > 0 时，在首页 Tab 上显示红色数字角标，给教练强烈的心理提示。
+     */
+    val unsignedTodayCount: StateFlow<Int> =
+        kotlinx.coroutines.flow.combine(todayScheduleCount, todayLessons) { schedCnt, lessons ->
+            (schedCnt - lessons.size).coerceAtLeast(0)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    /**
+     * === v28 优化6：是否显示 Tab 红点（今日有排课即显示） ===
+     *
+     * 触发条件：[todayScheduleCount] > 0
+     * 与 [unsignedTodayCount] 配合：
+     * - 红点（小圆点）：表示"今日有排课"
+     * - 数字角标：表示"今日未签到数"，未签到数为 0 时不显示数字
+     */
+    val hasTodayScheduleBadge: StateFlow<Boolean> = todayScheduleCount
+        .map { it > 0 }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    /**
      * 学员姓名 → 下一节课（含今日及未来，按日期/时间升序取首条）。
      *
-     * 数据来源：[LessonRepository.getFrom] 查询 date >= today 的全部课时。
-     * 用途：学员列表"下一节课"显示与修改入口，替代原先仅展示今日课时的逻辑。
+     * 数据来源：[LessonRepository.getUpcomingFrom] 查询 date >= today 且未签退的全部课时。
+     * 用途：学员列表"下一节课"显示与修改入口。
+     *
+     * 重要：过滤已签退课时（signOutTime 非空）——签退后的课时视为已完成，
+     * 不应再作为"下一节课"显示给教练。修复了"课后反馈签退后仍显示下一节课"的问题。
      */
-    val nextLessons: StateFlow<Map<String, Lesson>> = lessonRepo.getFrom(todayStr())
+    val nextLessons: StateFlow<Map<String, Lesson>> = lessonRepo.getUpcomingFrom(todayStr())
         .map { lessons ->
             lessons.groupBy { it.studentName }
                 .mapNotNull { (name, list) -> list.minByOrNull { "${it.date} ${it.time}" }?.let { name to it } }
@@ -87,11 +453,165 @@ class HomeViewModel(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
-    private val _toast = MutableStateFlow<String?>(null)
-    val toast: StateFlow<String?> = _toast.asStateFlow()
+    // ==================== v24 优化5：学员列表高级筛选与排序 ====================
+
+    /**
+     * 学员排序方式。
+     *
+     * - [Default]：按数据库原顺序（即插入顺序）
+     * - [RemainingAsc]：剩余课时升序（余额少的排前面，便于教练优先关注续费学员）
+     * - [UpcomingFirst]：今日/明日有课的学员排前面
+     * - [NamePinyin]：按姓名拼音字典序（A → Z）
+     */
+    enum class StudentSortBy {
+        Default, RemainingAsc, UpcomingFirst, NamePinyin
+    }
+
+    /**
+     * 年级筛选枚举（13 级系统：小学 1-6 / 初中 7-9 / 高中 10-12 / 中考）。
+     *
+     * - [All]：不筛选（默认）
+     * - [Primary]：小学 1-6 年级
+     * - [Junior]：初中 7-9 年级
+     * - [Senior]：高中 10-12 年级
+     * - [ZhongKao]：中考（备考阶段）
+     */
+    enum class GradeFilter {
+        All, Primary, Junior, Senior, ZhongKao
+    }
+
+    /** 当前排序方式 */
+    private val _sortBy = MutableStateFlow(StudentSortBy.Default)
+    val sortBy: StateFlow<StudentSortBy> = _sortBy.asStateFlow()
+
+    /** 当前年级筛选 */
+    private val _gradeFilter = MutableStateFlow(GradeFilter.All)
+    val gradeFilter: StateFlow<GradeFilter> = _gradeFilter.asStateFlow()
+
+    /** 姓名拼音/汉字模糊查询关键字 */
+    private val _nameQuery = MutableStateFlow("")
+    val nameQuery: StateFlow<String> = _nameQuery.asStateFlow()
+
+    /**
+     * 内部聚合的筛选状态（合并排序+年级+姓名三者为单一 StateFlow）。
+     *
+     * 设计目的：kotlinx.coroutines.flow.combine 仅支持 2-5 个 Flow 的直接重载，
+     * 将三个筛选条件打包成 [FilterState] 后只需 combine 4 个流即可完成计算，
+     * 避免使用 vararg 版本的反射式 transform。
+     */
+    private data class FilterState(
+        val sortBy: StudentSortBy,
+        val gradeFilter: GradeFilter,
+        val nameQuery: String
+    )
+
+    /** 聚合筛选状态：任一子条件变更时整体发射新值 */
+    private val filterState: StateFlow<FilterState> =
+        kotlinx.coroutines.flow.combine(_sortBy, _gradeFilter, _nameQuery) { sort, grade, query ->
+            FilterState(sort, grade, query)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000),
+            FilterState(StudentSortBy.Default, GradeFilter.All, ""))
+
+    fun setSortBy(sort: StudentSortBy) { _sortBy.value = sort }
+    fun setGradeFilter(filter: GradeFilter) { _gradeFilter.value = filter }
+    fun setNameQuery(q: String) { _nameQuery.value = q }
+
+    /** 重置所有筛选条件 */
+    fun resetFilters() {
+        _sortBy.value = StudentSortBy.Default
+        _gradeFilter.value = GradeFilter.All
+        _nameQuery.value = ""
+    }
+
+    /**
+     * 筛选+排序后的学员列表（与 [remainingMap] / [nextLessons] / [filterState] 联合计算）。
+     *
+     * 计算策略：
+     * 1. 名称过滤：包含关键字（不区分大小写、忽略前后空格）
+     * 2. 年级过滤：根据 [Student.grade] 字段映射到 [GradeFilter] 范畴
+     * 3. 排序：依据 [StudentSortBy] 计算键值后排序（稳定排序，相同键保持原顺序）
+     *
+     * 性能：所有计算在 Flow.map 中进行，每秒最多触发一次（WhileSubscribed(5000)）。
+     */
+    val filteredStudents: StateFlow<List<Student>> =
+        kotlinx.coroutines.flow.combine(
+            students, remainingMap, nextLessons, filterState
+        ) { list, remainMap, nextMap, filter ->
+            applyFilterAndSort(list, remainMap, nextMap,
+                filter.sortBy, filter.gradeFilter, filter.nameQuery)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** 内部纯函数：应用筛选与排序（处理器层，便于单元测试） */
+    private fun applyFilterAndSort(
+        list: List<Student>,
+        remainMap: Map<String, Int>,
+        nextMap: Map<String, Lesson>,
+        sortBy: StudentSortBy,
+        gradeFilter: GradeFilter,
+        query: String
+    ): List<Student> {
+        // 1. 名称过滤
+        var filtered = if (query.isBlank()) {
+            list
+        } else {
+            val key = query.trim().lowercase(java.util.Locale.getDefault())
+            list.filter { it.name.lowercase(java.util.Locale.getDefault()).contains(key) }
+        }
+
+        // 2. 年级过滤
+        if (gradeFilter != GradeFilter.All) {
+            filtered = filtered.filter { matchGradeFilter(it.grade, gradeFilter) }
+        }
+
+        // 3. 排序
+        val today = todayStr()
+        val tomorrow = java.time.LocalDate.now().plusDays(1)
+            .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd", java.util.Locale.getDefault()))
+        return when (sortBy) {
+            StudentSortBy.Default -> filtered
+            StudentSortBy.RemainingAsc -> {
+                // 余额少（包括 -1 未购课）的排前面，便于教练关注续费学员
+                filtered.sortedBy { remainMap[it.name] ?: -1 }
+            }
+            StudentSortBy.UpcomingFirst -> {
+                // 今日/明日有课的学员优先；其余按姓名原顺序
+                filtered.sortedBy { s ->
+                    val next = nextMap[s.name]
+                    if (next != null && (next.date == today || next.date == tomorrow)) 0 else 1
+                }
+            }
+            StudentSortBy.NamePinyin -> {
+                // Collator 按拼音排序（中文场景常用）
+                val collator = java.text.Collator.getInstance(java.util.Locale.CHINESE)
+                filtered.sortedWith(compareBy(collator) { it.name })
+            }
+        }
+    }
+
+    /** 内部工具：将 [Student.grade] 字符串匹配到 [GradeFilter] 范畴 */
+    private fun matchGradeFilter(grade: String, filter: GradeFilter): Boolean {
+        if (grade.isBlank()) return false
+        // 兼容历史：grade 可能是 "3"（小学 3 年级）、"8"（初中 8 年级）、"高一" 等
+        val num = grade.toIntOrNull()
+        return when (filter) {
+            GradeFilter.All -> true
+            GradeFilter.Primary -> num != null && num in 1..6
+            GradeFilter.Junior -> num != null && num in 7..9
+            GradeFilter.Senior -> num != null && num in 10..12
+            GradeFilter.ZhongKao -> grade == "中考" || grade.contains("中考")
+        }
+    }
 
     fun clearToast() {
         _toast.value = null
+    }
+
+    /**
+     * === v5 新增：暴露给 UI 层的 toast 触发方法 ===
+     * 用于异步任务结果（如精彩瞬间上传）通过 Snackbar 反馈给用户。
+     */
+    fun showToast(msg: String) {
+        _toast.value = msg
     }
 
     private fun toast(msg: String) {
@@ -99,32 +619,60 @@ class HomeViewModel(
     }
 
     /**
-     * 签到：消课 + 写课时记录在同一个 DB 事务中执行，保证原子性。
+     * === v27 重构：签到不再扣减课时包，仅创建 status="已签到" 的 Lesson ===
+     *
+     * 新流程：
+     * - 签到：仅创建 Lesson(status="已签到", packageId="")，不调用 [OperationRepository.consumeLesson]
+     * - 签退：教练保存课后反馈时调用 [saveFeedbackAndCheckOut]，事务内扣减课时包 + 更新 status="已签退"
+     *
+     * 兼容旧数据：
+     * - 老数据 Lesson.packageId 非空但 status 默认为"已签到"（v24 迁移默认值）
+     * - 这些数据下次签退时会自动迁移为"已签退"，不影响历史报表
      */
     fun sign(studentName: String, onCreated: (SignResult) -> Unit) {
-        viewModelScope.launch {
-            val (consume, lessonId) = db.withTransaction {
-                val consume = opRepo.consumeLesson(studentName)
-                if (!consume.success) {
-                    return@withTransaction consume to null
-                }
+        safeLaunch {
+            try {
+                // 签到：仅创建 Lesson，不扣减课时包
                 val lid = lessonRepo.createLesson(
                     studentName = studentName,
                     coach = "",
-                    packageId = consume.packageId
+                    packageId = ""  // 签到时不扣减课时包，packageId 留空
                 )
-                consume to lid
+
+                // === v31 优化3：签到成功后语音播报 ===
+                // - 受 voiceModeEnabled 开关控制
+                // - 文本格式："学员 [姓名] 已签到，剩余 [X] 节课"
+                // - 剩余课时从 remainingMap 读取（已聚合所有未到期课时包）
+                // - 失败静默忽略，不影响签到主流程
+                runCatching {
+                    if (voiceModeEnabled.value) {
+                        val remaining = remainingMap.value[studentName] ?: 0
+                        com.shangmentiyu.sportscoach.util.VoiceAnnouncer.announce(
+                            "学员 $studentName 已签到，剩余 $remaining 节课"
+                        )
+                    }
+                }
+
+                onCreated(
+                    SignResult(
+                        lessonId = lid,
+                        consumed = false,  // 签到不再消费课时
+                        packageName = "",
+                        remainingAfter = 0,
+                        message = "签到成功（签退时再扣减课时）"
+                    )
+                )
+            } catch (e: Exception) {
+                onCreated(
+                    SignResult(
+                        lessonId = "",
+                        consumed = false,
+                        packageName = "",
+                        remainingAfter = 0,
+                        message = "签到失败：${e.message ?: "未知异常"}"
+                    )
+                )
             }
-            onCreated(
-                SignResult(
-                    lessonId = lessonId ?: "",
-                    consumed = consume.success,
-                    packageName = consume.packageName,
-                    remainingAfter = consume.remainingAfter,
-                    message = if (consume.success) consume.message
-                              else "签到失败：${consume.message}（请确认学员已购买课时包）"
-                )
-            )
         }
     }
 
@@ -132,8 +680,15 @@ class HomeViewModel(
         name: String, gender: String, grade: String, school: String, phone: String,
         age: Int = 0, heightCm: Int = 0, weightKg: Float = 0f, bmi: Float = 0f
     ) {
-        viewModelScope.launch {
-            studentRepo.addStudent(name, gender, grade, school, phone, age, heightCm, weightKg, bmi)
+        safeLaunch {
+            try {
+                studentRepo.addStudent(name, gender, grade, school, phone, age, heightCm, weightKg, bmi)
+            } catch (e: IllegalArgumentException) {
+                // v22：输入边界校验失败 → 转 Toast 提示用户
+                toast(e.message ?: "学员数据不合法")
+            } catch (e: Exception) {
+                toast("添加失败：${e.message ?: "未知错误"}")
+            }
         }
     }
 
@@ -144,20 +699,27 @@ class HomeViewModel(
         purchaseDate: String, expireDate: String,
         onDone: () -> Unit = {}
     ) {
-        viewModelScope.launch {
-            studentRepo.addStudent(name, gender, grade, school, phone, age, heightCm, weightKg, bmi)
-            if (packageTotal > 0) {
-                val pkg = com.shangmentiyu.sportscoach.data.model.LessonPackage(
-                    studentName = name,
-                    name = packageName.ifBlank { "${packageTotal}次卡" },
-                    totalLessons = packageTotal,
-                    price = price,
-                    purchaseDate = purchaseDate,
-                    expireDate = expireDate
-                )
-                opRepo.addPackage(pkg)
+        safeLaunch {
+            try {
+                studentRepo.addStudent(name, gender, grade, school, phone, age, heightCm, weightKg, bmi)
+                if (packageTotal > 0) {
+                    val pkg = com.shangmentiyu.sportscoach.data.model.LessonPackage(
+                        studentName = name,
+                        name = packageName.ifBlank { "${packageTotal}次卡" },
+                        totalLessons = packageTotal,
+                        price = price,
+                        purchaseDate = purchaseDate,
+                        expireDate = expireDate
+                    )
+                    opRepo.addPackage(pkg)
+                }
+                onDone()
+            } catch (e: IllegalArgumentException) {
+                // v22：输入边界校验失败 → 转 Toast 提示，不调用 onDone（保持对话框开启）
+                toast(e.message ?: "学员数据不合法")
+            } catch (e: Exception) {
+                toast("添加失败：${e.message ?: "未知错误"}")
             }
-            onDone()
         }
     }
 
@@ -165,14 +727,21 @@ class HomeViewModel(
         original: Student, gender: String, grade: String, school: String, phone: String,
         age: Int, heightCm: Int, weightKg: Float, bmi: Float
     ) {
-        viewModelScope.launch {
-            studentRepo.updateStudent(
-                original.copy(
-                    gender = gender, grade = grade, school = school, phone = phone,
-                    age = age, heightCm = heightCm, weightKg = weightKg, bmi = bmi,
-                    updatedAt = System.currentTimeMillis()
+        safeLaunch {
+            try {
+                studentRepo.updateStudent(
+                    original.copy(
+                        gender = gender, grade = grade, school = school, phone = phone,
+                        age = age, heightCm = heightCm, weightKg = weightKg, bmi = bmi,
+                        updatedAt = System.currentTimeMillis()
+                    )
                 )
-            )
+            } catch (e: IllegalArgumentException) {
+                // v22：输入边界校验失败 → 转 Toast 提示
+                toast(e.message ?: "学员数据不合法")
+            } catch (e: Exception) {
+                toast("更新失败：${e.message ?: "未知错误"}")
+            }
         }
     }
 
@@ -197,7 +766,7 @@ class HomeViewModel(
             onDone(false, "姓名不能为空")
             return
         }
-        viewModelScope.launch {
+        safeLaunch {
             try {
                 if (original.name != newName) {
                     db.withTransaction {
@@ -245,11 +814,16 @@ class HomeViewModel(
     }
 
     /**
-     * 删除学员：在同一个 DB 事务中级联删除该学员的全部相关数据，
-     * 保证全局数据一致，避免遗留孤立记录。
+     * 删除学员（v20 软删除策略）：
      *
-     * 涉及表：students / lessons / lesson_packages / schedules /
-     *         body_metric_history / parent_reports / training_cycles
+     * 仅将 students 表的 isActive 置为 0，保留学员行与全部历史数据，
+     * 保证历史课时 / 排课 / 课时包 / 训练周期等子表数据仍能通过 studentName 关联，
+     * 用于历史报表查询。
+     *
+     * 日常 UI 通过 [StudentDao.getAll] 自动过滤 isActive=0 的行，
+     * 已删除的学员不会出现在学员管理、排课、签到等日常列表里。
+     *
+     * 如需物理删除（如整库恢复 / 清空场景），请使用 [StudentRepository.physicallyDeleteStudent]。
      *
      * @param name 学员姓名
      * @param onDone 删除完成回调（主线程）
@@ -259,22 +833,46 @@ class HomeViewModel(
             onDone(false, "姓名不能为空")
             return
         }
-        viewModelScope.launch {
+        safeLaunch {
             try {
-                db.withTransaction {
-                    db.studentDao().deleteByName(name)
-                    db.lessonDao().deleteByStudent(name)
-                    db.lessonPackageDao().deleteByStudent(name)
-                    db.scheduleDao().deleteByStudent(name)
-                    db.bodyMetricHistoryDao().deleteByStudent(name)
-                    db.parentReportDao().deleteByStudent(name)
-                    db.trainingCycleDao().deleteByStudent(name)
-                }
-                toast("已删除学员 $name 及其全部数据")
+                studentRepo.deleteStudent(name)
+                toast("已删除学员 $name（历史数据已保留）")
                 onDone(true, "删除成功")
             } catch (e: Exception) {
                 val msg = e.message ?: "删除失败"
                 toast("删除失败：$msg")
+                onDone(false, msg)
+            }
+        }
+    }
+
+    // === v22 冷热数据归档 ===
+
+    /**
+     * 归档一年前的课时记录（学员详情设置入口触发）。
+     *
+     * 将一年前（含）的全部 lessons 记录迁移到 archived_lessons 表，
+     * 释放主表体积，加速首页/学员详情查询。
+     *
+     * - 自动计算一年前的日期边界（today - 365 天）
+     * - 调用 [OperationRepository.archiveLessonsBefore] 在单事务内原子完成迁移+删除
+     * - 通过 [toast] 反馈结果给用户
+     *
+     * @param onDone 完成回调（主线程），(成功, 消息)
+     */
+    fun archiveLessonsOlderThanOneYear(onDone: (Boolean, String) -> Unit = { _, _ -> }) {
+        safeLaunch {
+            try {
+                val boundary = todayStr().let { today ->
+                    val date = java.time.LocalDate.parse(today)
+                    date.minusDays(365).toString()
+                }
+                val result = opRepo.archiveLessonsBefore(boundary)
+                toast(result.message)
+                onDone(result.success, result.message)
+            } catch (e: Exception) {
+                val msg = e.message ?: "归档失败"
+                toast("归档失败：$msg")
                 onDone(false, msg)
             }
         }
@@ -298,8 +896,8 @@ class HomeViewModel(
         performance: Int,
         attitude: String
     ) {
-        viewModelScope.launch {
-            val lesson = lessonRepo.getById(lessonId) ?: return@launch
+        safeLaunch {
+            val lesson = lessonRepo.getById(lessonId) ?: return@safeLaunch
             lessonRepo.updateLesson(
                 lesson.copy(
                     coachComment = coachComment,
@@ -308,6 +906,85 @@ class HomeViewModel(
                 )
             )
         }
+    }
+
+    /**
+     * === v27：保存课后反馈并触发签退消课（事务原子操作） ===
+     *
+     * 教练在课后反馈 Tab 点击"保存反馈"按钮时调用：
+     * 1. 更新 Lesson 的 coachComment / performance / attitude 字段
+     * 2. 若该课时当前 status != "已签退"，调用 [OperationRepository.consumeLessonForCheckOut]
+     *    执行事务化消课：扣减课时包 + 更新 status="已签退" + 写入 signOutTime + packageId
+     * 3. 若已签退，仅更新反馈字段，不重复扣减课时
+     *
+     * UI 反馈：通过 [toast] 推送签退结果，包含课时包名与剩余课时数。
+     *
+     * @param lessonId 课时 ID
+     * @param coachComment 教练寄语
+     * @param performance 表现评分（1-10）
+     * @param attitude 训练态度
+     * @param onDone 完成回调（主线程），参数为是否成功
+     */
+    fun saveFeedbackAndCheckOut(
+        lessonId: String,
+        coachComment: String,
+        performance: Int,
+        attitude: String,
+        onDone: (Boolean) -> Unit = {}
+    ) {
+        safeLaunch {
+            try {
+                val lesson = lessonRepo.getById(lessonId)
+                if (lesson == null) {
+                    toast("课时不存在，可能已被删除")
+                    onDone(false)
+                    return@safeLaunch
+                }
+
+                // 1. 先更新反馈字段
+                val updatedFeedback = lesson.copy(
+                    coachComment = coachComment,
+                    performance = performance,
+                    attitude = attitude
+                )
+                lessonRepo.updateLesson(updatedFeedback)
+
+                // 2. 若未签退，执行事务化消课
+                if (lesson.status != "已签退") {
+                    val result = opRepo.consumeLessonForCheckOut(updatedFeedback)
+                    if (result.success) {
+                        toast("签退成功，已扣减课时（${result.packageName}），剩余 ${result.remainingAfter} 节")
+                        onDone(true)
+                    } else {
+                        toast("反馈已保存，但签退失败：${result.message}")
+                        onDone(false)
+                    }
+                } else {
+                    // 已签退，仅更新反馈
+                    toast("反馈已保存（课时已签退，不重复扣减）")
+                    onDone(true)
+                }
+            } catch (e: Exception) {
+                toast("保存反馈失败：${e.message ?: "未知异常"}")
+                onDone(false)
+            }
+        }
+    }
+
+    /**
+     * === v27：查询学员在今日的排课记录（用于课后反馈自动填充） ===
+     *
+     * 教练在课后反馈 Tab 选中学员后，UI 调用本方法查询该学员今日的活跃排课。
+     * 若查询到，自动将排课的 startTime / durationMinutes / location 预填充到反馈表单输入框；
+     * 教练可手动覆盖，不强制锁定。
+     *
+     * @param studentName 学员姓名
+     * @return 该学员今日的活跃排课列表（按开始时间升序），无则空列表
+     */
+    suspend fun findScheduleForStudentToday(
+        studentName: String
+    ): List<com.shangmentiyu.sportscoach.data.model.Schedule> {
+        return opRepo.getTodayScheduleForStudent(studentName, todayStr())
     }
 
     /**
@@ -337,8 +1014,8 @@ class HomeViewModel(
         location: String,
         attendance: String
     ) {
-        viewModelScope.launch {
-            val lesson = lessonRepo.getById(lessonId) ?: return@launch
+        safeLaunch {
+            val lesson = lessonRepo.getById(lessonId) ?: return@safeLaunch
             lessonRepo.updateLesson(
                 lesson.copy(
                     lessonType = lessonType,
@@ -361,8 +1038,8 @@ class HomeViewModel(
      * @param imagePaths 图片路径列表（应用内部存储绝对路径）
      */
     fun updateLessonImages(lessonId: String, imagePaths: List<String>) {
-        viewModelScope.launch {
-            val lesson = lessonRepo.getById(lessonId) ?: return@launch
+        safeLaunch {
+            val lesson = lessonRepo.getById(lessonId) ?: return@safeLaunch
             val json = org.json.JSONArray().apply {
                 imagePaths.forEach { put(it) }
             }.toString()
@@ -392,7 +1069,7 @@ class HomeViewModel(
      * @param onDone 删除完成回调（主线程），参数为是否成功
      */
     fun deleteLesson(lessonId: String, onDone: (Boolean) -> Unit = {}) {
-        viewModelScope.launch {
+        safeLaunch {
             try {
                 lessonRepo.deleteLesson(lessonId)
                 toast("课时记录已删除")
@@ -425,13 +1102,13 @@ class HomeViewModel(
             onDone(false)
             return
         }
-        viewModelScope.launch {
+        safeLaunch {
             try {
                 val lesson = lessonRepo.getById(lessonId)
                 if (lesson == null) {
                     toast("课时不存在，可能已被删除")
                     onDone(false)
-                    return@launch
+                    return@safeLaunch
                 }
                 lessonRepo.updateLesson(lesson.copy(date = date, time = time))
                 toast("已调整下一节课时间为 $date $time")
@@ -463,7 +1140,7 @@ class HomeViewModel(
             onDone(false, "新姓名与原姓名相同")
             return
         }
-        viewModelScope.launch {
+        safeLaunch {
             try {
                 db.withTransaction {
                     // 重名校验：确保新姓名尚未占用
@@ -492,7 +1169,7 @@ class HomeViewModel(
         studentName: String, packageName: String, totalLessons: Int,
         price: Double, purchaseDate: String, expireDate: String
     ) {
-        viewModelScope.launch {
+        safeLaunch {
             val pkg = com.shangmentiyu.sportscoach.data.model.LessonPackage(
                 studentName = studentName,
                 name = packageName.ifBlank { "${totalLessons}次卡" },
@@ -507,6 +1184,33 @@ class HomeViewModel(
     }
 
     private fun todayStr(): String =
-        java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
-            .format(java.util.Date())
+        // 线程安全：[LocalDate.now] + [DateTimeFormatter] 不可变，无 Calendar 状态污染
+        java.time.LocalDate.now()
+            .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd", java.util.Locale.getDefault()))
+
+    /**
+     * === v28 优化6：今日星期几（ISO：1=周一 ... 7=周日） ===
+     *
+     * 用于 [todayScheduleCount] 查询今日排课。
+     * 使用 [java.time.LocalDate.getDayOfWeek] + [java.time.DayOfWeek.getValue]，
+     * 线程安全，避免 [java.util.Calendar] 状态污染。
+     */
+    private fun todayDayOfWeek(): Int =
+        java.time.LocalDate.now().getDayOfWeek().value  // Monday=1 ... Sunday=7
+
+    /**
+     * === v28 优化1：加载全部历史归档课时（用户点击"查看全部历史归档"按钮时调用） ===
+     *
+     * 默认所有 LazyColumn 只查 lessons 表（热数据）；
+     * 仅当教练主动点击"查看全部历史归档"按钮时调用本方法，
+     * 加载 archived_lessons 表（冷数据），用于归档列表展示。
+     *
+     * @param onDone 完成回调（主线程），参数为归档课时列表
+     */
+    fun loadAllArchivedLessons(onDone: (List<com.shangmentiyu.sportscoach.data.model.ArchivedLesson>) -> Unit = {}) {
+        safeLaunch {
+            val list = opRepo.getAllArchivedOnce()
+            onDone(list)
+        }
+    }
 }

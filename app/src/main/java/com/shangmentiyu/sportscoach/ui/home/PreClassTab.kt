@@ -17,28 +17,33 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.Button
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -55,6 +60,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.shangmentiyu.sportscoach.data.db.AppDatabase
+import com.shangmentiyu.sportscoach.data.model.PlanImage
 import com.shangmentiyu.sportscoach.data.model.Schedule
 import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
 import com.shangmentiyu.sportscoach.ui.dailyplan.DailyPlanViewModel
@@ -95,8 +102,56 @@ fun PreClassTab(
     val lessons by dailyVm.lessons.collectAsState()
     val dayOfWeek by dailyVm.dayOfWeek.collectAsState()
 
-    var showAddSchedule by remember { mutableStateOf(false) }
     var editingScheduleId by remember { mutableStateOf<String?>(null) }
+    // 收集编辑中的排课数据：仅当数据加载完成（editing != null）时才渲染编辑对话框，
+    // 避免异步加载未完成时 Dialog 一直卡在"加载中"。
+    val editingSchedule by opVm.editingSchedule.collectAsState()
+
+    // ============================================================
+    // === v5 新增：精彩瞬间照片上传到 PC 端 ===
+    // ============================================================
+    // 缓存当前要上传的学员姓名（点击按钮时写入，选择图片后读取）
+    var pendingMomentStudentName by remember { mutableStateOf<String?>(null) }
+    // 缓存最近一次选中的 URI（在 launcher 回调中写入，由 LaunchedEffect 消费）
+    var pendingMomentUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    // 启动系统图库选择器（PickVisualMedia），选择完成后写入 pendingMomentUri
+    val momentLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        val studentName = pendingMomentStudentName
+        pendingMomentStudentName = null  // 用完立即清理，避免下次误用
+        if (uri == null || studentName.isNullOrBlank()) return@rememberLauncherForActivityResult
+        // 写入状态，由下方的 LaunchedEffect 在 Composable 上下文中消费
+        pendingMomentUri = uri
+        // 同步把 studentName 写回，LaunchedEffect 用 key 校验
+        pendingMomentStudentName = studentName
+    }
+    // 在 Composable 上下文中执行上传（避免在 launcher 回调里调用 @Composable）
+    androidx.compose.runtime.LaunchedEffect(pendingMomentUri, pendingMomentStudentName) {
+        val uri = pendingMomentUri ?: return@LaunchedEffect
+        val studentName = pendingMomentStudentName ?: return@LaunchedEffect
+        // 消费后立即清理，避免重复触发
+        pendingMomentUri = null
+        pendingMomentStudentName = null
+        val msg = vm.uploadMoment(uri, studentName)
+        vm.showToast(msg)
+    }
+
+    // === v26 优化3：智能引导推荐 ===
+    // 收集排课记忆（时间/地点）和未来一周排课，用于"今日无排课"空状态的引导推荐
+    val timeMemories by opVm.timeMemories.collectAsState()
+    val locationMemories by opVm.locationMemories.collectAsState()
+    val allSchedules by opVm.schedules.collectAsState()
+    // "添加典型排课"对话框：预填教练最近使用过的时间和地点
+    var showTypicalSchedule by remember { mutableStateOf(false) }
+    // "查看近期排课"对话框：展示未来一周的排课概览
+    var showRecentSchedules by remember { mutableStateOf(false) }
+
+    // === v28 优化1：历史归档列表状态 ===
+    // 点击"查看全部历史归档"按钮后弹出全屏 Dialog，懒加载 archived_lessons 表
+    var showArchivedList by remember { mutableStateOf(false) }
+    var archivedLessons by remember { mutableStateOf<List<com.shangmentiyu.sportscoach.data.model.ArchivedLesson>>(emptyList()) }
+    var archivedLoading by remember { mutableStateOf(false) }
 
     val dayNames = mapOf(
         1 to "周一", 2 to "周二", 3 to "周三", 4 to "周四",
@@ -116,7 +171,7 @@ fun PreClassTab(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 IconButton(onClick = { dailyVm.previousDay() }) {
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "前一天")
+                    Icon(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, contentDescription = "前一天")
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
@@ -132,45 +187,33 @@ fun PreClassTab(
                     )
                 }
                 IconButton(onClick = { dailyVm.nextDay() }) {
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "后一天")
+                    Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = "后一天")
                 }
             }
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.md),
                 horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
             ) {
-                OutlinedButton(
+                TextButton(
                     onClick = { dailyVm.goToday() },
                     modifier = Modifier.weight(1f),
                     shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
                 ) {
-                    Text("回到今天")
-                }
-                Button(
-                    onClick = {
-                        opVm.startCreate()
-                        showAddSchedule = true
-                    },
-                    modifier = Modifier.weight(1f),
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
-                ) {
-                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("添加排课")
+                    Text("回到今天", color = MaterialTheme.colorScheme.primary)
                 }
             }
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.md),
                 horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
             ) {
-                OutlinedButton(
+                TextButton(
                     onClick = onSchedule,
                     modifier = Modifier.fillMaxWidth(),
                     shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
                 ) {
-                    Icon(Icons.Filled.Schedule, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Outlined.Schedule, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(4.dp))
-                    Text("查看周课表")
+                    Text("查看周课表", color = MaterialTheme.colorScheme.primary)
                 }
             }
             Spacer(Modifier.height(Spacing.md))
@@ -196,12 +239,63 @@ fun PreClassTab(
 
         // 排课时间线
         if (schedules.isEmpty()) {
+            // === v26 优化3：今日无排课时的智能引导推荐 ===
+            // 不再只显示一句话，而是给出两个推荐按钮，引导教练快速行动
             IosCard {
-                Box(
-                    modifier = Modifier.fillMaxWidth().height(120.dp),
-                    contentAlignment = Alignment.Center
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(Spacing.md),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(Spacing.sm)
                 ) {
-                    Text("今日无排课", color = MaterialTheme.colorScheme.outline)
+                    Icon(
+                        Icons.Outlined.Schedule,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.size(32.dp)
+                    )
+                    Text("今日无排课", color = MaterialTheme.colorScheme.outline,
+                        style = MaterialTheme.typography.bodyLarge)
+                    Text("空闲时间也能高效利用，试试下面的快捷操作",
+                        color = MaterialTheme.colorScheme.outline,
+                        style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(Spacing.xs))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                    ) {
+                        // 按钮1：查看未来一周排课概览
+                        TextButton(
+                            onClick = { showRecentSchedules = true },
+                            modifier = Modifier.weight(1f),
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(Icons.Outlined.Schedule, contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(4.dp))
+                            Text("查看排课", color = MaterialTheme.colorScheme.primary)
+                        }
+                        // 按钮2：从近期记忆一键填充典型排课表单
+                        Button(
+                            onClick = { showTypicalSchedule = true },
+                            modifier = Modifier.weight(1f),
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                            enabled = timeMemories.isNotEmpty() || locationMemories.isNotEmpty()
+                        ) {
+                            Icon(Icons.Outlined.Add, contentDescription = null,
+                                modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("添加排课")
+                        }
+                    }
+                    // 当没有排课记忆时的友好提示
+                    if (timeMemories.isEmpty() && locationMemories.isEmpty()) {
+                        Text(
+                            "「添加排课」需要先排过一次课，下次就能一键填充时间和地点了",
+                            color = MaterialTheme.colorScheme.outline,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
                 }
             }
         } else {
@@ -217,25 +311,59 @@ fun PreClassTab(
                     onEdit = {
                         opVm.startEdit(schedule.id)
                         editingScheduleId = schedule.id
+                    },
+                    // === v5 修复：点击"上传精彩瞬间"按钮时缓存当前学员名并启动图库选择器 ===
+                    // 原代码漏传 onUploadMoment 参数，按钮点击 = no-op（默认空实现 {}）
+                    // 这里补上：先缓存 schedule.studentName 到 pendingMomentStudentName，
+                    // 再调用 momentLauncher.launch 启动系统图库
+                    // 图库回调中读取 pendingMomentStudentName，触发 LaunchedEffect 执行上传
+                    onUploadMoment = {
+                        pendingMomentStudentName = schedule.studentName
+                        momentLauncher.launch(
+                            androidx.activity.result.PickVisualMediaRequest(
+                                androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly
+                            )
+                        )
                     }
                 )
             }
         }
-    }
 
-    // 添加排课对话框：复用 ScheduleEditDialog，预填当前周几
-    if (showAddSchedule) {
-        ScheduleEditDialog(
-            vm = opVm,
-            isCreate = true,
-            prefillDayOfWeek = dayOfWeek,
-            onDismiss = { showAddSchedule = false },
-            onSaved = { showAddSchedule = false }
-        )
+        // === v28 优化1：查看全部历史归档入口 ===
+        // 默认所有列表只查 lessons 表（热数据），仅当教练主动点击时加载归档表（冷数据）
+        IosCard {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(Spacing.md),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "查看全部历史归档",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        "一年以上的旧课时已自动归档，点击查看完整记录",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
+                IconButton(onClick = { showArchivedList = true }) {
+                    Icon(
+                        Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                        contentDescription = "查看归档",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        }
     }
 
     // 编辑排课对话框：点击课前准备清单中的课程卡片编辑按钮触发
-    if (editingScheduleId != null) {
+    // 仅当编辑数据加载完成（editingSchedule != null）时才渲染，与 OperationScreen/ScheduleScreen
+    // 保持一致，避免异步加载未完成时 Dialog 一直卡在"加载中"。
+    if (editingScheduleId != null && editingSchedule != null) {
         ScheduleEditDialog(
             vm = opVm,
             isCreate = false,
@@ -249,6 +377,165 @@ fun PreClassTab(
             }
         )
     }
+
+    // === v26 优化3：典型排课对话框 ===
+    // 从 ScheduleMemory 调出教练最近使用过的"上课时间"和"上课地点"，预填到表单
+    // 教练只需选择学员即可一键完成排课，减少重复输入的疲劳感
+    if (showTypicalSchedule) {
+        val prefillTime = timeMemories.firstOrNull()?.value
+        val prefillLoc = locationMemories.firstOrNull()?.value
+        ScheduleEditDialog(
+            vm = opVm,
+            isCreate = true,
+            prefillDayOfWeek = dayOfWeek,
+            prefillStartTime = prefillTime,
+            prefillLocation = prefillLoc,
+            onDismiss = { showTypicalSchedule = false },
+            onSaved = { showTypicalSchedule = false }
+        )
+    }
+
+    // === v26 优化3：近期排课概览对话框 ===
+    if (showRecentSchedules) {
+        RecentSchedulesDialog(
+            schedules = allSchedules,
+            onDismiss = { showRecentSchedules = false }
+        )
+    }
+
+    // === v28 优化1：历史归档列表对话框 ===
+    // 点击"查看全部历史归档"按钮后懒加载 archived_lessons 表数据
+    if (showArchivedList) {
+        // 进入对话框时异步加载归档数据，加载中显示 Loading 指示
+        androidx.compose.runtime.LaunchedEffect(Unit) {
+            if (archivedLessons.isEmpty() && !archivedLoading) {
+                archivedLoading = true
+                vm.loadAllArchivedLessons { list ->
+                    archivedLessons = list
+                    archivedLoading = false
+                }
+            }
+        }
+        ArchivedLessonsDialog(
+            lessons = archivedLessons,
+            loading = archivedLoading,
+            onDismiss = {
+                showArchivedList = false
+                // 关闭后清空缓存，下次打开重新加载，避免长期持有大量归档数据
+                archivedLessons = emptyList()
+            }
+        )
+    }
+}
+
+/**
+ * 近期排课概览对话框（v26 优化3）：展示未来一周的排课概览。
+ *
+ * 用于"今日无排课"空状态下的智能引导，让教练快速看到未来一周的排课安排，
+ * 无需跳转到周课表页面即可了解整体排课情况。
+ *
+ * @param schedules 全部活跃排课列表
+ * @param onDismiss 关闭回调
+ */
+@Composable
+private fun RecentSchedulesDialog(
+    schedules: List<Schedule>,
+    onDismiss: () -> Unit
+) {
+    // 按周几分组并按开始时间排序
+    val dayNames = mapOf(
+        1 to "周一", 2 to "周二", 3 to "周三", 4 to "周四",
+        5 to "周五", 6 to "周六", 7 to "周日"
+    )
+    val grouped = schedules.sortedBy { it.dayOfWeek }.groupBy { it.dayOfWeek }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+            // 顶部栏
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(Spacing.md),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    "未来一周排课概览",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Outlined.Close, contentDescription = "关闭")
+                }
+            }
+
+            if (schedules.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("暂无任何排课记录", color = MaterialTheme.colorScheme.outline)
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize().padding(horizontal = Spacing.md),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+                ) {
+                    items(grouped.entries.toList()) { (dayOfWeek, daySchedules) ->
+                        IosCard {
+                            Column(modifier = Modifier.padding(Spacing.md)) {
+                                Text(
+                                    dayNames[dayOfWeek] ?: "周$dayOfWeek",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(Modifier.height(Spacing.xs))
+                                daySchedules.sortedBy { it.startTime }.forEach { s ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth()
+                                            .padding(vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            s.startTime,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.width(60.dp)
+                                        )
+                                        Text(
+                                            s.studentName,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        if (s.location.isNotBlank()) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Outlined.LocationOn,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.outline,
+                                                    modifier = Modifier.size(12.dp))
+                                                Text(
+                                                    s.location,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.outline
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -259,8 +546,28 @@ private fun PreClassScheduleCard(
     contentImages: List<String>,
     equipmentList: List<String>,
     onSign: () -> Unit,
-    onEdit: () -> Unit
+    onEdit: () -> Unit,
+    /**
+     * === v5 新增：上传精彩瞬间回调 ===
+     * 点击"上传精彩瞬间"按钮时触发，由调用方启动图库选择器。
+     * 卡片本身不感知 Uri，只负责把学员姓名传给调用方。
+     */
+    onUploadMoment: () -> Unit = {}
 ) {
+    // === v25 新增：订阅该学员的电脑端训练计划图片 ===
+    // 通过 produceState 异步订阅 PlanImageRepository.getByStudent 返回的 Flow
+    // 学员姓名变更或新截图同步进来时，画廊自动响应更新
+    val context = LocalContext.current
+    val planImages by produceState(
+        initialValue = emptyList<PlanImage>(),
+        schedule.studentName
+    ) {
+        // 使用 AppDatabase 单例获取 planImageDao，避免修改 HomeViewModel 注入链
+        val dao = AppDatabase.getDatabase(context.applicationContext as android.app.Application)
+            .planImageDao()
+        dao.getByStudent(schedule.studentName).collect { value = it }
+    }
+
     IosCard {
         Column(modifier = Modifier.padding(Spacing.md)) {
             Row(
@@ -268,7 +575,7 @@ private fun PreClassScheduleCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    Icons.Filled.Schedule,
+                    Icons.Outlined.Schedule,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(end = 8.dp)
@@ -282,7 +589,7 @@ private fun PreClassScheduleCard(
                 Spacer(Modifier.weight(1f))
                 if (isSigned) {
                     Icon(
-                        Icons.Filled.CheckCircle,
+                        Icons.Outlined.CheckCircle,
                         contentDescription = "已签到",
                         tint = com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent,
                         modifier = Modifier.padding(end = 4.dp)
@@ -293,7 +600,7 @@ private fun PreClassScheduleCard(
                 // 编辑按钮：点击后打开 ScheduleEditDialog 修改课程内容
                 IconButton(onClick = onEdit, modifier = Modifier.size(28.dp)) {
                     Icon(
-                        Icons.Filled.Edit,
+                        Icons.Outlined.Edit,
                         contentDescription = "编辑课程",
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(16.dp)
@@ -311,7 +618,7 @@ private fun PreClassScheduleCard(
             if (schedule.location.isNotBlank()) {
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.LocationOn, contentDescription = null,
+                    Icon(Icons.Outlined.LocationOn, contentDescription = null,
                         tint = MaterialTheme.colorScheme.outline,
                         modifier = Modifier.size(14.dp).padding(end = 4.dp))
                     Text("地点：${schedule.location}",
@@ -350,7 +657,7 @@ private fun PreClassScheduleCard(
                 Spacer(Modifier.height(Spacing.sm))
                 Text("训练计划图片", style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = com.shangmentiyu.sportscoach.ui.theme.FeatureIconOrange)
+                    color = MaterialTheme.colorScheme.primary)
                 // 横向滚动展示图片缩略图
                 Row(
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -362,12 +669,46 @@ private fun PreClassScheduleCard(
                 }
             }
 
+            // === v25 新增：来自电脑端的训练计划截图画廊（LazyRow 水平卡片）===
+            // 数据来源：电脑端 PySide6 截图 → 局域网 HTTP 下载 → LanImageReceiver 解析姓名
+            // → PlanImageRepository 写入 student_plan_images 表
+            // 显示：每张图片以 96dp 宽卡片展示，点击可放大查看（复用 ZoomableImageDialog）
+            if (planImages.isNotEmpty()) {
+                Spacer(Modifier.height(Spacing.sm))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "来自电脑端的训练计划",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        "${planImages.size} 张",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(planImages) { planImage ->
+                        LanPlanImageCard(planImage = planImage)
+                    }
+                }
+            }
+
             // 上课器材
             if (equipmentList.isNotEmpty()) {
                 Spacer(Modifier.height(Spacing.sm))
                 Text("上课器材", style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = com.shangmentiyu.sportscoach.ui.theme.FeatureIconOrange)
+                    color = MaterialTheme.colorScheme.primary)
                 Text(equipmentList.joinToString("、"), style = MaterialTheme.typography.bodySmall)
             }
 
@@ -379,11 +720,28 @@ private fun PreClassScheduleCard(
                     modifier = Modifier.fillMaxWidth(),
                     shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
                 ) {
-                    Icon(Icons.Filled.PlayArrow, contentDescription = null,
+                    Icon(Icons.Outlined.PlayArrow, contentDescription = null,
                         modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
                     Text("课前签到")
                 }
+            }
+            // === v5 新增：上传精彩瞬间到 PC 端 ===
+            // 与签到按钮同行下方，使用 TextButton 次要样式（不抢主按钮视觉）
+            // 仅当教练已配置 PC 端 IP 时按钮才有意义，但此处不阻塞：
+            // 未配置时点击会返回失败提示，引导教练去设置
+            TextButton(
+                onClick = onUploadMoment,
+                modifier = Modifier.fillMaxWidth(),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+            ) {
+                Icon(Icons.Outlined.PhotoLibrary, contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.outline)
+                Spacer(Modifier.width(4.dp))
+                Text("上传精彩瞬间",
+                    color = MaterialTheme.colorScheme.outline,
+                    style = MaterialTheme.typography.labelMedium)
             }
         }
     }
@@ -422,7 +780,7 @@ private fun ScheduleImageThumb(path: String) {
         } else {
             Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                 Icon(
-                    Icons.Filled.Schedule,
+                    Icons.Outlined.Schedule,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.outline,
                     modifier = Modifier.size(20.dp)
@@ -432,6 +790,96 @@ private fun ScheduleImageThumb(path: String) {
     }
 
     // 全屏缩放查看
+    if (fullscreen && bitmap != null) {
+        ZoomableImageDialog(bitmap = bitmap, onDismiss = { fullscreen = false })
+    }
+}
+
+/**
+ * v25 新增：电脑端训练计划图片画廊卡片。
+ *
+ * 数据来源：电脑端 PySide6 截图 → 局域网 HTTP 下载 → filesDir/ImportedPlans/
+ * 显示规格：
+ * - 卡片宽度 96dp，高度 110dp（含日期标签）
+ * - 圆角 8dp，纯白背景
+ * - 图片以 ContentScale.Crop 填充 96×96 区域
+ * - 底部叠加日期标签（白色半透明背景）
+ * - 点击放大查看（复用 [ZoomableImageDialog]）
+ *
+ * @param planImage 训练计划图片记录（含 imagePath / createdAt / originalFilename）
+ */
+@Composable
+private fun LanPlanImageCard(planImage: PlanImage) {
+    var fullscreen by remember { mutableStateOf(false) }
+    val bitmap = remember(planImage.id, planImage.imagePath) {
+        try {
+            val file = java.io.File(planImage.imagePath)
+            if (file.exists()) {
+                android.graphics.BitmapFactory.decodeFile(file.absolutePath)
+            } else null
+        } catch (_: Exception) { null }
+    }
+
+    // 日期格式化：createdAt 毫秒 → yyyy/MM/dd
+    val dateText = remember(planImage.createdAt) {
+        try {
+            val sdf = java.text.SimpleDateFormat("yyyy/MM/dd", java.util.Locale.CHINA)
+            sdf.format(java.util.Date(planImage.createdAt))
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .width(96.dp)
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+            .clickable { if (bitmap != null) fullscreen = true }
+    ) {
+        Box(
+            modifier = Modifier
+                .size(96.dp)
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+        ) {
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap.asImageBitmap(),
+                    contentDescription = "电脑端训练计划",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                // 图片文件丢失时显示占位图标
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                    Icon(
+                        Icons.Outlined.Schedule,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+        }
+        // 底部日期标签
+        if (dateText.isNotBlank()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    dateText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+            }
+        }
+    }
+
+    // 全屏缩放查看（复用现有组件）
     if (fullscreen && bitmap != null) {
         ZoomableImageDialog(bitmap = bitmap, onDismiss = { fullscreen = false })
     }
@@ -526,7 +974,7 @@ internal fun ZoomableImageDialog(
                     .background(Color.Black.copy(alpha = 0.5f))
             ) {
                 Icon(
-                    Icons.Filled.Close,
+                    Icons.Outlined.Close,
                     contentDescription = "关闭",
                     tint = Color.White,
                     modifier = Modifier.size(24.dp)
@@ -545,6 +993,185 @@ internal fun ZoomableImageDialog(
                     .background(Color.Black.copy(alpha = 0.4f))
                     .padding(horizontal = 12.dp, vertical = 6.dp)
             )
+        }
+    }
+}
+
+/**
+ * === v28 优化1：历史归档课时列表对话框 ===
+ *
+ * 全屏展示全部归档课时（archived_lessons 表），按日期降序、时间降序。
+ * 与热数据 lessons 表查询分离，仅在用户主动打开时加载，不影响日常列表性能。
+ *
+ * 设计原则：
+ * - 数据量大时仅显示前 500 条 + 顶部统计（避免一次性渲染数千条导致 OOM）
+ * - 卡片样式与 [PreClassScheduleCard] 保持一致，确保视觉统一
+ *
+ * @param lessons 归档课时列表
+ * @param loading 是否正在加载
+ * @param onDismiss 关闭回调
+ */
+@Composable
+private fun ArchivedLessonsDialog(
+    lessons: List<com.shangmentiyu.sportscoach.data.model.ArchivedLesson>,
+    loading: Boolean,
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+            // 顶部栏：标题 + 关闭按钮 + 统计
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(Spacing.md),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "全部历史归档",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "共 ${lessons.size} 条已归档课时（一年前）",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Outlined.Close, contentDescription = "关闭")
+                }
+            }
+
+            if (loading) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.height(Spacing.sm))
+                        Text("正在加载归档数据...", color = MaterialTheme.colorScheme.outline)
+                    }
+                }
+            } else if (lessons.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Outlined.Schedule,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Spacer(Modifier.height(Spacing.sm))
+                        Text("暂无归档课时", color = MaterialTheme.colorScheme.outline)
+                        Text(
+                            "数据量超过 2000 条且存在一年以上旧记录时会自动归档",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+                }
+            } else {
+                // 仅显示前 500 条避免一次性渲染过多导致 OOM
+                val displayList = if (lessons.size > 500) lessons.take(500) else lessons
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize().padding(horizontal = Spacing.md),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+                ) {
+                    items(displayList) { lesson ->
+                        ArchivedLessonCard(lesson = lesson)
+                    }
+                    if (lessons.size > 500) {
+                        item {
+                            IosCard {
+                                Box(
+                                    modifier = Modifier.fillMaxWidth().padding(Spacing.md),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        "仅显示前 500 条，共 ${lessons.size} 条归档记录",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 单条归档课时卡片：展示学员、日期、时间、内容、教练寄语等关键信息。
+ */
+@Composable
+private fun ArchivedLessonCard(lesson: com.shangmentiyu.sportscoach.data.model.ArchivedLesson) {
+    IosCard {
+        Column(modifier = Modifier.padding(Spacing.md)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Outlined.Schedule,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(end = 8.dp).size(16.dp)
+                )
+                Text(
+                    "${lesson.date} ${lesson.time}",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.weight(1f))
+                // 归档时间标签
+                Text(
+                    "已归档",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline,
+                    modifier = Modifier
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                lesson.studentName,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium
+            )
+            if (lesson.content.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "内容：${lesson.content.take(80)}${if (lesson.content.length > 80) "..." else ""}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
+            if (lesson.coachComment.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "寄语：${lesson.coachComment.take(80)}${if (lesson.coachComment.length > 80) "..." else ""}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
         }
     }
 }

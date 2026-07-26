@@ -13,10 +13,20 @@ local.properties
 # 签名密钥（个人使用也应避免上传）
 *.jks
 *.keystore
+# 无扩展名的签名文件（Android Studio 创建时未指定扩展名的情况）
+SMTY
+SMTY.*
+keystore.properties
 
 # 日志与临时文件
 *.log
 *.tmp
+
+# Python 缓存文件
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
 
 # 系统文件
 Thumbs.db

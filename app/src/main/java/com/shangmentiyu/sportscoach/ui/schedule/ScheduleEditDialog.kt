@@ -26,26 +26,30 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Notes
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AddPhotoAlternate
-import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Label
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.Notes
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.AddPhotoAlternate
+import androidx.compose.material.icons.outlined.CalendarToday
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Label
+import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
@@ -76,7 +80,10 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.shangmentiyu.sportscoach.data.model.ExerciseItem
+import com.shangmentiyu.sportscoach.data.repo.CoachConflictException
+import com.shangmentiyu.sportscoach.data.repo.WebDavCredentialsStore
 import com.shangmentiyu.sportscoach.ui.operation.OperationViewModel
+import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import com.shangmentiyu.sportscoach.ui.theme.IOSCard
 import com.shangmentiyu.sportscoach.ui.theme.IOSColorPillSelector
 import com.shangmentiyu.sportscoach.ui.theme.IOSSectionHeader
@@ -126,6 +133,9 @@ fun ScheduleEditDialog(
     vm: OperationViewModel,
     isCreate: Boolean,
     prefillDayOfWeek: Int? = null,
+    // === v26 优化3：支持从"添加典型排课"按钮预填时间/地点 ===
+    prefillStartTime: String? = null,
+    prefillLocation: String? = null,
     onDismiss: () -> Unit,
     onSaved: () -> Unit
 ) {
@@ -134,6 +144,17 @@ fun ScheduleEditDialog(
     // 排课记忆：时间/地点历史下拉
     val timeMemories by vm.timeMemories.collectAsState()
     val locationMemories by vm.locationMemories.collectAsState()
+    // === v24 优化6：最近操作的上课周几记忆（新建模式默认选中） ===
+    val dayOfWeekMemories by vm.dayOfWeekMemories.collectAsState()
+    // === 焦点管理器：从下拉菜单选择项目后立即清除焦点，关闭软键盘 ===
+    // 用户痛点：从历史记录选择学员/上课地点后，OutlinedTextField 仍保持焦点，
+    // 导致系统自动弹出软键盘遮挡视线。选择后 clearFocus() 即可关闭键盘。
+    // 若用户想手动输入新内容，单击输入框仍可正常唤起键盘（保留默认行为）。
+    val focusManager = LocalFocusManager.current
+    // === v28 优化3：协程作用域，用于学员选中后异步加载训练内容推荐 ===
+    val scope = rememberCoroutineScope()
+    // === v28 优化3：是否已为当前学员填充过推荐训练内容（避免重复覆盖用户编辑） ===
+    var recommendedFor by remember { mutableStateOf<String?>(null) }
 
     // 编辑模式下等待原数据加载完成
     val loaded = if (isCreate) true else editing != null
@@ -142,10 +163,16 @@ fun ScheduleEditDialog(
     var studentName by remember { mutableStateOf("") }
     // 教练默认为"李"（用户要求）
     var coachName by remember { mutableStateOf("李") }
+    // 新建模式下：优先使用调用方传入的 prefillDayOfWeek；
+    // 若调用方未指定（null），则回退到上一次排课的周几记忆；都没有则用 1（周一）。
     var dayOfWeek by remember { mutableStateOf(prefillDayOfWeek ?: 1) }
-    var startTime by remember { mutableStateOf("09:00") }
+    // 新建模式多选周几集合；编辑模式保持空（编辑单条记录使用 dayOfWeek）
+    var selectedDays by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    // 是否已应用过"近期记忆"默认值（防止 LaunchedEffect 重复覆盖用户已修改的选中状态）
+    var memoryApplied by remember { mutableStateOf(false) }
+    var startTime by remember { mutableStateOf(prefillStartTime ?: "09:00") }
     var durationMinutes by remember { mutableStateOf("60") }
-    var location by remember { mutableStateOf("") }
+    var location by remember { mutableStateOf(prefillLocation ?: "") }
     var lessonType by remember { mutableStateOf("训练课") }
     var isLongTerm by remember { mutableStateOf(false) }
     var color by remember { mutableStateOf("blue") }
@@ -172,7 +199,59 @@ fun ScheduleEditDialog(
             contentImages = vm.parseImages(s.contentImages)
             equipment = vm.parseEquipment(s.equipment)
         } else if (isCreate && prefillDayOfWeek != null) {
+            // 新建模式：从课表页 FAB 跳转时预填一个周几
             dayOfWeek = prefillDayOfWeek
+            selectedDays = setOf(prefillDayOfWeek)
+            memoryApplied = true  // 已显式预填，无需再应用记忆
+        }
+    }
+
+    // === v25 优化5：监听保存成功事件，调用 onSaved() 关闭弹窗 ===
+    // 替代原"按钮点击后立即 onSaved()"的同步关闭行为
+    // 让"成功才关闭、冲突弹框、失败保持打开"三种分支能在 UI 层清晰区分
+    LaunchedEffect(Unit) {
+        vm.saveSuccessEvent.collect { onSaved() }
+    }
+
+    // === v25 优化5：教练时间冲突确认框状态 ===
+    // 收到冲突事件时显示 GlassAlertDialog，用户确认后用 forceReplace=true 重新保存
+    var pendingConflict by remember { mutableStateOf<CoachConflictException?>(null) }
+    LaunchedEffect(Unit) {
+        vm.coachConflictEvent.collect { e -> pendingConflict = e }
+    }
+
+    // 暂存当前表单快照，用于冲突确认后用 forceReplace=true 重新提交
+    // （用户在确认框期间未修改表单，state 变量保持不变，直接复用即可）
+    val buildForm: () -> ScheduleForm = {
+        ScheduleForm(
+            studentName = studentName,
+            coachName = coachName,
+            dayOfWeek = dayOfWeek,
+            daysOfWeek = if (isCreate) selectedDays else emptySet(),
+            startTime = startTime,
+            durationMinutes = durationMinutes.toIntOrNull() ?: 60,
+            location = location,
+            lessonType = lessonType,
+            isLongTerm = isLongTerm,
+            content = content,
+            contentImages = contentImages,
+            color = color,
+            note = note,
+            equipment = equipment
+        )
+    }
+
+    // === v24 优化6：新建模式 + 未显式预填 + 有近期周几记忆 → 应用最近一次操作的周几作为默认选中 ===
+    // 独立 LaunchedEffect 监听 dayOfWeekMemories，确保数据库异步加载完成后才应用
+    LaunchedEffect(isCreate, prefillDayOfWeek, dayOfWeekMemories) {
+        if (isCreate && prefillDayOfWeek == null && !memoryApplied && dayOfWeekMemories.isNotEmpty()) {
+            // 取最近一次操作的周几（dayOfWeekMemories 已按 updatedAt 降序）
+            val recentDay = dayOfWeekMemories.first().value.toIntOrNull()
+            if (recentDay != null && recentDay in 1..7) {
+                dayOfWeek = recentDay
+                selectedDays = setOf(recentDay)
+            }
+            memoryApplied = true
         }
     }
 
@@ -201,7 +280,7 @@ fun ScheduleEditDialog(
                 navigationIcon = {
                     IconButton(onClick = onDismiss) {
                         Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
+                            Icons.AutoMirrored.Outlined.ArrowBack,
                             contentDescription = "返回"
                         )
                     }
@@ -243,7 +322,7 @@ fun ScheduleEditDialog(
                                 onValueChange = { studentName = it },
                                 readOnly = false,
                                 label = { Text("学员") },
-                                leadingIcon = { Icon(Icons.Filled.Person, contentDescription = null) },
+                                leadingIcon = { Icon(Icons.Outlined.Person, contentDescription = null) },
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(studentExpanded) },
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -259,6 +338,29 @@ fun ScheduleEditDialog(
                                         onClick = {
                                             studentName = s.name
                                             studentExpanded = false
+                                            // 选择学员后立即清除焦点，关闭软键盘
+                                            focusManager.clearFocus()
+                                            // === v28 优化3：新建模式下选中学员后异步预填训练内容推荐 ===
+                                            // 触发条件：
+                                            // 1. 仅新建模式（isCreate=true）触发，编辑模式不动用户已有内容
+                                            // 2. 当前 content 为空（用户尚未添加动作）
+                                            // 3. 同一学员只触发一次（避免用户清空后又自动填充）
+                                            // 异步执行不阻塞 UI；推荐失败静默忽略，保持空白由教练填写
+                                            if (isCreate && content.isEmpty() && recommendedFor != s.name) {
+                                                recommendedFor = s.name
+                                                scope.launch {
+                                                    val recommended = withContext(Dispatchers.IO) {
+                                                        vm.recommendTrainingContent(
+                                                            studentName = s.name,
+                                                            latestBmi = s.bmi
+                                                        )
+                                                    }
+                                                    // 再次校验 content 仍为空（用户可能在加载期间手动添加）
+                                                    if (recommended.isNotEmpty() && content.isEmpty()) {
+                                                        content = recommended
+                                                    }
+                                                }
+                                            }
                                         }
                                     )
                                 }
@@ -270,7 +372,7 @@ fun ScheduleEditDialog(
                             value = coachName,
                             onValueChange = { coachName = it },
                             label = { Text("教练") },
-                            leadingIcon = { Icon(Icons.Filled.Person, contentDescription = null) },
+                            leadingIcon = { Icon(Icons.Outlined.Person, contentDescription = null) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -281,36 +383,93 @@ fun ScheduleEditDialog(
                 item {
                     IOSSectionHeader("时间安排")
                     IOSCard {
-                        // 周几下拉
-                        var dayExpanded by remember { mutableStateOf(false) }
                         val dayLabels = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
-                        ExposedDropdownMenuBox(
-                            expanded = dayExpanded,
-                            onExpandedChange = { dayExpanded = !dayExpanded }
-                        ) {
-                            OutlinedTextField(
-                                value = dayLabels.getOrNull(dayOfWeek - 1) ?: "周一",
-                                onValueChange = {},
-                                readOnly = true,
-                                label = { Text("周几") },
-                                leadingIcon = { Icon(Icons.Filled.CalendarToday, contentDescription = null) },
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(dayExpanded) },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true)
-                            )
-                            DropdownMenu(
-                                expanded = dayExpanded,
-                                onDismissRequest = { dayExpanded = false }
+                        // 周几选择：新建模式多选 Chip（避免重复添加），编辑模式保留单选下拉
+                        if (isCreate) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Outlined.CalendarToday,
+                                    contentDescription = null,
+                                    tint = appOutline(),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(Modifier.width(Spacing.sm))
+                                Text(
+                                    "选择周几",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = appOutline()
+                                )
+                            }
+                            Spacer(Modifier.height(Spacing.sm))
+                            FlowRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
                             ) {
                                 dayLabels.forEachIndexed { idx, label ->
-                                    DropdownMenuItem(
-                                        text = { Text(label) },
+                                    val day = idx + 1
+                                    FilterChip(
+                                        selected = selectedDays.contains(day),
                                         onClick = {
-                                            dayOfWeek = idx + 1
-                                            dayExpanded = false
-                                        }
+                                            val newSelectedDays = if (selectedDays.contains(day)) {
+                                                selectedDays - day
+                                            } else {
+                                                selectedDays + day
+                                            }
+                                            selectedDays = newSelectedDays
+                                            // === Bug 2 UI 修复 ===
+                                            // 多天排课必须搭配"长期排课"：
+                                            // 单次排课只能对应一个 dayOfWeek，多选天时若不勾选长期排课，
+                                            // 后续 ensureLongTermLessonsForWeek 也不会为这些天生成课时记录，
+                                            // 会导致"排了课却没有课时"的混乱。
+                                            // 解决方案：自动勾选"长期排课"并 Toast 提示用户。
+                                            if (newSelectedDays.size > 1 && !isLongTerm) {
+                                                isLongTerm = true
+                                                vm.showToast("已自动勾选\u201C长期排课\u201D：多天排课需按周循环生成课程")
+                                            }
+                                            // 同步 dayOfWeek 为首个选中值（用于回退/展示）
+                                            dayOfWeek = newSelectedDays.minOrNull() ?: day
+                                        },
+                                        label = { Text(label) },
+                                        leadingIcon = if (selectedDays.contains(day)) {
+                                            { Icon(Icons.Outlined.Check, contentDescription = null) }
+                                        } else null
                                     )
+                                }
+                            }
+                        } else {
+                            // 编辑模式：保留原下拉单选（编辑单条记录）
+                            var dayExpanded by remember { mutableStateOf(false) }
+                            ExposedDropdownMenuBox(
+                                expanded = dayExpanded,
+                                onExpandedChange = { dayExpanded = !dayExpanded }
+                            ) {
+                                OutlinedTextField(
+                                    value = dayLabels.getOrNull(dayOfWeek - 1) ?: "周一",
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    label = { Text("周几") },
+                                    leadingIcon = { Icon(Icons.Outlined.CalendarToday, contentDescription = null) },
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(dayExpanded) },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true)
+                                )
+                                DropdownMenu(
+                                    expanded = dayExpanded,
+                                    onDismissRequest = { dayExpanded = false }
+                                ) {
+                                    dayLabels.forEachIndexed { idx, label ->
+                                        DropdownMenuItem(
+                                            text = { Text(label) },
+                                            onClick = {
+                                                dayOfWeek = idx + 1
+                                                dayExpanded = false
+                                                // 选择周几后立即清除焦点，关闭软键盘
+                                                focusManager.clearFocus()
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -335,7 +494,7 @@ fun ScheduleEditDialog(
                                     },
                                     label = { Text("开始时间") },
                                     placeholder = { Text("09:00") },
-                                    leadingIcon = { Icon(Icons.Filled.Schedule, contentDescription = null) },
+                                    leadingIcon = { Icon(Icons.Outlined.Schedule, contentDescription = null) },
                                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(timeExpanded) },
                                     singleLine = true,
                                     modifier = Modifier
@@ -358,6 +517,8 @@ fun ScheduleEditDialog(
                                                 onClick = {
                                                     startTime = mem.value
                                                     timeExpanded = false
+                                                    // 选择历史时间后立即清除焦点，关闭软键盘
+                                                    focusManager.clearFocus()
                                                 }
                                             )
                                         }
@@ -368,7 +529,7 @@ fun ScheduleEditDialog(
                                 value = durationMinutes,
                                 onValueChange = { durationMinutes = it.filter { c -> c.isDigit() } },
                                 label = { Text("时长(分)") },
-                                leadingIcon = { Icon(Icons.Filled.Timer, contentDescription = null) },
+                                leadingIcon = { Icon(Icons.Outlined.Timer, contentDescription = null) },
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier.weight(1f)
@@ -418,7 +579,7 @@ fun ScheduleEditDialog(
                                 },
                                 readOnly = false,
                                 label = { Text("上课地点") },
-                                leadingIcon = { Icon(Icons.Filled.LocationOn, contentDescription = null) },
+                                leadingIcon = { Icon(Icons.Outlined.LocationOn, contentDescription = null) },
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(locExpanded) },
                                 singleLine = true,
                                 modifier = Modifier
@@ -441,6 +602,8 @@ fun ScheduleEditDialog(
                                             onClick = {
                                                 location = mem.value
                                                 locExpanded = false
+                                                // 选择历史地点后立即清除焦点，关闭软键盘
+                                                focusManager.clearFocus()
                                             }
                                         )
                                     }
@@ -460,7 +623,7 @@ fun ScheduleEditDialog(
                                 onValueChange = { lessonType = it },
                                 readOnly = false,
                                 label = { Text("课时类型") },
-                                leadingIcon = { Icon(Icons.Filled.Label, contentDescription = null) },
+                                leadingIcon = { Icon(Icons.Outlined.Label, contentDescription = null) },
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(typeExpanded) },
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -476,6 +639,8 @@ fun ScheduleEditDialog(
                                         onClick = {
                                             lessonType = t
                                             typeExpanded = false
+                                            // 选择课时类型后立即清除焦点，关闭软键盘
+                                            focusManager.clearFocus()
                                         }
                                     )
                                 }
@@ -523,7 +688,7 @@ fun ScheduleEditDialog(
                                     leadingIcon = if (equipment.contains(name)) {
                                         {
                                             Icon(
-                                                Icons.Filled.Check,
+                                                Icons.Outlined.Check,
                                                 contentDescription = null,
                                                 modifier = Modifier.size(16.dp)
                                             )
@@ -546,6 +711,21 @@ fun ScheduleEditDialog(
                 item {
                     IOSSectionHeader("训练内容")
                     IOSCard {
+                        // === v32 优化2：常用训练动作积木胶囊按钮 ===
+                        // - 数据源：WebDavCredentialsStore.getExerciseBlocks()
+                        // - 首次返回预置 15 个动作，用户在设置页自定义后返回持久化列表
+                        // - 点击胶囊：将动作名追加为新 ExerciseItem（默认 3 组 × 10 次）
+                        ExerciseBlocksRow(
+                            onAppendBlock = { blockName ->
+                                content = content + ExerciseItem(
+                                    name = blockName,
+                                    sets = 3,
+                                    reps = "10",
+                                    intensity = ""
+                                )
+                            }
+                        )
+                        Spacer(Modifier.height(Spacing.md))
                         if (content.isEmpty()) {
                             Text(
                                 "暂无训练内容，点击下方按钮添加",
@@ -569,6 +749,50 @@ fun ScheduleEditDialog(
                             }
                         }
                         Spacer(Modifier.height(Spacing.sm))
+                        // === v29 优化2：一键复制上次训练内容按钮 ===
+                        // 仅当选中有效学员时显示，点击后异步从该学员 lessons 表
+                        // 取最近一条非空 content 填充到当前表单
+                        if (studentName.isNotBlank()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(appPrimary().copy(alpha = 0.05f))
+                                    .clickable {
+                                        // 异步加载上次训练内容，覆盖当前 content
+                                        scope.launch {
+                                            val lastContent = withContext(Dispatchers.IO) {
+                                                vm.fetchLastTrainingContent(studentName)
+                                            }
+                                            if (lastContent.isNotEmpty()) {
+                                                // 直接覆盖当前 content（用户主动点击，无需保留原内容）
+                                                content = lastContent
+                                                vm.showToast("已复制上次训练内容（${lastContent.size} 项）")
+                                            } else {
+                                                vm.showToast("该学员暂无可复用的训练内容")
+                                            }
+                                        }
+                                    }
+                                    .padding(Spacing.md),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Outlined.ContentCopy,
+                                    contentDescription = "复制上次训练内容",
+                                    tint = appPrimary(),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(Modifier.width(Spacing.xs))
+                                Text(
+                                    "复制上次训练内容",
+                                    color = appPrimary(),
+                                    fontWeight = FontWeight.Medium,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                            Spacer(Modifier.height(Spacing.sm))
+                        }
                         // 添加动作按钮（浅蓝填充胶囊）
                         Row(
                             modifier = Modifier
@@ -583,7 +807,7 @@ fun ScheduleEditDialog(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                Icons.Filled.Add,
+                                Icons.Outlined.Add,
                                 contentDescription = "添加动作",
                                 tint = appPrimary(),
                                 modifier = Modifier.size(18.dp)
@@ -619,7 +843,7 @@ fun ScheduleEditDialog(
                             value = note,
                             onValueChange = { note = it },
                             label = { Text("备注信息") },
-                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.Notes, contentDescription = null) },
+                            leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Notes, contentDescription = null) },
                             modifier = Modifier.fillMaxWidth(),
                             minLines = 2
                         )
@@ -638,7 +862,7 @@ fun ScheduleEditDialog(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Icon(
-                                Icons.Filled.Delete,
+                                Icons.Outlined.Delete,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.error,
                                 modifier = Modifier.size(18.dp)
@@ -665,24 +889,14 @@ fun ScheduleEditDialog(
             ) {
                 Button(
                     onClick = {
-                        vm.saveSchedule(
-                            ScheduleForm(
-                                studentName = studentName,
-                                coachName = coachName,
-                                dayOfWeek = dayOfWeek,
-                                startTime = startTime,
-                                durationMinutes = durationMinutes.toIntOrNull() ?: 60,
-                                location = location,
-                                lessonType = lessonType,
-                                isLongTerm = isLongTerm,
-                                content = content,
-                                contentImages = contentImages,
-                                color = color,
-                                note = note,
-                                equipment = equipment
-                            )
-                        )
-                        onSaved()
+                        // 新建模式校验：至少选择一个周几
+                        if (isCreate && selectedDays.isEmpty()) {
+                            vm.showToast("请至少选择一个周几")
+                            return@Button
+                        }
+                        // v25 优化5：不再立即 onSaved()
+                        // 由 vm.saveSuccessEvent 触发关闭，由 vm.coachConflictEvent 触发冲突确认框
+                        vm.saveSchedule(buildForm())
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -698,6 +912,43 @@ fun ScheduleEditDialog(
                         fontSize = 16.sp
                     )
                 }
+            }
+
+            // === v25 优化5：教练时间冲突确认框（用户可选择"强制替换"）===
+            // 收到 CoachConflictException 时弹出，提示"该时间段已有其他学员排课，是否强制替换？"
+            // 用户确认后用 forceReplace=true 重新调用 saveSchedule（先删旧排课再写新排课）
+            pendingConflict?.let { conflict ->
+                GlassAlertDialog(
+                    onDismissRequest = { pendingConflict = null },
+                    title = "排课冲突",
+                    content = {
+                        Column {
+                            Text(
+                                conflict.userMessage,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = appOnSurface()
+                            )
+                            Spacer(Modifier.height(Spacing.sm))
+                            Text(
+                                "是否强制替换？强制替换将删除原有冲突排课并写入新排课。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                pendingConflict = null
+                                // 用 forceReplace=true 重新保存（复用当前表单状态）
+                                vm.saveSchedule(buildForm(), forceReplace = true)
+                            }
+                        ) { Text("确认替换") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { pendingConflict = null }) { Text("取消") }
+                    }
+                )
             }
         }
     }
@@ -741,7 +992,7 @@ private fun ExerciseEditCard(
             )
             IconButton(onClick = onDelete) {
                 Icon(
-                    Icons.Filled.Delete,
+                    Icons.Outlined.Delete,
                     contentDescription = "删除",
                     tint = MaterialTheme.colorScheme.error,
                     modifier = Modifier.size(18.dp)
@@ -860,7 +1111,7 @@ private fun ContentImagesSection(
                                 .background(appSurface().copy(alpha = 0.8f))
                         ) {
                             Icon(
-                                Icons.Filled.Close,
+                                Icons.Outlined.Close,
                                 contentDescription = "删除图片",
                                 tint = MaterialTheme.colorScheme.error,
                                 modifier = Modifier.size(14.dp)
@@ -900,7 +1151,7 @@ private fun ContentImagesSection(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
-            Icons.Filled.AddPhotoAlternate,
+            Icons.Outlined.AddPhotoAlternate,
             contentDescription = "导入图片",
             tint = appPrimary(),
             modifier = Modifier.size(18.dp)
@@ -948,5 +1199,79 @@ private fun loadImageBitmapFromFile(path: String): androidx.compose.ui.graphics.
         }
     } catch (e: Exception) {
         androidx.compose.ui.graphics.ImageBitmap(1, 1)
+    }
+}
+
+/**
+ * 常用训练动作积木胶囊按钮（v32 优化2 新增）。
+ *
+ * - 数据源：[WebDavCredentialsStore.getExerciseBlocks]
+ * - 首次返回预置 15 个动作（高抬腿/深蹲/折返跑/跳绳等）
+ * - 用户在设置页自定义后，列表持久化到 SharedPreferences
+ * - 点击胶囊：调用 [onAppendBlock] 将动作名追加到训练内容
+ *
+ * 视觉规格：
+ * - 浅灰小标题"常用动作" + FlowRow 横排胶囊按钮
+ * - 胶囊：appPrimary 半透明背景 + 12dp 圆角 + 中等字号
+ * - 自适应换行，支持任意数量动作
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ExerciseBlocksRow(
+    onAppendBlock: (String) -> Unit
+) {
+    val context = LocalContext.current
+    // WebDavCredentialsStore 同时承载训练动作积木库（与 WebDAV 凭证分区存储）
+    val store = remember { WebDavCredentialsStore(context) }
+    var blocks by remember { mutableStateOf<List<String>>(emptyList()) }
+
+    // 首次进入页面加载积木库（每次打开 Dialog 都重新读取，确保设置页修改后立即生效）
+    LaunchedEffect(Unit) {
+        blocks = store.getExerciseBlocks()
+    }
+
+    if (blocks.isEmpty()) return
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Icon(
+            Icons.Outlined.Add,
+            contentDescription = null,
+            tint = appOutline(),
+            modifier = Modifier.size(14.dp)
+        )
+        Spacer(Modifier.width(Spacing.xs))
+        Text(
+            "常用动作",
+            style = MaterialTheme.typography.labelSmall,
+            color = appOutline(),
+            fontWeight = FontWeight.Medium
+        )
+    }
+    Spacer(Modifier.height(Spacing.sm))
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+    ) {
+        blocks.forEach { name ->
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(appPrimary().copy(alpha = 0.08f))
+                    .clickable { onAppendBlock(name) }
+                    .padding(horizontal = Spacing.sm, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    name,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = appPrimary(),
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
     }
 }

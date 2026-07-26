@@ -26,15 +26,17 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AddPhotoAlternate
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Logout
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.AddPhotoAlternate
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Logout
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -45,7 +47,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -67,11 +68,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
-import coil.compose.AsyncImage
 import com.shangmentiyu.sportscoach.core.PhotoCrypto
 import com.shangmentiyu.sportscoach.data.model.Lesson
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconOrange
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
+import com.shangmentiyu.sportscoach.ui.theme.SafeAsyncImage
 import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
@@ -209,7 +209,8 @@ fun PostClassTab(
                     onOpenLesson = { onSign(lesson.id) },
                     onShare = { shareLessonToWechatWithImage(context, lesson) },
                     onUpdateFeedback = { comment, perf, attitude ->
-                        vm.updateLessonFeedback(lesson.id, comment, perf, attitude)
+                        // v27：保存反馈时触发签退消课（事务内扣减课时包 + 更新 status）
+                        vm.saveFeedbackAndCheckOut(lesson.id, comment, perf, attitude)
                     },
                     onUpdateDetail = { lessonType, coach, duration, location, attendance ->
                         vm.updateLessonDetail(lesson.id, lessonType, coach, duration, location, attendance)
@@ -220,6 +221,10 @@ fun PostClassTab(
                     onDelete = {
                         deletingLessonId = lesson.id
                         deletingLessonName = lesson.studentName
+                    },
+                    // v27：传入自动填充查询回调
+                    onQueryScheduleForAutoFill = {
+                        vm.findScheduleForStudentToday(lesson.studentName)
                     }
                 )
             }
@@ -284,7 +289,17 @@ private fun PostClassLessonCard(
     onUpdateFeedback: (coachComment: String, performance: Int, attitude: String) -> Unit,
     onUpdateDetail: (lessonType: String, coach: String, duration: Int, location: String, attendance: String) -> Unit,
     onUpdateImages: (List<String>) -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    /**
+     * === v27：自动填充查询回调 ===
+     *
+     * 展开时调用此回调查询学员今日的活跃排课（Schedule）。
+     * 若查询到排课记录，自动将 Schedule.startTime / durationMinutes / location
+     * 预填充到反馈表单输入框作为默认值。
+     *
+     * 回调返回 List<Schedule>：今日该学员的全部活跃排课（按开始时间升序）
+     */
+    onQueryScheduleForAutoFill: suspend () -> List<com.shangmentiyu.sportscoach.data.model.Schedule>
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -318,6 +333,45 @@ private fun PostClassLessonCard(
         mutableStateOf(if (expanded) lesson.attitude else "认真")
     }
 
+    // === v27：展开时自动查询今日排课并预填充 location/duration ===
+    // 仅在 location/duration 为空时填充（教练可手动覆盖）
+    var autoFillCompleted by remember(lesson.id, expanded) { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(expanded) {
+        if (expanded && !autoFillCompleted) {
+            try {
+                val schedules = onQueryScheduleForAutoFill()
+                if (schedules.isNotEmpty()) {
+                    // 取最近一次排课（按 startTime 升序后取最后一个，即今日最晚的排课）
+                    // 或匹配 lesson.time 最近的排课
+                    val matchedSchedule = schedules.firstOrNull { sched ->
+                        // 优先匹配签到时间附近的排课
+                        val lessonTime = lesson.time.toIntOrNull() ?: -1
+                        val schedTime = sched.startTime.filter { it.isDigit() }.toIntOrNull() ?: -1
+                        kotlin.math.abs(lessonTime - schedTime) <= 60
+                    } ?: schedules.first()  // 退而求其次取第一条
+
+                    // 仅在原值为空或默认值时预填充，保留教练手动修改的值
+                    if (lesson.location.isBlank()) {
+                        editLocation = matchedSchedule.location
+                    } else {
+                        editLocation = lesson.location
+                    }
+                    if (lesson.duration <= 0 || lesson.duration == 60) {
+                        // 默认值 60 是 Lesson 实体默认值，视为未填写，使用排课时长填充
+                        if (matchedSchedule.durationMinutes > 0) {
+                            editDuration = matchedSchedule.durationMinutes.toString()
+                        }
+                    }
+                    // 注意：不覆盖 lesson.startTime（签到时间字段不可改），duration 用于课后反馈统计
+                }
+                autoFillCompleted = true
+            } catch (e: Exception) {
+                // 查询失败不阻塞 UI，教练仍可手动输入
+                autoFillCompleted = true
+            }
+        }
+    }
+
     IosCard {
         Column(modifier = Modifier.padding(Spacing.md)) {
             // 头部：姓名 + 签到/签退时间 + 删除按钮
@@ -334,7 +388,7 @@ private fun PostClassLessonCard(
                 // 签退状态徽标
                 if (lesson.signOutTime.isNotBlank()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Logout, contentDescription = null,
+                        Icon(Icons.Outlined.Logout, contentDescription = null,
                             tint = ScoreExcellent, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(2.dp))
                         Text("签退 ${lesson.signOutTime}",
@@ -349,7 +403,7 @@ private fun PostClassLessonCard(
                 // 删除按钮：触发二次确认对话框
                 IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
                     Icon(
-                        Icons.Filled.Delete,
+                        Icons.Outlined.Delete,
                         contentDescription = "删除课时",
                         tint = MaterialTheme.colorScheme.error,
                         modifier = Modifier.size(16.dp)
@@ -374,7 +428,7 @@ private fun PostClassLessonCard(
             if (imageList.isNotEmpty()) {
                 Spacer(Modifier.height(Spacing.sm))
                 Text("训练内容图片", style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold, color = FeatureIconOrange)
+                    fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.height(4.dp))
                 // 横向滚动展示所有图片缩略图
                 Row(
@@ -411,12 +465,12 @@ private fun PostClassLessonCard(
             if (!expanded && lesson.coachComment.isNotBlank()) {
                 Spacer(Modifier.height(Spacing.sm))
                 Row(verticalAlignment = Alignment.Top) {
-                    Icon(Icons.Filled.Star, contentDescription = null,
-                        tint = FeatureIconOrange, modifier = Modifier.size(14.dp))
+                    Icon(Icons.Outlined.Star, contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.size(4.dp))
                     Column {
                         Text("教练寄语", style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold, color = FeatureIconOrange)
+                            fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
                         Text(lesson.coachComment, style = MaterialTheme.typography.bodySmall,
                             maxLines = 2)
                     }
@@ -429,27 +483,28 @@ private fun PostClassLessonCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                OutlinedButton(
+                TextButton(
                     onClick = onOpenLesson,
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("查看详情", style = MaterialTheme.typography.labelMedium)
+                    Text("查看详情", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 }
-                OutlinedButton(
+                TextButton(
                     onClick = onToggleExpand,
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Icon(Icons.Filled.Edit, contentDescription = null,
-                        modifier = Modifier.size(14.dp))
+                    Icon(Icons.Outlined.Edit, contentDescription = null,
+                        modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.size(4.dp))
                     Text(
                         if (expanded) "收起编辑" else "编辑数据",
-                        style = MaterialTheme.typography.labelMedium
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
-                OutlinedButton(
+                TextButton(
                     onClick = {
                         if (!sharing) {
                             sharing = true
@@ -465,14 +520,15 @@ private fun PostClassLessonCard(
                     if (sharing) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(14.dp),
-                            strokeWidth = 2.dp
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
                         )
                     } else {
-                        Icon(Icons.Filled.Share, contentDescription = null,
-                            modifier = Modifier.size(14.dp))
+                        Icon(Icons.Outlined.Share, contentDescription = null,
+                            modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
                     }
                     Spacer(Modifier.size(4.dp))
-                    Text("分享微信", style = MaterialTheme.typography.labelMedium)
+                    Text("分享微信", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 }
             }
 
@@ -588,7 +644,7 @@ private fun PostClassLessonCard(
                 Spacer(Modifier.height(8.dp))
 
                 // 保存课时详情按钮
-                OutlinedButton(
+                Button(
                     onClick = {
                         val duration = editDuration.toIntOrNull() ?: 60
                         onUpdateDetail(editLessonType, editCoach, duration, editLocation, editAttendance)
@@ -596,7 +652,7 @@ private fun PostClassLessonCard(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Icon(Icons.Filled.CheckCircle, contentDescription = null,
+                    Icon(Icons.Outlined.CheckCircle, contentDescription = null,
                         modifier = Modifier.size(14.dp))
                     Spacer(Modifier.size(4.dp))
                     Text("保存课时详情", style = MaterialTheme.typography.labelMedium)
@@ -605,7 +661,7 @@ private fun PostClassLessonCard(
                 // === 第二部分：课堂反馈编辑 ===
                 Spacer(Modifier.height(Spacing.md))
                 Text("课堂状况评分", style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold, color = FeatureIconOrange)
+                    fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.height(8.dp))
 
                 // 表现评分 Slider
@@ -649,14 +705,14 @@ private fun PostClassLessonCard(
                 Spacer(Modifier.height(8.dp))
 
                 // 保存反馈按钮
-                OutlinedButton(
+                Button(
                     onClick = {
                         onUpdateFeedback(editComment, editPerf.toInt(), editAttitude)
                     },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Icon(Icons.Filled.CheckCircle, contentDescription = null,
+                    Icon(Icons.Outlined.CheckCircle, contentDescription = null,
                         modifier = Modifier.size(14.dp))
                     Spacer(Modifier.size(4.dp))
                     Text("保存反馈", style = MaterialTheme.typography.labelMedium)
@@ -718,7 +774,7 @@ private fun LessonImagesImportSection(
 
     Text("训练内容图片（反馈给家长）",
         style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.SemiBold, color = FeatureIconOrange)
+        fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
     Spacer(Modifier.height(8.dp))
 
     // 图片网格（每行2张）
@@ -753,7 +809,7 @@ private fun LessonImagesImportSection(
                                 .background(appSurface().copy(alpha = 0.8f))
                         ) {
                             Icon(
-                                Icons.Filled.Close,
+                                Icons.Outlined.Close,
                                 contentDescription = "删除图片",
                                 tint = MaterialTheme.colorScheme.error,
                                 modifier = Modifier.size(14.dp)
@@ -780,7 +836,7 @@ private fun LessonImagesImportSection(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .background(FeatureIconOrange.copy(alpha = 0.08f))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
             .clickable {
                 launcher.launch(
                     PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
@@ -791,15 +847,15 @@ private fun LessonImagesImportSection(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
-            Icons.Filled.AddPhotoAlternate,
+            Icons.Outlined.AddPhotoAlternate,
             contentDescription = "添加图片",
-            tint = FeatureIconOrange,
+            tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(18.dp)
         )
         Spacer(Modifier.width(Spacing.xs))
         Text(
             "添加图片（支持多选）",
-            color = FeatureIconOrange,
+            color = MaterialTheme.colorScheme.primary,
             fontWeight = FontWeight.Medium,
             style = MaterialTheme.typography.bodyMedium
         )
@@ -843,7 +899,7 @@ private fun LessonImageThumb(
         } else {
             Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                 Icon(
-                    Icons.Filled.AddPhotoAlternate,
+                    Icons.Outlined.AddPhotoAlternate,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.outline,
                     modifier = Modifier.size(20.dp)
@@ -861,7 +917,7 @@ private fun LessonImageThumb(
                     .background(appSurface().copy(alpha = 0.85f))
             ) {
                 Icon(
-                    Icons.Filled.Close,
+                    Icons.Outlined.Close,
                     contentDescription = "删除图片",
                     tint = MaterialTheme.colorScheme.error,
                     modifier = Modifier.size(12.dp)
@@ -932,14 +988,18 @@ private fun PhotoThumb(path: String, label: String) {
             color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(4.dp))
         if (photoBytes != null) {
-            AsyncImage(
+            // === v28 优化5：使用 SafeAsyncImage 提供 Coil 容错兜底 ===
+            // === v34：启用全屏预览，教练可双指缩放查看签到照片细节 ===
+            // 防止用户删除 filesDir/SignPhotos 或照片损坏时 Compose 渲染崩溃
+            SafeAsyncImage(
                 model = photoBytes,
                 contentDescription = "${label}照片",
                 contentScale = ContentScale.Crop,
+                cornerRadius = 8.dp,
+                enableZoomPreview = true,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(100.dp)
-                    .clip(RoundedCornerShape(8.dp))
             )
         } else {
             Box(

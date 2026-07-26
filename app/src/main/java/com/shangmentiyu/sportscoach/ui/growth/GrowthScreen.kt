@@ -1,7 +1,6 @@
 package com.shangmentiyu.sportscoach.ui.growth
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,28 +18,36 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Analytics
-import androidx.compose.material.icons.filled.Cake
-import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material.icons.filled.Height
-import androidx.compose.material.icons.filled.MonitorWeight
-import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Analytics
+import androidx.compose.material.icons.outlined.Archive
+import androidx.compose.material.icons.outlined.Cake
+import androidx.compose.material.icons.outlined.EmojiEvents
+import androidx.compose.material.icons.outlined.Height
+import androidx.compose.material.icons.outlined.MonitorWeight
+import androidx.compose.material.icons.outlined.PictureAsPdf
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -57,6 +64,7 @@ import com.shangmentiyu.sportscoach.ui.theme.AttendanceAbsent
 import com.shangmentiyu.sportscoach.ui.theme.AttendanceLate
 import com.shangmentiyu.sportscoach.ui.theme.AttendanceLeave
 import com.shangmentiyu.sportscoach.ui.theme.AttendanceOnTime
+import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import com.shangmentiyu.sportscoach.ui.theme.HeroGradientEnd
 import com.shangmentiyu.sportscoach.ui.theme.HeroGradientStart
 import com.shangmentiyu.sportscoach.ui.theme.MedalBronzeEnd
@@ -81,7 +89,9 @@ import com.shangmentiyu.sportscoach.ui.theme.VitalOrangeEnd
 import com.shangmentiyu.sportscoach.ui.theme.VitalOrangeStart
 import com.shangmentiyu.sportscoach.ui.theme.VitalPurpleEnd
 import com.shangmentiyu.sportscoach.ui.theme.VitalPurpleStart
+import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
+import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 
 /**
  * 成长档案页：明亮活力渐变风格（Dribbble-inspired）。
@@ -112,6 +122,64 @@ fun GrowthScreen(
     val latestScores by vm.latestScores.collectAsState()
     val personalBests by vm.personalBests.collectAsState()
     val stats by vm.stats.collectAsState()
+    val archiveToast by vm.archiveToast.collectAsState()
+    // === v10 终极架构：5 维能力雷达 ===
+    val radar by vm.radar.collectAsState()
+
+    // === v28 优化2：PDF 报告生成状态 ===
+    val isGenerating by vm.isGenerating.collectAsState()
+    val reportUri by vm.reportUri.collectAsState()
+    val reportToast by vm.reportToast.collectAsState()
+
+    // === v31 优化4：家长端加密 PDF 分享状态 ===
+    val parentShareResult by vm.parentShareResult.collectAsState()
+    // 家长姓名输入对话框
+    var showParentDialog by remember { mutableStateOf(false) }
+    // 密码展示 + 一键微信发送对话框
+    var showPasswordDialog by remember { mutableStateOf(false) }
+
+    // 归档确认对话框是否打开
+    var showArchiveDialog by remember { mutableStateOf(false) }
+
+    // 监听归档 Toast 消息：通过 Android Toast 显示并自动清除状态
+    LaunchedEffect(archiveToast) {
+        archiveToast?.let { msg ->
+            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+            kotlinx.coroutines.delay(2500)
+            vm.clearArchiveToast()
+        }
+    }
+
+    // === v28 优化2：监听 PDF 生成 Toast ===
+    LaunchedEffect(reportToast) {
+        reportToast?.let { msg ->
+            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+            kotlinx.coroutines.delay(2500)
+            vm.clearReportToast()
+        }
+    }
+
+    // === v28 优化2：监听 PDF Uri 生成完成，触发系统分享面板 ===
+    LaunchedEffect(reportUri) {
+        reportUri?.let { uri ->
+            val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "application/pdf"
+                putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(
+                android.content.Intent.createChooser(shareIntent, "分享成长报告")
+            )
+            vm.clearReportUri()
+        }
+    }
+
+    // === v31 优化4：监听加密 PDF 生成完成，弹出"密码 + 一键微信发送"对话框 ===
+    LaunchedEffect(parentShareResult) {
+        if (parentShareResult != null) {
+            showPasswordDialog = true
+        }
+    }
 
     LaunchedEffect(studentName) {
         vm.load(studentName)
@@ -125,11 +193,36 @@ fun GrowthScreen(
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
                     navigationIconContentColor = Color.White,
-                    titleContentColor = Color.White
+                    titleContentColor = Color.White,
+                    actionIconContentColor = Color.White
                 ),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
+                    }
+                },
+                // v22 新增：设置入口"归档一年前记录"按钮
+                // 使用 Archive 图标，不改变原有标题与返回按钮位置，保持 UI 风格
+                actions = {
+                    // === v28 优化2：生成成长 PDF 报告按钮 ===
+                    // 与"归档"按钮并列在 TopAppBar actions 区，保持珊瑚橙主色风格
+                    IconButton(onClick = { vm.generateGrowthReport(context) }) {
+                        if (isGenerating) {
+                            androidx.compose.material3.CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = Color.White
+                            )
+                        } else {
+                            Icon(Icons.Outlined.PictureAsPdf, contentDescription = "生成成长报告")
+                        }
+                    }
+                    // === v31 优化4：家长端加密 PDF 一键微信分享按钮 ===
+                    IconButton(onClick = { showParentDialog = true }) {
+                        Icon(Icons.Outlined.Share, contentDescription = "家长端分享")
+                    }
+                    IconButton(onClick = { showArchiveDialog = true }) {
+                        Icon(Icons.Outlined.Archive, contentDescription = "归档一年前记录")
                     }
                 }
             )
@@ -155,6 +248,12 @@ fun GrowthScreen(
                 item {
                     VitalMetricsGrid(student = s)
                 }
+            }
+
+            // === v10 终极架构：能力画像（5 维能力雷达图） ===
+            // 紧跟身体形态之后，让教练一眼看清学员运动强弱项
+            item {
+                AbilityRadarCard(radar = radar)
             }
 
             // === 3. 统计卡：彩色数字（蓝/紫/绿） ===
@@ -213,7 +312,7 @@ fun GrowthScreen(
                             text = month,
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                            color = appOnSurfaceVariant(),
                             modifier = Modifier.padding(horizontal = 20.dp, vertical = Spacing.xs)
                         )
                     }
@@ -243,7 +342,7 @@ fun GrowthScreen(
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(
-                                Icons.Filled.Schedule,
+                                Icons.Outlined.Schedule,
                                 contentDescription = null,
                                 modifier = Modifier.size(72.dp),
                                 tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
@@ -266,6 +365,230 @@ fun GrowthScreen(
             }
         }
     }
+
+    // v22 新增：归档一年前记录确认对话框
+    // - 使用 GlassAlertDialog 保持与现有 UI 风格一致
+    // - 确认后调用 ViewModel.archiveLessonsOlderThanOneYear
+    // - 结果通过 archiveToast StateFlow 反馈
+    if (showArchiveDialog) {
+        GlassAlertDialog(
+            onDismissRequest = { showArchiveDialog = false },
+            title = "归档一年前记录",
+            content = {
+                Text(
+                    "将一年前的全部课时记录从主表迁移到归档表，" +
+                        "释放主表体积以加速日常查询。\n\n" +
+                        "归档后的记录仍可在历史报表中查询，不会被删除。"
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showArchiveDialog = false
+                        vm.archiveLessonsOlderThanOneYear()
+                    }
+                ) { Text("归档", color = MaterialTheme.colorScheme.primary) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showArchiveDialog = false }) { Text("取消") }
+            }
+        )
+    }
+
+    // === v31 优化4：家长姓名输入对话框 ===
+    // 教练输入家长称呼（如"张爸爸"），点击"生成加密报告"后：
+    // 1. 后台生成加密 PDF + 4 位密码
+    // 2. 通过 parentShareResult 暴露给 UI
+    // 3. 触发 LaunchedEffect 弹出"密码 + 一键微信发送"对话框
+    if (showParentDialog) {
+        ParentNameInputDialog(
+            studentName = studentName,
+            onDismiss = { showParentDialog = false },
+            onConfirm = { parentName ->
+                showParentDialog = false
+                vm.generateParentEncryptedReport(context, parentName)
+            }
+        )
+    }
+
+    // === v31 优化4：密码展示 + 一键微信发送对话框 ===
+    // 显示 4 位密码，教练口头告知家长；点击"发送到微信"按钮直接跳转微信分享面板
+    if (showPasswordDialog && parentShareResult != null) {
+        PasswordShareDialog(
+            result = parentShareResult!!,
+            onDismiss = {
+                showPasswordDialog = false
+                vm.clearParentShareResult()
+            },
+            onShareToWeChat = {
+                ParentShareHelper.shareToWeChat(context, parentShareResult!!)
+            }
+        )
+    }
+}
+
+/**
+ * === v31 优化4：家长姓名输入对话框 ===
+ *
+ * 输入家长称呼（如"张爸爸"、"李妈妈"），用于：
+ * - PDF 文件名标识（ParentReport_{学员}_{家长}_{密码}_{时间}.pdf）
+ * - 分享文本中的家长专属称呼
+ * - "心理压力"防止家长随意转发 PDF
+ *
+ * 默认填入"XX家长"占位，教练可快速修改。
+ */
+@Composable
+private fun ParentNameInputDialog(
+    studentName: String,
+    onDismiss: () -> Unit,
+    onConfirm: (parentName: String) -> Unit
+) {
+    var parentName by remember { mutableStateOf("") }
+
+    GlassAlertDialog(
+        onDismissRequest = onDismiss,
+        title = "家长端加密分享",
+        content = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    "为 ${studentName} 生成加密成长报告",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+                Spacer(Modifier.height(Spacing.md))
+                Text(
+                    "家长称呼",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.height(Spacing.xs))
+                androidx.compose.material3.OutlinedTextField(
+                    value = parentName,
+                    onValueChange = { parentName = it },
+                    placeholder = { Text("如：张爸爸 / 李妈妈") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(Spacing.sm))
+                Text(
+                    "加密后生成 4 位密码，需口头告知家长查看",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(parentName.ifBlank { "家长" }) },
+                enabled = parentName.isNotBlank()
+            ) { Text("生成加密报告", color = MaterialTheme.colorScheme.primary) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        }
+    )
+}
+
+/**
+ * === v31 优化4：密码展示 + 一键微信发送对话框 ===
+ *
+ * 显示生成结果：
+ * - 4 位密码（大字号珊瑚橙突出显示）
+ * - PDF 文件名标识（让教练确认家长专属）
+ * - "发送到微信"按钮（直接跳转微信分享面板）
+ * - "复制密码"按钮（教练可复制密码到剪贴板，方便发送给家长）
+ */
+@Composable
+private fun PasswordShareDialog(
+    result: ParentShareHelper.ShareResult,
+    onDismiss: () -> Unit,
+    onShareToWeChat: () -> Unit
+) {
+    val context = LocalContext.current
+    GlassAlertDialog(
+        onDismissRequest = onDismiss,
+        title = "加密报告已生成",
+        content = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    "查看密码",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.outline
+                )
+                Spacer(Modifier.height(Spacing.xs))
+                // 大字号密码显示（珊瑚橙主题色）
+                Text(
+                    result.password,
+                    style = MaterialTheme.typography.displayMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.height(Spacing.md))
+                // 微信安装状态提示
+                if (result.fallbackToSystemShare) {
+                    Text(
+                        "（未检测到微信，将弹出系统分享面板）",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                } else {
+                    Text(
+                        "（已检测到微信，可一键发送）",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ScoreExcellent
+                    )
+                }
+                Spacer(Modifier.height(Spacing.sm))
+                // 文件路径简略显示（仅显示文件名）
+                val fileName = result.filePath.substringAfterLast("/")
+                Text(
+                    "文件：$fileName",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
+        },
+        confirmButton = {
+            Row {
+                // 复制密码按钮
+                TextButton(
+                    onClick = {
+                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                            as android.content.ClipboardManager
+                        clipboard.setPrimaryClip(
+                            android.content.ClipData.newPlainText("查看密码", result.password)
+                        )
+                        android.widget.Toast.makeText(
+                            context, "密码已复制", android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                ) { Text("复制密码", color = MaterialTheme.colorScheme.outline) }
+                Spacer(Modifier.width(Spacing.sm))
+                // 一键微信发送按钮（主按钮珊瑚橙）
+                TextButton(
+                    onClick = {
+                        onShareToWeChat()
+                        onDismiss()
+                    }
+                ) {
+                    Icon(
+                        Icons.Outlined.Share,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text("发送到微信", color = MaterialTheme.colorScheme.primary)
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("关闭") }
+        }
+    )
 }
 
 // ============ 私有 Composable ============
@@ -382,7 +705,7 @@ private fun VitalMetricsGrid(student: com.shangmentiyu.sportscoach.data.model.St
                 label = "年龄",
                 value = if (student.age > 0) "${student.age}" else "—",
                 unit = if (student.age > 0) "岁" else "",
-                icon = Icons.Filled.Cake,
+                icon = Icons.Outlined.Cake,
                 gradientStart = VitalOrangeStart,
                 gradientEnd = VitalOrangeEnd,
                 modifier = Modifier.weight(1f)
@@ -391,7 +714,7 @@ private fun VitalMetricsGrid(student: com.shangmentiyu.sportscoach.data.model.St
                 label = "身高",
                 value = if (student.heightCm > 0) "${student.heightCm}" else "—",
                 unit = if (student.heightCm > 0) "cm" else "",
-                icon = Icons.Filled.Height,
+                icon = Icons.Outlined.Height,
                 gradientStart = VitalBlueStart,
                 gradientEnd = VitalBlueEnd,
                 modifier = Modifier.weight(1f)
@@ -406,7 +729,7 @@ private fun VitalMetricsGrid(student: com.shangmentiyu.sportscoach.data.model.St
                 label = "体重",
                 value = if (student.weightKg > 0f) String.format("%.1f", student.weightKg) else "—",
                 unit = if (student.weightKg > 0f) "kg" else "",
-                icon = Icons.Filled.MonitorWeight,
+                icon = Icons.Outlined.MonitorWeight,
                 gradientStart = VitalPurpleStart,
                 gradientEnd = VitalPurpleEnd,
                 modifier = Modifier.weight(1f)
@@ -415,7 +738,7 @@ private fun VitalMetricsGrid(student: com.shangmentiyu.sportscoach.data.model.St
                 label = "BMI",
                 value = if (displayBmi > 0f) String.format("%.1f", displayBmi) else "—",
                 unit = if (displayBmi > 0f) BmiProcessor.classify(displayBmi).label else "",
-                icon = Icons.Filled.Analytics,
+                icon = Icons.Outlined.Analytics,
                 gradientStart = VitalGreenStart,
                 gradientEnd = VitalGreenEnd,
                 modifier = Modifier.weight(1f)
@@ -542,7 +865,7 @@ private fun IosSectionHeader(text: String) {
         text = text.uppercase(),
         style = MaterialTheme.typography.labelMedium,
         fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+        color = appOnSurfaceVariant(),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp, vertical = Spacing.xs)
@@ -560,14 +883,13 @@ private fun IosGroupedListCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(Color.White, RoundedCornerShape(10.dp))
-            .border(
-                width = 1.5.dp,
-                brush = Brush.linearGradient(
-                    colors = listOf(VitalBlueStart, VitalPurpleEnd)
-                ),
-                shape = RoundedCornerShape(10.dp)
+            .shadow(
+                elevation = 4.dp,
+                shape = RoundedCornerShape(10.dp),
+                ambientColor = Color(0x1A000000),
+                spotColor = Color(0x1A000000)
             )
+            .background(Color.White, RoundedCornerShape(10.dp))
     ) {
         content()
     }
@@ -597,21 +919,21 @@ private fun StatItem(
         Text(
             label,
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            color = appOnSurfaceVariant()
         )
     }
 }
 
 /**
- * 统计项分隔线：1dp 宽 + 40dp 高 + 浅灰。
+ * 统计项分隔线：0.5dp 宽 + 40dp 高 + 极浅灰。
  */
 @Composable
 private fun StatDivider() {
     Box(
         modifier = Modifier
-            .width(1.dp)
+            .width(0.5.dp)
             .height(40.dp)
-            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+            .background(appDividerColor())
     )
 }
 
@@ -631,7 +953,7 @@ private fun ScoreRow(
                     .padding(start = Spacing.cardPadding)
                     .fillMaxWidth()
                     .height(0.5.dp)
-                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.6f))
+                    .background(appDividerColor())
             )
         }
         Row(
@@ -699,7 +1021,7 @@ private fun PersonalBestRow(
                     .padding(start = 60.dp)
                     .fillMaxWidth()
                     .height(0.5.dp)
-                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.6f))
+                    .background(appDividerColor())
             )
         }
         Row(
@@ -722,7 +1044,7 @@ private fun PersonalBestRow(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    Icons.Filled.EmojiEvents,
+                    Icons.Outlined.EmojiEvents,
                     contentDescription = null,
                     tint = Color.White,
                     modifier = Modifier.size(20.dp)
@@ -772,7 +1094,7 @@ private fun HistoryRow(
                     .padding(start = 44.dp)
                     .fillMaxWidth()
                     .height(0.5.dp)
-                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.6f))
+                    .background(appDividerColor())
             )
         }
         Row(

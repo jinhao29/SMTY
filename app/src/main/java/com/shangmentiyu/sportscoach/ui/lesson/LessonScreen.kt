@@ -9,13 +9,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Logout
-import androidx.compose.material.icons.filled.SportsScore
-import androidx.compose.material.icons.filled.Summarize
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Logout
+import androidx.compose.material.icons.outlined.SportsScore
+import androidx.compose.material.icons.outlined.Summarize
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,6 +28,7 @@ import com.shangmentiyu.sportscoach.core.TemplateData
 import com.shangmentiyu.sportscoach.data.model.ExerciseItem
 import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
 import com.shangmentiyu.sportscoach.ui.theme.GlassCard
+import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
 import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
@@ -65,7 +66,7 @@ fun LessonScreen(
                 colors = glassTopAppBarColors(),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
                     }
                 }
             )
@@ -100,7 +101,7 @@ fun LessonScreen(
                     onClick = onScoring,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Icon(Icons.Filled.SportsScore, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Outlined.SportsScore, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("去打分")
                 }
@@ -108,7 +109,7 @@ fun LessonScreen(
                     onClick = onSummary,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Icon(Icons.Filled.Summarize, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Outlined.Summarize, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("生成小结")
                 }
@@ -265,14 +266,23 @@ private fun ContentCard(exercises: List<ExerciseItem>, vm: LessonViewModel, less
 
         Spacer(modifier = Modifier.height(8.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            OutlinedButton(onClick = { showTemplateDialog = true }, modifier = Modifier.weight(1f)) {
-                Text("模板", style = MaterialTheme.typography.bodySmall)
+            TextButton(
+                onClick = { showTemplateDialog = true },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("模板", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }
-            OutlinedButton(onClick = { showExerciseDialog = true }, modifier = Modifier.weight(1f)) {
-                Text("动作库", style = MaterialTheme.typography.bodySmall)
+            TextButton(
+                onClick = { showExerciseDialog = true },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("动作库", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }
-            OutlinedButton(onClick = { showCustomDialog = true }, modifier = Modifier.weight(1f)) {
-                Text("自定义", style = MaterialTheme.typography.bodySmall)
+            TextButton(
+                onClick = { showCustomDialog = true },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("自定义", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }
         }
     }
@@ -352,13 +362,13 @@ private fun ExerciseRow(item: ExerciseItem, onUpdate: (ExerciseItem) -> Unit, on
             })
             Column(modifier = Modifier.weight(1f)) {
                 Text(name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                Text("${sets}组 × $reps · $intensity", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                Text("${sets}组 × $reps · $intensity", style = MaterialTheme.typography.bodySmall, color = appOnSurfaceVariant())
                 if (note.isNotBlank()) {
                     Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                 }
             }
             IconButton(onClick = onDelete) {
-                Icon(Icons.Filled.Delete, contentDescription = "删除", tint = MaterialTheme.colorScheme.error)
+                Icon(Icons.Outlined.Delete, contentDescription = "删除", tint = MaterialTheme.colorScheme.error)
             }
         }
     }
@@ -470,7 +480,7 @@ private fun SignOutCard(lesson: com.shangmentiyu.sportscoach.data.model.Lesson, 
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                Icons.Filled.Logout,
+                Icons.Outlined.Logout,
                 contentDescription = null,
                 tint = if (signedOut) ScoreExcellent else MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(20.dp)
@@ -485,7 +495,7 @@ private fun SignOutCard(lesson: com.shangmentiyu.sportscoach.data.model.Lesson, 
             if (signedOut) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        Icons.Filled.CheckCircle,
+                        Icons.Outlined.CheckCircle,
                         contentDescription = null,
                         tint = ScoreExcellent,
                         modifier = Modifier.size(16.dp)
@@ -527,11 +537,11 @@ private fun SignOutCard(lesson: com.shangmentiyu.sportscoach.data.model.Lesson, 
                 Spacer(Modifier.width(8.dp))
                 Text("签退中…")
             } else if (signedOut) {
-                Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(Icons.Outlined.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(4.dp))
                 Text("已完成签退")
             } else {
-                Icon(Icons.Filled.Logout, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(Icons.Outlined.Logout, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(4.dp))
                 Text("完成签退（结算本次课时）")
             }
@@ -554,7 +564,7 @@ private fun SummaryFeedbackCard(lesson: com.shangmentiyu.sportscoach.data.model.
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                Icons.Filled.Summarize,
+                Icons.Outlined.Summarize,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(20.dp)

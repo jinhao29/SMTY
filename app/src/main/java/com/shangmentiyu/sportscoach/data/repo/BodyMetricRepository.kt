@@ -4,8 +4,9 @@ import com.shangmentiyu.sportscoach.data.db.BodyMetricHistoryDao
 import com.shangmentiyu.sportscoach.data.model.BodyMetricHistory
 import com.shangmentiyu.sportscoach.data.model.Student
 import kotlinx.coroutines.flow.Flow
-import java.text.SimpleDateFormat
-import java.util.Date
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 
 /**
@@ -14,16 +15,17 @@ import java.util.Locale
  * 管理学员身高/体重/BMI 的历史记录，
  * 同时协调更新 Student 表的当前身高/体重/BMI 字段。
  *
- * 注意：[SimpleDateFormat] 非线程安全，禁止作为成员变量持有；
- * 统一通过 [todayStr] 在方法内新建实例使用。
+ * 日期格式化统一使用 [DateTimeFormatter]（线程安全），无 [SimpleDateFormat] 的 Calendar 状态污染问题。
  */
 class BodyMetricRepository(
     private val dao: BodyMetricHistoryDao,
     private val studentRepo: StudentRepository
 ) {
-    /** 当前日期字符串（yyyy-MM-dd），每次调用新建 SimpleDateFormat 实例，避免并发污染 */
-    private fun todayStr(): String =
-        SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+    private val dateFormatter: DateTimeFormatter =
+        DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault())
+
+    /** 当前日期字符串（yyyy-MM-dd），基于 [LocalDate.now] 线程安全获取 */
+    private fun todayStr(): String = LocalDate.now().format(dateFormatter)
 
     fun getByStudent(name: String): Flow<List<BodyMetricHistory>> = dao.getByStudent(name)
     suspend fun getByStudentOnce(name: String): List<BodyMetricHistory> = dao.getByStudentOnce(name)
@@ -70,6 +72,8 @@ class BodyMetricRepository(
 
     /**
      * 计算两条记录之间的指标变化。
+     *
+     * 天数差使用 [ChronoUnit.DAYS.between] 基于 [LocalDate] 计算，无时区/日历复用污染问题。
      */
     fun computeDelta(first: BodyMetricHistory, last: BodyMetricHistory): MetricDelta {
         return MetricDelta(
@@ -77,11 +81,9 @@ class BodyMetricRepository(
             weightDelta = last.weightKg - first.weightKg,
             bmiDelta = last.bmi - first.bmi,
             daysBetween = try {
-                // 方法内新建 SimpleDateFormat，避免多协程并发解析时 Calendar 状态污染
-                val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-                val d1 = sdf.parse(first.date)?.time ?: 0L
-                val d2 = sdf.parse(last.date)?.time ?: 0L
-                ((d2 - d1) / (24 * 3600 * 1000L)).toInt()
+                val d1 = LocalDate.parse(first.date, dateFormatter)
+                val d2 = LocalDate.parse(last.date, dateFormatter)
+                ChronoUnit.DAYS.between(d1, d2).toInt()
             } catch (_: Exception) { 0 }
         )
     }

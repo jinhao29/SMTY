@@ -18,19 +18,19 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.ChevronLeft
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Pause
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -39,7 +39,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
@@ -78,8 +77,6 @@ import com.shangmentiyu.sportscoach.ui.theme.GlowCyan
 import com.shangmentiyu.sportscoach.ui.theme.OutlinedDatePickerField
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 
 /**
@@ -116,7 +113,7 @@ fun OperationScreen(
                 colors = glassTopAppBarColors(),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
                     }
                 }
             )
@@ -157,7 +154,7 @@ private fun ScheduleTab(vm: OperationViewModel) {
     var showEditDialog by remember { mutableStateOf(false) }
     var isCreate by remember { mutableStateOf(true) }
 
-    val dateFmt = remember { SimpleDateFormat("MM-dd", Locale.getDefault()) }
+    val dateFmt = remember { java.time.format.DateTimeFormatter.ofPattern("MM-dd", Locale.getDefault()) }
     val dayNames = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
 
     // 进入排课页时自动生成本周长期课记录（一次性触发，避免每次重组重复执行）
@@ -178,16 +175,16 @@ private fun ScheduleTab(vm: OperationViewModel) {
             GlassCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { vm.shiftWeek(-7) }) {
-                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "上一周")
+                        Icon(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, contentDescription = "上一周")
                     }
                     Text(
-                        "${dateFmt.format(weekStart)} 周",
+                        "${weekStart.toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate().format(dateFmt)} 周",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.weight(1f)
                     )
                     IconButton(onClick = { vm.shiftWeek(7) }) {
-                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "下一周")
+                        Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = "下一周")
                     }
                 }
             }
@@ -239,7 +236,7 @@ private fun ScheduleTab(vm: OperationViewModel) {
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text("新增排课")
             }
@@ -295,17 +292,17 @@ private fun ScheduleCard(
                 }
             }
             IconButton(onClick = onEdit) {
-                Icon(Icons.Filled.Edit, contentDescription = "编辑", tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.Outlined.Edit, contentDescription = "编辑", tint = MaterialTheme.colorScheme.primary)
             }
             IconButton(onClick = onToggleActive) {
                 Icon(
-                    if (s.isActive) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    if (s.isActive) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
                     contentDescription = "启停",
                     tint = if (s.isActive) MaterialTheme.colorScheme.outline else GlowCyan
                 )
             }
             IconButton(onClick = onDelete) {
-                Icon(Icons.Filled.Delete, contentDescription = "删除", tint = MaterialTheme.colorScheme.error)
+                Icon(Icons.Outlined.Delete, contentDescription = "删除", tint = MaterialTheme.colorScheme.error)
             }
         }
     }
@@ -364,7 +361,7 @@ private fun PackageTab(vm: OperationViewModel) {
                 onClick = { showAddDialog = true },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text("新增课时包")
             }
@@ -407,16 +404,41 @@ private fun PackageCard(
         pkg.isExpired -> MaterialTheme.colorScheme.outline
         else -> GlowCyan
     }
+
+    // === v26 优化6：状态角标 ===
+    // 对于"已过期"或"已退费"的课时包，在卡片右上角显示角标，
+    // 让教练在查看"历史记录"时清晰看到该学员的包停用原因
+    // - 已过期：浅灰色背景 + "过" 字角标
+    // - 已退费：浅红色背景 + "退" 字角标
+    // - 已用完：浅黄色背景 + "完" 字角标
+    // 默认（活跃）：正常显示
+    val statusBadge = when {
+        pkg.status == "已退费" -> PackageStatusBadge("退", MaterialTheme.colorScheme.error)
+        pkg.status == "已过期" || pkg.isExpired -> PackageStatusBadge("过", MaterialTheme.colorScheme.outline)
+        pkg.status == "已用完" || pkg.isExhausted -> PackageStatusBadge("完", MaterialTheme.colorScheme.error.copy(alpha = 0.6f))
+        else -> null
+    }
+
     GlassCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "${pkg.studentName} · ${pkg.name}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (statusBadge != null) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                else MaterialTheme.colorScheme.onSurface
+                    )
+                    // === v26 优化6：状态角标 ===
+                    if (statusBadge != null) {
+                        Spacer(Modifier.width(8.dp))
+                        PackageStatusBadgeView(statusBadge)
+                    }
+                }
                 Text(
-                    "${pkg.studentName} · ${pkg.name}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    "剩余 ${pkg.remainingLessons} / ${pkg.totalLessons} 次",
+                    "剩余 ${pkg.remainingLessons} / ${pkg.totalLessons} 次" +
+                        if (pkg.status != "活跃") " · ${pkg.status}" else "",
                     style = MaterialTheme.typography.bodyMedium,
                     color = accentColor
                 )
@@ -436,6 +458,14 @@ private fun PackageCard(
                         )
                     }
                 }
+                // 退费备注
+                if (pkg.status == "已退费" && pkg.note.isNotBlank()) {
+                    Text(
+                        "退费原因：${pkg.note}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
                 // 进度条
                 Spacer(modifier = Modifier.height(6.dp))
                 Box(modifier = Modifier.fillMaxWidth().height(6.dp)) {
@@ -452,12 +482,47 @@ private fun PackageCard(
                 }
             }
             IconButton(onClick = onEdit) {
-                Icon(Icons.Filled.Edit, contentDescription = "编辑", tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.Outlined.Edit, contentDescription = "编辑", tint = MaterialTheme.colorScheme.primary)
             }
             IconButton(onClick = onDelete) {
-                Icon(Icons.Filled.Delete, contentDescription = "删除", tint = MaterialTheme.colorScheme.error)
+                Icon(Icons.Outlined.Delete, contentDescription = "删除", tint = MaterialTheme.colorScheme.error)
             }
         }
+    }
+}
+
+/**
+ * 课时包状态角标数据（v26 优化6）。
+ *
+ * @param text 角标文字（如"过"、"退"、"完"）
+ * @param color 角标颜色
+ */
+private data class PackageStatusBadge(
+    val text: String,
+    val color: androidx.compose.ui.graphics.Color
+)
+
+/**
+ * 课时包状态角标视图（v26 优化6）。
+ *
+ * 在卡片标题旁显示一个圆角小标签，让教练快速识别该课时包的状态：
+ * - "过"：已过期，浅灰色背景
+ * - "退"：已退费，浅红色背景
+ * - "完"：已用完，浅黄色背景
+ */
+@Composable
+private fun PackageStatusBadgeView(badge: PackageStatusBadge) {
+    Surface(
+        shape = RoundedCornerShape(4.dp),
+        color = badge.color.copy(alpha = 0.15f)
+    ) {
+        Text(
+            badge.text,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = badge.color,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+        )
     }
 }
 
@@ -471,7 +536,12 @@ private fun AddPackageDialog(
     var name by remember { mutableStateOf("10次卡") }
     var total by remember { mutableStateOf("10") }
     var price by remember { mutableStateOf("800") }
-    var purchaseDate by remember { mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())) }
+    var purchaseDate by remember {
+        mutableStateOf(
+            java.time.LocalDate.now()
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault()))
+        )
+    }
     var expireDate by remember { mutableStateOf("") }
 
     GlassAlertDialog(
@@ -632,7 +702,7 @@ private fun CoachTab(vm: OperationViewModel) {
                 onClick = { showAddDialog = true },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text("新增教练")
             }
@@ -654,7 +724,7 @@ private fun CoachTab(vm: OperationViewModel) {
 private fun CoachCard(c: Coach, vm: OperationViewModel) {
     GlassCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.Person, contentDescription = null, tint = GlowCyan, modifier = Modifier.size(28.dp))
+            Icon(Icons.Outlined.Person, contentDescription = null, tint = GlowCyan, modifier = Modifier.size(28.dp))
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(c.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -670,7 +740,7 @@ private fun CoachCard(c: Coach, vm: OperationViewModel) {
                 }
             }
             IconButton(onClick = { vm.deleteCoach(c.name) }) {
-                Icon(Icons.Filled.Delete, contentDescription = "删除", tint = MaterialTheme.colorScheme.error)
+                Icon(Icons.Outlined.Delete, contentDescription = "删除", tint = MaterialTheme.colorScheme.error)
             }
         }
     }
@@ -747,7 +817,7 @@ private fun DailyPlanTab(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     IconButton(onClick = { vm.previousDay() }) {
-                        Icon(Icons.Filled.ChevronLeft, contentDescription = "前一天")
+                        Icon(Icons.Outlined.ChevronLeft, contentDescription = "前一天")
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
@@ -763,16 +833,16 @@ private fun DailyPlanTab(
                         )
                     }
                     IconButton(onClick = { vm.nextDay() }) {
-                        Icon(Icons.Filled.ChevronRight, contentDescription = "后一天")
+                        Icon(Icons.Outlined.ChevronRight, contentDescription = "后一天")
                     }
                 }
                 Spacer(modifier = Modifier.height(4.dp))
-                OutlinedButton(
+                TextButton(
                     onClick = { vm.goToday() },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("回到今天")
+                    Text("回到今天", color = MaterialTheme.colorScheme.primary)
                 }
             }
         }
@@ -848,7 +918,7 @@ private fun DailyScheduleCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Filled.Schedule, contentDescription = null,
+                Icon(Icons.Outlined.Schedule, contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(end = 8.dp))
                 Text(
                     "${schedule.startTime} - ${schedule.endTime()}",
@@ -858,7 +928,7 @@ private fun DailyScheduleCard(
                 )
                 Spacer(modifier = Modifier.weight(1f))
                 if (isSigned) {
-                    Icon(Icons.Filled.CheckCircle, contentDescription = "已签到",
+                    Icon(Icons.Outlined.CheckCircle, contentDescription = "已签到",
                         tint = ScoreExcellent, modifier = Modifier.padding(end = 4.dp))
                     Text("已签到", style = MaterialTheme.typography.labelSmall,
                         color = ScoreExcellent)
@@ -885,12 +955,12 @@ private fun DailyScheduleCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (isSigned) {
-                    OutlinedButton(
+                    TextButton(
                         onClick = onOpenLesson,
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Text("查看课时")
+                        Text("查看课时", color = MaterialTheme.colorScheme.primary)
                     }
                 } else {
                     Button(

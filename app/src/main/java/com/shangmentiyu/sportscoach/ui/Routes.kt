@@ -19,6 +19,8 @@ object Routes {
     const val EDIT_STUDENT = "edit_student/{studentName}"
     const val GROWTH = "growth/{studentName}"
     const val TRAINING_PLAN = "training_plan/{studentName}"
+    const val HEIGHT_PREDICTION = "height_prediction/{studentName}"
+    const val DIET_MANAGE = "diet_manage/{studentName}"
 
     // === 训练规划类（设置详情页二级入口） ===
     const val STAGE_SUMMARY = "stage_summary"
@@ -39,5 +41,7 @@ object Routes {
     fun scoringWithLesson(id: String) = "scoring/$id"
     fun growth(studentName: String) = "growth/$studentName"
     fun trainingPlan(studentName: String) = "training_plan/$studentName"
+    fun heightPrediction(studentName: String) = "height_prediction/$studentName"
+    fun dietManage(studentName: String) = "diet_manage/$studentName"
     fun editStudent(studentName: String) = "edit_student/$studentName"
 }

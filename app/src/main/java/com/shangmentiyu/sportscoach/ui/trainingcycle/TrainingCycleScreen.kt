@@ -13,9 +13,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.AlertDialog
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import androidx.compose.material3.Button
@@ -31,7 +31,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -56,8 +55,6 @@ import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
 import com.shangmentiyu.sportscoach.ui.theme.GlassCard
 import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
 import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 
 /**
@@ -86,7 +83,7 @@ fun TrainingCycleScreen(onBack: () -> Unit) {
                 colors = glassTopAppBarColors(),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
                     }
                 }
             )
@@ -99,7 +96,7 @@ fun TrainingCycleScreen(onBack: () -> Unit) {
                     contentColor = Color.White,
                     shape = RoundedCornerShape(16.dp)
                 ) {
-                    Icon(Icons.Filled.Add, contentDescription = "新建周期")
+                    Icon(Icons.Outlined.Add, contentDescription = "新建周期")
                 }
             }
         }
@@ -222,9 +219,12 @@ private fun CycleListCard(cycle: TrainingCycle, onClick: () -> Unit) {
                     color = MaterialTheme.colorScheme.outline)
             }
             Spacer(modifier = Modifier.height(8.dp))
-            OutlinedButton(onClick = onClick, modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(8.dp)) {
-                Text("查看周计划")
+            TextButton(
+                onClick = onClick,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("查看周计划", color = MaterialTheme.colorScheme.primary)
             }
         }
     }
@@ -270,19 +270,23 @@ private fun CycleDetailCard(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             if (cycle.status != "已完成") {
-                OutlinedButton(onClick = onMarkCompleted, modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(8.dp)) {
-                    Text("标记完成")
+                TextButton(
+                    onClick = onMarkCompleted,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("标记完成", color = MaterialTheme.colorScheme.primary)
                 }
             }
-            OutlinedButton(onClick = onDelete, modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(8.dp),
-                colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.error
-                )) {
-                Icon(Icons.Filled.Delete, contentDescription = null,
-                    modifier = Modifier.padding(end = 4.dp).height(16.dp))
-                Text("删除周期")
+            TextButton(
+                onClick = onDelete,
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Icon(Icons.Outlined.Delete, contentDescription = null,
+                    modifier = Modifier.padding(end = 4.dp).height(16.dp),
+                    tint = MaterialTheme.colorScheme.error)
+                Text("删除周期", color = MaterialTheme.colorScheme.error)
             }
         }
     }
@@ -340,7 +344,11 @@ private fun CreateCycleDialog(
     var name by remember { mutableStateOf("") }
     var goal by remember { mutableStateOf("") }
     var weeks by remember { mutableStateOf("4") }
-    val today = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()) }
+    val today = remember {
+        // 线程安全：基于 [java.time.LocalDate] 替代 [SimpleDateFormat]
+        java.time.LocalDate.now()
+            .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault()))
+    }
     var startDate by remember { mutableStateOf(today) }
 
     GlassAlertDialog(

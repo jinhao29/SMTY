@@ -15,20 +15,20 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.SportsScore
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.SportsScore
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -93,7 +93,7 @@ fun TrainingPlanScreen(
                 colors = glassTopAppBarColors(),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
                     }
                 }
             )
@@ -150,7 +150,7 @@ fun TrainingPlanScreen(
             GlassCard(glow = true) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        Icons.Filled.AutoAwesome,
+                        Icons.Outlined.AutoAwesome,
                         contentDescription = null,
                         tint = GlowCyan,
                         modifier = Modifier.size(20.dp)
@@ -192,14 +192,14 @@ fun TrainingPlanScreen(
 
             // === 底部双按钮 ===
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(
+                TextButton(
                     onClick = { vm.regenerate() },
                     modifier = Modifier.weight(1f),
                     enabled = !applying
                 ) {
-                    Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("重新生成")
+                    Text("重新生成", color = MaterialTheme.colorScheme.primary)
                 }
                 Button(
                     onClick = { vm.applyToNewLesson() },
@@ -213,7 +213,7 @@ fun TrainingPlanScreen(
                             color = MaterialTheme.colorScheme.onPrimary
                         )
                     } else {
-                        Icon(Icons.Filled.SportsScore, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Outlined.SportsScore, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("应用为新课时")
                     }
@@ -225,16 +225,12 @@ fun TrainingPlanScreen(
 
 /**
  * 单个推荐动作卡片。
- * 弱项针对性动作（priority=1）使用青色高亮边框。
  */
 @Composable
 private fun ExerciseRecommendCard(re: RecommendedExercise, index: Int) {
-    val isWeak = re.priority == 1
-    val borderColor = if (isWeak) GlowCyan.copy(alpha = 0.6f)
-                      else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
     val tagColor = when (re.priority) {
-        1 -> GlowCyan
-        2 -> MaterialTheme.colorScheme.primary
+        1 -> MaterialTheme.colorScheme.primary
+        2 -> MaterialTheme.colorScheme.secondary
         else -> MaterialTheme.colorScheme.outline
     }
     val tagText = when (re.priority) {
@@ -247,7 +243,7 @@ private fun ExerciseRecommendCard(re: RecommendedExercise, index: Int) {
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-        border = androidx.compose.foundation.BorderStroke(1.dp, borderColor)
+        shadowElevation = 4.dp
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

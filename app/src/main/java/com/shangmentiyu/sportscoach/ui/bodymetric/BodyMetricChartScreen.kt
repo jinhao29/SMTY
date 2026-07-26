@@ -15,8 +15,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.AlertDialog
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import androidx.compose.material3.Button
@@ -27,7 +27,6 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -83,7 +82,7 @@ fun BodyMetricChartScreen(onBack: () -> Unit) {
                 colors = glassTopAppBarColors(),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
                     }
                 }
             )
@@ -192,7 +191,7 @@ fun BodyMetricChartScreen(onBack: () -> Unit) {
                                         }
                                     }
                                     IconButton(onClick = { vm.deleteRecord(r.id) }) {
-                                        Icon(Icons.Filled.Delete, contentDescription = "删除",
+                                        Icon(Icons.Outlined.Delete, contentDescription = "删除",
                                             tint = MaterialTheme.colorScheme.error)
                                     }
                                 }

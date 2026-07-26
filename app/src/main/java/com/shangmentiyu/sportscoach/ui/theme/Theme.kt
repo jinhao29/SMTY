@@ -11,11 +11,11 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 /**
- * iOS 18 风格主题，跟随系统 Dark Mode 自动切换。
+ * 现代高级紫主题，跟随系统 Dark Mode 自动切换。
  *
- * - 亮色：iOS SystemBackground（纯白）+ SystemGroupedBackground（浅灰）
- * - 暗色：iOS Dark Mode Black (#000000) + #1C1C1E
- * - 主强调色：SystemBlue（亮色 #007AFF / 暗色 #0A84FF）
+ * - 亮色：纯白背景 + 轻微灰白分组背景 (#F5F7FA)
+ * - 暗色：纯黑背景 (#000000) + #1C1C1E
+ * - 主强调色：现代高级紫（亮色 #6A5ACD / 暗色 #8A79D9）
  * - 状态栏图标随主题反色：亮色背景=深色图标，暗色背景=浅色图标
  * - 所有页面通过 Scaffold 的 containerColor 控制底色，
  *   建议改用 [appBackground] / [appGroupedBackground] 等 @Composable 函数

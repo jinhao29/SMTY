@@ -1,6 +1,7 @@
 package com.shangmentiyu.sportscoach.ui.schedule
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,18 +18,22 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.DeleteSweep
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.CleaningServices
+import androidx.compose.material.icons.outlined.DeleteSweep
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -37,8 +42,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -46,6 +53,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -61,26 +69,49 @@ import com.shangmentiyu.sportscoach.ui.theme.FeatureIconOrange
 import com.shangmentiyu.sportscoach.ui.theme.FeatureIconPink
 import com.shangmentiyu.sportscoach.ui.theme.FeatureIconPurple
 import com.shangmentiyu.sportscoach.ui.theme.FeatureIconTeal
+import com.shangmentiyu.sportscoach.ui.theme.IOSCard
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
+import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
+import com.shangmentiyu.sportscoach.ui.theme.appOutline
+import com.shangmentiyu.sportscoach.ui.theme.appPrimary
+import com.shangmentiyu.sportscoach.ui.theme.appSurface
 import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
-import java.text.SimpleDateFormat
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Calendar
+import java.util.Date
 import java.util.Locale
 
 /**
- * 课表页面（wakeup 课表风格周视图）。
+ * 日期条目：Keep 风格日期选择条使用。
  *
- * 设计要点：
- * - 顶部：周切换条（上一周/本周范围/下一周）+ 「本周新增」按钮
- * - 主体：7 列横向滚动网格，每列代表一天（周一~周日）
- * - 每列顶部：周几标签 + 日期（MM-dd）
- * - 每列内：按开始时间排序的课程卡片
- * - 课程卡片：左侧 4dp 色条（对应 Schedule.color）+ 时间 + 学员 + 地点
+ * @param dayOfWeek ISO 周几（1=周一 ... 7=周日）
+ * @param dayName 周几文本（如"周一"）
+ * @param date 对应日期
+ * @param dateLabel 日期文本（如"03-04"）
+ */
+private data class DayItem(
+    val dayOfWeek: Int,
+    val dayName: String,
+    val date: Date,
+    val dateLabel: String
+)
+
+/**
+ * 课表页面（Keep 风格周视图）。
+ *
+ * 设计要点（参考 Keep 直播课表）：
+ * - 顶部：返回 + 标题 + 清空全部
+ * - 日期选择条：横向滚动的 7 天（今天 / 周一~周日 + 日期数字），选中高亮
+ * - 主体：按开始时间升序排列的垂直课程卡片列表
+ * - 课程卡片：左侧大字号时间（开始 + 结束），右侧白色卡片（学员、时长/地点/类型、状态）
  * - 点击课程卡片：进入编辑（复用 ScheduleEditDialog）
- * - 点击列底部「+」：为该天快速新增课程
+ * - 长按课程卡片：弹出修改/删除操作菜单
+ * - 右下角 FAB：为当前选中的星期几快速新增课程
  *
- * 数据流：ScheduleScreen → OperationViewModel → ScheduleRepository → Room
+ * 数据流与业务逻辑保持不变：ScheduleScreen → OperationViewModel → ScheduleRepository → Room
  *
  * @param onBack 返回回调
  */
@@ -97,41 +128,79 @@ fun ScheduleScreen(
     val schedules by vm.schedules.collectAsState()
     val weekStart by vm.weekStart.collectAsState()
     val editing by vm.editingSchedule.collectAsState()
+    // v24 优化2：余额不足警告（顶部 Alert Banner 显示）
+    val noBalanceWarnings by vm.noBalanceWarnings.collectAsState()
 
     var showEditDialog by remember { mutableStateOf(false) }
     var isCreate by remember { mutableStateOf(true) }
     var prefillDay by remember { mutableStateOf<Int?>(null) }
     var showClearAllDialog by remember { mutableStateOf(false) }
 
-    // 长按课程卡片弹出"修改/删除"操作菜单
-    // 用户需求：周课表支持指定某一天课表某一节课的修改删除
-    // 点击 = 进入编辑；长按 = 弹出操作菜单（修改 / 删除该节课）
+    // 长按课程卡片弹出的操作菜单状态
     var actionTargetSchedule by remember { mutableStateOf<Schedule?>(null) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var pendingDeleteSchedule by remember { mutableStateOf<Schedule?>(null) }
 
-    val dateFmt = remember { SimpleDateFormat("MM-dd", Locale.getDefault()) }
-    val weekFmt = remember { SimpleDateFormat("yyyy年MM月dd日", Locale.getDefault()) }
+    val dateFmt = remember { java.time.format.DateTimeFormatter.ofPattern("MM-dd", Locale.getDefault()) }
     val dayNames = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
 
-    // 计算本周 7 天的日期
-    val weekDates = remember(weekStart) {
-        val cal = Calendar.getInstance()
-        cal.time = weekStart
-        (0..6).map { i ->
-            if (i > 0) cal.add(Calendar.DATE, 1)
-            cal.time
+    // === Bug 修复2：进入排课页时自动清理历史废弃占位排课 ===
+    // 静默模式：仅在确有清理时通过 toast 反馈，避免每次进入页面都弹"无清理"提示
+    LaunchedEffect(Unit) { vm.cleanupOnEnter() }
+
+    // 计算本周 7 天对应的 Date 与 dayOfWeek（1=周一 ... 7=周日）
+    // 日期格式化线程安全：Date→LocalDate 转换后用 [DateTimeFormatter] 格式化
+    val weekDays: List<DayItem> = remember(weekStart) {
+        val cal = Calendar.getInstance().apply { time = weekStart }
+        val zone = java.time.ZoneId.systemDefault()
+        (1..7).map { dayOfWeek ->
+            val date = cal.time
+            val localDate = date.toInstant().atZone(zone).toLocalDate()
+            val item = DayItem(
+                dayOfWeek = dayOfWeek,
+                dayName = dayNames[dayOfWeek - 1],
+                date = date,
+                dateLabel = dateFmt.format(localDate)
+            )
+            cal.add(Calendar.DATE, 1)
+            item
         }
     }
 
-    // 本周日期范围标题
-    val weekTitle = remember(weekStart) {
-        val cal = Calendar.getInstance()
-        cal.time = weekStart
-        val startStr = weekFmt.format(weekStart)
-        cal.add(Calendar.DATE, 6)
-        val endStr = weekFmt.format(cal.time)
-        "$startStr ~ $endStr"
+    // 默认选中今天对应的 dayOfWeek（仅在首次进入页面时计算），切换周时保持
+    // 当前选中的星期几不变，这样用户能明确看到日期选择条随周切换而移动。
+    var selectedDayOfWeek by remember { mutableIntStateOf(1) }
+    var hasSelectedToday by remember { mutableStateOf(false) }
+
+    LaunchedEffect(weekDays) {
+        if (!hasSelectedToday && weekDays.isNotEmpty()) {
+            val todayCal = Calendar.getInstance()
+            val todayIdx = weekDays.indexOfFirst { day ->
+                val d = Calendar.getInstance().apply { time = day.date }
+                d.get(Calendar.YEAR) == todayCal.get(Calendar.YEAR) &&
+                    d.get(Calendar.DAY_OF_YEAR) == todayCal.get(Calendar.DAY_OF_YEAR)
+            }
+            selectedDayOfWeek = if (todayIdx >= 0) weekDays[todayIdx].dayOfWeek else 1
+            hasSelectedToday = true
+        }
+    }
+
+    // === Bug 修复3：当前选中日期是否为过去日期（用于 UI 置灰 + "已过去"角标）===
+    // 必须放在 selectedDayOfWeek 声明之后，否则 Kotlin 编译器报 Unresolved reference
+    // weekStart 是周一，selectedDayOfWeek 1=周一 ... 7=周日
+    val todayLocal = remember { LocalDate.now() }
+    val selectedDateLocal = remember(weekStart, selectedDayOfWeek) {
+        val zone = ZoneId.systemDefault()
+        val weekStartLocal = weekStart.toInstant().atZone(zone).toLocalDate()
+        weekStartLocal.plusDays((selectedDayOfWeek - 1).toLong())
+    }
+    val isSelectedDatePast = selectedDateLocal.isBefore(todayLocal)
+
+    // 当前选中日期的课程列表（按开始时间升序，已暂停置底）
+    val daySchedules = remember(schedules, selectedDayOfWeek) {
+        schedules
+            .filter { it.dayOfWeek == selectedDayOfWeek }
+            .sortedWith(compareBy({ if (it.isActive) 0 else 1 }, { it.startTime }))
     }
 
     Scaffold(
@@ -142,15 +211,24 @@ fun ScheduleScreen(
                 colors = glassTopAppBarColors(),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
                     }
                 },
                 actions = {
-                    // 清空全部课表按钮（仅当有课表时显示）
+                    // === Bug 修复2：手动触发"清理过去无效排课"按钮 ===
+                    // 即使启动时已自动清理，仍保留手动按钮供用户主动触发
+                    // （如数据库被外部同步污染后可一键再次清理）
+                    IconButton(onClick = { vm.cleanupPastLessonsManually() }) {
+                        Icon(
+                            Icons.Outlined.CleaningServices,
+                            contentDescription = "清理过去无效排课",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                     if (schedules.isNotEmpty()) {
                         IconButton(onClick = { showClearAllDialog = true }) {
                             Icon(
-                                Icons.Filled.DeleteSweep,
+                                Icons.Outlined.DeleteSweep,
                                 contentDescription = "清空全部",
                                 tint = MaterialTheme.colorScheme.error
                             )
@@ -158,89 +236,155 @@ fun ScheduleScreen(
                     }
                 }
             )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = {
+                    isCreate = true
+                    prefillDay = selectedDayOfWeek
+                    vm.startCreate()
+                    showEditDialog = true
+                },
+                shape = CircleShape,
+                containerColor = appPrimary()
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Add,
+                    contentDescription = "新增课程",
+                    tint = Color.White
+                )
+            }
         }
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .background(appGroupedBackground())
                 .padding(padding)
         ) {
-            // === 周切换条 ===
-            Row(
+            // === v34 布局优化3：顶部瘦身 ===
+            // 取消白色 IOSCard 包裹，直接平铺在浅灰底色上，缩小整体垂直高度
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = Spacing.screenH, vertical = Spacing.sm),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(horizontal = Spacing.screenH)
+                    .padding(top = Spacing.sm, bottom = Spacing.sm),
+                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
             ) {
-                IconButton(onClick = { vm.shiftWeek(-7) }) {
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "上一周")
+                // 第一行：周次范围标题 + 周切换按钮组（上一周 / 今天 / 下一周）
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = weekRangeText(weekStart),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = appOnSurface(),
+                        modifier = Modifier.weight(1f, fill = false),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                        // 上一周按钮（图标 + 文字 + 圆角浅主色背景）
+                        WeekShiftButton(
+                            text = "上一周",
+                            icon = Icons.AutoMirrored.Outlined.KeyboardArrowLeft,
+                            onClick = { vm.shiftWeek(-7) }
+                        )
+                        // 今天按钮（实心主色，突出快捷回到本周）
+                        TodayButton(onClick = { vm.resetToThisWeek() })
+                        // 下一周按钮
+                        WeekShiftButton(
+                            text = "下一周",
+                            icon = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                            onClick = { vm.shiftWeek(7) }
+                        )
+                    }
                 }
-                Text(
-                    text = weekTitle,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.weight(1f)
+
+                // 第二行：胶囊日期选择条（直接平铺在浅灰底色上，无白色背景）
+                DaySelector(
+                    days = weekDays,
+                    selectedDayOfWeek = selectedDayOfWeek,
+                    onDaySelected = { selectedDayOfWeek = it }
                 )
-                IconButton(onClick = { vm.shiftWeek(7) }) {
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "下一周")
-                }
             }
 
-            // === 7 列横向滚动课表网格 ===
-            LazyRow(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                    horizontal = Spacing.screenH,
-                    vertical = Spacing.sm
-                ),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-            ) {
-                items(weekDates.size) { idx ->
-                    val date = weekDates[idx]
-                    val dayOfWeek = idx + 1
-                    val daySchedules = schedules
-                        .filter { it.dayOfWeek == dayOfWeek }
-                        .sortedBy { it.startTime }
+            // === v24 优化2：余额不足警告 Alert Banner（浅橙色背景提示条） ===
+            if (noBalanceWarnings.isNotEmpty()) {
+                NoBalanceWarningBanner(
+                    warnings = noBalanceWarnings,
+                    onDismiss = { vm.clearNoBalanceWarnings() }
+                )
+            }
 
-                    DayColumn(
-                        dayName = dayNames[idx],
-                        dateLabel = dateFmt.format(date),
-                        daySchedules = daySchedules,
-                        onScheduleClick = { s ->
-                            // 点击 = 进入编辑（保留原行为）
-                            isCreate = false
-                            prefillDay = null
-                            vm.startEdit(s.id)
-                            showEditDialog = true
-                        },
-                        onScheduleLongClick = { s ->
-                            // 长按 = 弹出操作菜单（修改 / 删除该节课）
-                            actionTargetSchedule = s
-                        },
-                        onAddNew = {
-                            isCreate = true
-                            prefillDay = dayOfWeek
-                            vm.startCreate()
-                            showEditDialog = true
+            // === 课程列表（IOSCard 白色卡片包裹，与添加排课页面风格一致）===
+            if (daySchedules.isEmpty()) {
+                IOSCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.screenH, vertical = Spacing.sm),
+                    contentPadding = Spacing.xl
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                "今日无排课",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = appOutline()
+                            )
+                            Spacer(Modifier.height(Spacing.sm))
+                            Text(
+                                "点击右下角 + 添加课程",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = appOutline()
+                            )
                         }
-                    )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = Spacing.screenH,
+                        vertical = Spacing.sm
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.md)
+                ) {
+                    items(daySchedules, key = { it.id }) { s ->
+                        KeepScheduleCard(
+                            schedule = s,
+                            isPastDate = isSelectedDatePast,
+                            onClick = {
+                                // === Bug 修复3：过去日期的排课不可操作（避免误编辑历史记录）===
+                                if (isSelectedDatePast) return@KeepScheduleCard
+                                isCreate = false
+                                prefillDay = null
+                                vm.startEdit(s.id)
+                                showEditDialog = true
+                            },
+                            onLongClick = {
+                                // === Bug 修复3：过去日期的排课不可操作 ===
+                                if (isSelectedDatePast) return@KeepScheduleCard
+                                actionTargetSchedule = s
+                            }
+                        )
+                    }
                 }
             }
         }
     }
 
     // 长按课程卡片弹出的操作菜单（修改 / 删除该节课）
-    // 用户需求：周课表支持指定某一天课表某一节课的修改删除
     actionTargetSchedule?.let { target ->
         AlertDialog(
             onDismissRequest = { actionTargetSchedule = null },
-            title = {
-                Text(
-                    "课程操作",
-                    fontWeight = FontWeight.Bold
-                )
-            },
+            title = { Text("课程操作", fontWeight = FontWeight.Bold) },
             text = {
                 Column {
                     Text(
@@ -271,7 +415,6 @@ fun ScheduleScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        // 修改：进入编辑对话框
                         val s = target
                         actionTargetSchedule = null
                         isCreate = false
@@ -281,7 +424,7 @@ fun ScheduleScreen(
                     }
                 ) {
                     Icon(
-                        Icons.Filled.Edit,
+                        Icons.Outlined.Edit,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp)
                     )
@@ -293,23 +436,19 @@ fun ScheduleScreen(
                 Row {
                     TextButton(
                         onClick = {
-                            // 删除：弹出二次确认
                             pendingDeleteSchedule = target
                             actionTargetSchedule = null
                             showDeleteConfirmDialog = true
                         }
                     ) {
                         Icon(
-                            Icons.Filled.DeleteSweep,
+                            Icons.Outlined.DeleteSweep,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp),
                             tint = MaterialTheme.colorScheme.error
                         )
                         Spacer(Modifier.width(Spacing.xs))
-                        Text(
-                            "删除",
-                            color = MaterialTheme.colorScheme.error
-                        )
+                        Text("删除", color = MaterialTheme.colorScheme.error)
                     }
                     TextButton(onClick = { actionTargetSchedule = null }) {
                         Text("取消")
@@ -320,7 +459,6 @@ fun ScheduleScreen(
     }
 
     // 删除课程二次确认对话框
-    // 避免长按误触导致课程被直接删除
     if (showDeleteConfirmDialog && pendingDeleteSchedule != null) {
         val toDelete = pendingDeleteSchedule!!
         AlertDialog(
@@ -328,12 +466,7 @@ fun ScheduleScreen(
                 showDeleteConfirmDialog = false
                 pendingDeleteSchedule = null
             },
-            title = {
-                Text(
-                    "删除课程",
-                    fontWeight = FontWeight.Bold
-                )
-            },
+            title = { Text("删除课程", fontWeight = FontWeight.Bold) },
             text = {
                 Text(
                     buildString {
@@ -355,11 +488,7 @@ fun ScheduleScreen(
                         pendingDeleteSchedule = null
                     }
                 ) {
-                    Text(
-                        "删除",
-                        color = MaterialTheme.colorScheme.error,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Text("删除", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
                 }
             },
             dismissButton = {
@@ -423,110 +552,71 @@ fun ScheduleScreen(
 }
 
 /**
- * 单日列：周几标签 + 日期 + 课程卡片列表 + 新增按钮。
+ * v24 优化2：余额不足警告 Alert Banner。
  *
- * @param dayName 周几文本（如 "周一"）
- * @param dateLabel 日期文本（如 "03-04"）
- * @param daySchedules 当天所有课程（按时间升序）
- * @param onScheduleClick 点击课程卡片（进入编辑）
- * @param onScheduleLongClick 长按课程卡片（弹出修改/删除菜单）
- * @param onAddNew 点击新增
+ * 浅橙色背景圆角卡片，显示本周排课时检测到的余额不足学员列表，
+ * 提示教练及时为学员续费。点击关闭按钮可手动清除警告。
+ *
+ * 设计要点：
+ * - 浅橙色背景（#FFF3E0）+ 深橙色文字（#E65100），符合 Material 警告色规范
+ * - 圆角 12dp，与 IOSCard 风格一致
+ * - 警告图标 + 标题 + 学员列表 + 关闭按钮
+ * - 不改动现有 UI 布局，仅在周次信息卡片后新增可关闭的提示条
+ *
+ * @param warnings 余额不足警告文案列表（每条形如 "陈书楠 周五 余额不足"）
+ * @param onDismiss 关闭回调
  */
 @Composable
-private fun DayColumn(
-    dayName: String,
-    dateLabel: String,
-    daySchedules: List<Schedule>,
-    onScheduleClick: (Schedule) -> Unit,
-    onScheduleLongClick: (Schedule) -> Unit,
-    onAddNew: () -> Unit
+private fun NoBalanceWarningBanner(
+    warnings: List<String>,
+    onDismiss: () -> Unit
 ) {
-    Column(
+    Box(
         modifier = Modifier
-            .width(140.dp)
-            .fillMaxSize()
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.screenH, vertical = Spacing.xs)
             .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(8.dp),
-        verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+            .background(Color(0xFFFFF3E0))   // 浅橙色背景
+            .padding(Spacing.md)
     ) {
-        // 列头：周几 + 日期
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
-                .padding(vertical = 8.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Outlined.Warning,
+                    contentDescription = null,
+                    tint = Color(0xFFE65100),   // 深橙色
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.width(Spacing.sm))
                 Text(
-                    dayName,
+                    text = "余额不足提醒",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    color = Color(0xFFE65100)
                 )
-                Text(
-                    dateLabel,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
-            }
-        }
-
-        // 课程列表
-        if (daySchedules.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                contentAlignment = Alignment.TopCenter
-            ) {
-                Text(
-                    "无课",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline,
-                    modifier = Modifier.padding(top = 16.dp)
-                )
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(Spacing.xs)
-            ) {
-                items(daySchedules, key = { it.id }) { s ->
-                    ScheduleBlock(
-                        schedule = s,
-                        onClick = { onScheduleClick(s) },
-                        onLongClick = { onScheduleLongClick(s) }
+                Spacer(Modifier.weight(1f))
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        Icons.Outlined.Close,
+                        contentDescription = "关闭",
+                        tint = Color(0xFFE65100),
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }
-        }
-
-        // 底部新增按钮
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.06f))
-                .clickable(onClick = onAddNew)
-                .padding(vertical = 8.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Filled.Add,
-                    contentDescription = "新增",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(14.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
+            Spacer(Modifier.height(Spacing.xs))
+            warnings.forEach { warning ->
                 Text(
-                    "新增",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Medium
+                    text = "• $warning",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF6B4E00),   // 深棕色文字
+                    modifier = Modifier.padding(vertical = 2.dp)
                 )
             }
         }
@@ -534,117 +624,248 @@ private fun DayColumn(
 }
 
 /**
- * 单个课程方块：左侧色条 + 时间 + 学员 + 地点。
+ * Keep 风格日期选择条（v34 布局优化3 瘦身版）。
+ *
+ * === v34 布局优化3 ===
+ * - 取消白色背景，直接平铺在浅灰底色上
+ * - 每项改为胶囊形状（RoundedCornerShape(50) 完全胶囊）
+ * - 未选中：浅灰背景（#E8E8EB），次级灰色文字
+ * - 选中：珊瑚橙边框（1dp）+ 浅珊瑚橙底色（alpha 0.10）+ 珊瑚橙文字
+ *   不再用大块橙色实心背景，整体视觉更轻量
+ * - 缩小垂直 padding（10→6），减小顶部整体高度
+ *
+ * 横向滚动，每项显示周几 + 日期（MM-dd）。
+ */
+@Composable
+private fun DaySelector(
+    days: List<DayItem>,
+    selectedDayOfWeek: Int,
+    onDaySelected: (Int) -> Unit
+) {
+    val todayCal = Calendar.getInstance()
+    // 胶囊形状：50% 圆角 = 完全胶囊
+    val capsuleShape = RoundedCornerShape(50)
+
+    LazyRow(
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = Spacing.screenH),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+    ) {
+        items(days, key = { it.dayOfWeek }) { day ->
+            val isSelected = day.dayOfWeek == selectedDayOfWeek
+            val isToday = remember(day.date) {
+                val d = Calendar.getInstance().apply { time = day.date }
+                d.get(Calendar.YEAR) == todayCal.get(Calendar.YEAR) &&
+                    d.get(Calendar.DAY_OF_YEAR) == todayCal.get(Calendar.DAY_OF_YEAR)
+            }
+            val displayDayName = if (isToday) "今天" else day.dayName
+
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .clip(capsuleShape)
+                    .border(
+                        width = if (isSelected) 1.dp else 0.dp,
+                        color = if (isSelected) appPrimary() else Color.Transparent,
+                        shape = capsuleShape
+                    )
+                    .clickable { onDaySelected(day.dayOfWeek) }
+                    .background(
+                        if (isSelected) appPrimary().copy(alpha = 0.10f)
+                        else Color(0xFFE8E8EB),
+                        capsuleShape
+                    )
+                    .padding(horizontal = 14.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    text = displayDayName,
+                    fontSize = 12.sp,
+                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                    color = if (isSelected) appPrimary() else appOnSurface().copy(alpha = 0.7f)
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = day.dateLabel,
+                    fontSize = 12.sp,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                    color = if (isSelected) appPrimary() else appOnSurface().copy(alpha = 0.9f)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Keep 风格课程卡片（v34 布局优化版）。
+ *
+ * === v34 布局优化 ===
+ * - 删除左侧独立的"09:00"和"10:00 结束"列，将上课时间段（如 09:00-10:00）
+ *   直接放入卡片内学员姓名上方，使用较小号的次级灰色文字（#6B6B6B）
+ * - 删除卡片左侧的垂直橙色装饰竖线，让信息密度更紧凑
+ * - 卡片内信息排布改为两行：
+ *   第一行（粗体）：学员姓名 + 课时类型胶囊标签（最右侧）
+ *   第二行（次级灰色，同一行内）：60分钟 · 地点 · 教练：李
+ * - "训练课"标签改为浅色背景 + 珊瑚橙文字的胶囊形状
  *
  * 交互：
- * - 点击：进入编辑（[onClick]）
- * - 长按：弹出操作菜单（[onLongClick]），用于"修改/删除该节课"
+ * - 点击：进入编辑（过去日期禁用）
+ * - 长按：弹出操作菜单（修改 / 删除）（过去日期禁用）
  *
- * @param schedule 课程数据
+ * === Bug 修复3：过去日期视觉区分 ===
+ * - [isPastDate]=true 时，整张卡片降低透明度（0.4f）并叠加"已过去"角标
+ * - 点击/长按已在调用方拦截，此处 combinedClickable 仍保留以维持点击反馈一致性
+ * - 与 [schedule.isActive]=false（已暂停）的 0.5f 透明度叠加，
+ *   过去日期的已暂停卡片 alpha = 0.4 * 0.5 = 0.2，视觉上更弱
+ *
+ * @param schedule 排课数据
+ * @param isPastDate 当前选中日期是否为过去日期（用于置灰 + "已过去"角标）
  * @param onClick 点击回调
  * @param onLongClick 长按回调
  */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun ScheduleBlock(
+private fun KeepScheduleCard(
     schedule: Schedule,
+    isPastDate: Boolean = false,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
     val accentColor = scheduleColor(schedule.color)
-    val inactiveAlpha = if (schedule.isActive) 1f else 0.45f
+    // === Bug 修复3：过去日期叠加 0.4f 透明度，与 isActive=false 的 0.5f 叠加 ===
+    val baseAlpha = if (schedule.isActive) 1f else 0.5f
+    val pastAlpha = if (isPastDate) 0.4f else 1f
+    val inactiveAlpha = baseAlpha * pastAlpha
 
-    Row(
+    // === v34：单卡片结构（无左侧时间列、无装饰竖线）===
+    // 上方一行时间段（如 09:00-10:00）+ 右侧"已过去"角标
+    // 下方白色圆角卡片：第一行学员名 + 课时类型胶囊；第二行 60分钟 · 地点 · 教练
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.background.copy(alpha = inactiveAlpha))
+            .clip(RoundedCornerShape(12.dp))
+            .background(appSurface())
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
             )
-            .padding(end = 6.dp),
-        verticalAlignment = Alignment.Top
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        // 左侧 4dp 色条
-        Box(
-            modifier = Modifier
-                .width(4.dp)
-                .background(accentColor)
-        )
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(start = 6.dp, top = 6.dp, bottom = 6.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
+        // === 第一行：时间段 + 过去角标 ===
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // 时间
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Filled.Schedule,
-                    contentDescription = null,
-                    modifier = Modifier.size(10.dp),
-                    tint = accentColor
-                )
-                Spacer(modifier = Modifier.width(2.dp))
-                Text(
-                    schedule.startTime,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = accentColor,
-                    fontSize = 11.sp
-                )
-            }
-            // 学员名 + 课时类型
+            // 时间段（09:00-10:00），较小号次级灰色（#6B6B6B）
             Text(
-                buildString {
-                    append(schedule.studentName)
-                    if (schedule.lessonType.isNotBlank()) {
-                        append(" · ").append(schedule.lessonType)
-                    }
-                },
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                fontSize = 12.sp
+                text = "${schedule.startTime}-${schedule.endTime()}",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color(0xFF6B6B6B).copy(alpha = pastAlpha),
+                maxLines = 1
             )
-            // 地点
-            if (schedule.location.isNotBlank()) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Filled.LocationOn,
-                        contentDescription = null,
-                        modifier = Modifier.size(10.dp),
-                        tint = MaterialTheme.colorScheme.outline
-                    )
-                    Spacer(modifier = Modifier.width(2.dp))
+            // === Bug 修复3：过去日期角标 ===
+            if (isPastDate) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
                     Text(
-                        schedule.location,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        fontSize = 10.sp
+                        text = "已过去",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.outline
                     )
                 }
             }
-            // 暂停标记
-            if (!schedule.isActive) {
-                Text(
-                    "已暂停",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline,
-                    fontSize = 10.sp
-                )
+        }
+
+        // === 第二行：学员名 + 课时类型胶囊（最右侧）===
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = schedule.studentName,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = appOnSurface().copy(alpha = inactiveAlpha),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            if (schedule.lessonType.isNotBlank()) {
+                Spacer(Modifier.width(Spacing.sm))
+                // === v34：浅色背景 + 珊瑚橙文字胶囊 ===
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(accentColor.copy(alpha = 0.12f))
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                ) {
+                    Text(
+                        text = schedule.lessonType,
+                        fontSize = 11.sp,
+                        color = accentColor.copy(alpha = inactiveAlpha),
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1
+                    )
+                }
             }
+        }
+
+        // === 第三行：60分钟 · 地点 · 教练：李 ===
+        // 同一行内用中点分隔，次级灰色
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+        ) {
+            // 用 buildAnnotatedString 拼接，确保同一行
+            val metaText = buildString {
+                append("${schedule.durationMinutes}分钟")
+                if (schedule.location.isNotBlank()) {
+                    append(" · ")
+                    append(schedule.location)
+                }
+                if (schedule.coachName.isNotBlank()) {
+                    append(" · ")
+                    append("教练：${schedule.coachName}")
+                }
+                if (!schedule.isActive) {
+                    append(" · ")
+                    append("已暂停")
+                }
+            }
+            Text(
+                text = metaText,
+                fontSize = 12.sp,
+                color = appOutline().copy(alpha = pastAlpha),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
 
 /**
+ * 计算本周日期范围文本（yyyy年MM月dd日 ~ yyyy年MM月dd日）。
+ * 线程安全：基于 [java.time.LocalDate] + [DateTimeFormatter]，替代 [SimpleDateFormat]。
+ */
+private fun weekRangeText(weekStart: Date): String {
+    val fmt = java.time.format.DateTimeFormatter.ofPattern("yyyy年MM月dd日", Locale.getDefault())
+    val zone = java.time.ZoneId.systemDefault()
+    val start = weekStart.toInstant().atZone(zone).toLocalDate()
+    val end = start.plusDays(6)
+    return "${start.format(fmt)} ~ ${end.format(fmt)}"
+}
+
+/**
  * 将 Schedule.color 字符串映射为 Color。
- * 默认返回蓝色（与 wakeup 课表风格一致）。
  */
 private fun scheduleColor(colorKey: String): Color = when (colorKey) {
     "blue" -> FeatureIconBlue
@@ -654,4 +875,76 @@ private fun scheduleColor(colorKey: String): Color = when (colorKey) {
     "pink" -> FeatureIconPink
     "teal" -> FeatureIconTeal
     else -> FeatureIconBlue
+}
+
+/**
+ * 周切换按钮：图标 + 文字 + 圆角浅色背景。
+ *
+ * 设计要点：
+ * - 圆角胶囊背景（主色 10% 透明度），主色文字与图标
+ * - 充足的水平 padding（12dp）保证点击区可点击
+ * - 文字尺寸 13sp，配合 16dp 图标
+ * - 用于"上一周"/"下一周"切换，间距由外部 Row 控制（建议 Spacing.sm）
+ *
+ * @param text 按钮文字（如"上一周"）
+ * @param icon 方向图标
+ * @param onClick 点击回调
+ */
+@Composable
+private fun WeekShiftButton(
+    text: String,
+    icon: ImageVector,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(16.dp)
+        )
+        Spacer(Modifier.size(4.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+/**
+ * "今天"按钮：实心主色背景 + 白色文字，突出快捷回到本周的主操作。
+ *
+ * 设计要点：
+ * - 与 [WeekShiftButton] 的浅主色背景形成视觉对比，突出"回到今天"这一常用快捷操作
+ * - 圆角胶囊形，文字居中
+ * - 充足的水平 padding 保证点击区可点击
+ *
+ * @param onClick 点击回调，调用 [OperationViewModel.resetToThisWeek]
+ */
+@Composable
+private fun TodayButton(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.primary)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "今天",
+            style = MaterialTheme.typography.labelLarge,
+            color = Color.White,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
 }

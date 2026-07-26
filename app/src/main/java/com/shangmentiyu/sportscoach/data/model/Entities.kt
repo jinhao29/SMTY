@@ -1,10 +1,24 @@
 package com.shangmentiyu.sportscoach.data.model
 
+import androidx.compose.runtime.Stable
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-/** 学员实体 */
+/**
+ * 学员实体
+ *
+ * === v26 优化2：@Stable 注解 ===
+ *
+ * Compose 编译器在 StateFlow<List<Student>> 变化时会触发 LazyColumn 重组。
+ * 默认情况下 Compose 无法识别 data class 的"是否相等"，每次 emit 都会全量重组所有 item。
+ *
+ * 加上 @Stable 后，Compose 编译器会按字段对比实例，
+ * 仅当字段值变化时才触发重组，列表滑动更丝滑、省电。
+ *
+ * 适用场景：所有在 Compose UI 中作为 State 暴露的数据类。
+ */
+@Stable
 @Entity(tableName = "students")
 data class Student(
     @PrimaryKey val name: String,        // 姓名（主键）
@@ -16,6 +30,17 @@ data class Student(
     val heightCm: Int = 0,                // 身高（厘米，0=未填）
     val weightKg: Float = 0f,             // 体重（千克，0=未填）
     val bmi: Float = 0f,                  // BMI（自动计算，0=未计算）
+    // === 身高遗传潜力与后天预测字段（v17 引入，默认 0 兼容老数据） ===
+    val fatherHeight: Double = 0.0,       // 父亲身高（厘米）
+    val motherHeight: Double = 0.0,       // 母亲身高（厘米）
+    val avgSleepHours: Double = 0.0,      // 日常平均睡眠小时
+    val nutritionScore: Int = 0,          // 日常营养均衡评分（1-5，0=未填）
+    val sportsMinsPerWeek: Int = 0,       // 每周运动总时长（分钟）
+    // === v20 引入：软删除标志 + 软关联外键 ===
+    // isActive=false 表示已逻辑删除（学员行保留，不出现在日常列表，但历史课时/排课数据保留用于报表）
+    // studentId 为可选软关联字段：用于更精准的内部查询和改名级联查找（旧数据初始为 NULL，由业务层后续回填）
+    val isActive: Boolean = true,         // 是否活跃（软删除标志，false=已删除）
+    val studentId: String? = null,       // 学员唯一ID（软关联外键，NULL=旧数据未生成）
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )
@@ -40,11 +65,14 @@ data class Student(
         Index(value = ["studentName", "date", "packageId"], name = "idx_lessons_student_date_pkg")
     ]
 )
+// v26 优化2：@Stable 让 LazyColumn 课时列表按字段对比，避免无效重组
+@Stable
 data class Lesson(
     @PrimaryKey val id: String,           // UUID前8位
     val date: String,                     // YYYY-MM-DD
     val time: String,                     // HH:mm（签到时间）
-    val studentName: String,              // 学员姓名(外键)
+    val studentName: String,              // 学员姓名（软关联，保留用于显示）
+    val studentId: String? = null,        // 学员唯一ID（软关联外键，v20 引入，旧数据 NULL）
     val content: String = "[]",           // 训练内容JSON
     val scores: String = "{}",            // 成绩JSON
     val summary: String = "",             // 课后小结
@@ -62,10 +90,17 @@ data class Lesson(
     val signOutTime: String = "",         // 签退时间 HH:mm（空=未签退）
     val signOutPhotoPath: String = "",    // 签退照片路径（空=未拍照）
     val contentImages: String = "[]",     // 课后反馈训练内容图片路径 JSON（字符串列表，便于反馈给家长）
+    // === v27：签到/签退状态字段 ===
+    // 取值："已签到"（默认，签到时写入但未扣减课时包）/ "已签退"（签退时扣减课时包并标记）
+    // 配合"签退后消耗课时"重构：签到时仅创建 Lesson(status="已签到", packageId="")
+    // 签退时事务内：consumeLesson 扣减课时包 + 更新 Lesson(status="已签退", packageId, signOutTime)
+    val status: String = "已签到",         // 课时状态：已签到 / 已签退
     val createdAt: Long = System.currentTimeMillis()
 )
 
 /** 训练内容项（用于JSON序列化） */
+// v26 优化2：@Stable 让训练内容 LazyColumn 列表项按字段对比，避免无效重组
+@Stable
 data class ExerciseItem(
     val name: String = "",
     val sets: Int = 3,
@@ -76,6 +111,8 @@ data class ExerciseItem(
 )
 
 /** 成绩项（用于JSON序列化） */
+// v26 优化2：@Stable 让成绩 LazyColumn 列表项按字段对比，避免无效重组
+@Stable
 data class ScoreItem(
     val value: String = "",
     val score: Double = 0.0,

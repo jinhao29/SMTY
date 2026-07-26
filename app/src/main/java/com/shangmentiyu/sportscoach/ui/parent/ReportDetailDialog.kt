@@ -11,14 +11,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Flag
-import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.AlertDialog
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -98,7 +97,7 @@ fun ReportDetailDialog(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
-                                    Icons.Filled.Flag,
+                                    Icons.Outlined.Flag,
                                     contentDescription = null,
                                     tint = GlowCyan,
                                     modifier = Modifier.width(18.dp)
@@ -170,16 +169,16 @@ fun ReportDetailDialog(
                         },
                         modifier = Modifier.weight(1f)
                     ) {
-                        Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.width(18.dp))
+                        Icon(Icons.Outlined.Share, contentDescription = null, modifier = Modifier.width(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text("分享给家长")
                     }
                     if (!report.shared) {
-                        OutlinedButton(
+                        TextButton(
                             onClick = onMarkShared,
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("标记已分享")
+                            Text("标记已分享", color = MaterialTheme.colorScheme.primary)
                         }
                     }
                 }

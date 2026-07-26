@@ -1,6 +1,9 @@
 package com.shangmentiyu.sportscoach.core
 
 import com.shangmentiyu.sportscoach.core.AbilityAnalyzer.AbilityRadar
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /**
  * AI 训练计划生成器（处理器层）。
@@ -196,9 +199,9 @@ object TrainingPlanGenerator {
             "重点突破维度：$weakText。建议每周 2-3 次针对性训练，4 周后复测评估进展。"
     }
 
-    /** 当前时间格式化 yyyy-MM-dd HH:mm */
+    /** 当前时间格式化 yyyy-MM-dd HH:mm（线程安全：基于 [LocalDateTime] + [DateTimeFormatter]） */
     private fun nowFormatted(): String {
-        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
-        return sdf.format(java.util.Date())
+        val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", Locale.getDefault())
+        return LocalDateTime.now().format(formatter)
     }
 }

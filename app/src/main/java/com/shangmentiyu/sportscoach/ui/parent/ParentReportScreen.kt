@@ -14,10 +14,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Flag
-import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.AlertDialog
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -25,7 +25,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -86,12 +85,12 @@ fun ParentReportScreen(onBack: () -> Unit) {
                 title = { Text("家长服务", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
                     }
                 },
                 actions = {
                     IconButton(onClick = { showGenerateDialog = true }) {
-                        Icon(Icons.Filled.Add, contentDescription = "生成报告")
+                        Icon(Icons.Outlined.Add, contentDescription = "生成报告")
                     }
                 },
                 colors = glassTopAppBarColors()
@@ -194,7 +193,7 @@ private fun ReportCard(report: ParentReport, onClick: () -> Unit) {
                     if (report.hasMilestones) {
                         Spacer(Modifier.width(8.dp))
                         Icon(
-                            Icons.Filled.Flag,
+                            Icons.Outlined.Flag,
                             contentDescription = "含里程碑",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.width(16.dp)
@@ -214,8 +213,8 @@ private fun ReportCard(report: ParentReport, onClick: () -> Unit) {
                     )
                 }
             }
-            OutlinedButton(onClick = onClick, shape = RoundedCornerShape(8.dp)) {
-                Text("查看")
+            TextButton(onClick = onClick, shape = RoundedCornerShape(8.dp)) {
+                Text("查看", color = MaterialTheme.colorScheme.primary)
             }
         }
     }

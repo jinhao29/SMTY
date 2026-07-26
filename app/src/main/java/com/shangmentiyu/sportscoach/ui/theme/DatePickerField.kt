@@ -9,8 +9,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -32,8 +32,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import java.text.SimpleDateFormat
-import java.util.Date
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
@@ -81,7 +83,7 @@ fun IosDatePickerRow(
                 modifier = Modifier.weight(1f)
             )
             Icon(
-                Icons.Filled.CalendarMonth,
+                Icons.Outlined.CalendarMonth,
                 contentDescription = "选择日期",
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(20.dp)
@@ -91,7 +93,7 @@ fun IosDatePickerRow(
             HorizontalDivider(
                 modifier = Modifier.padding(start = 100.dp),
                 thickness = 0.5.dp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                color = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.06f)
             )
         }
     }
@@ -145,7 +147,7 @@ fun OutlinedDatePickerField(
             .clickable { showPicker = true },
         trailingIcon = {
             Icon(
-                Icons.Filled.CalendarMonth,
+                Icons.Outlined.CalendarMonth,
                 contentDescription = "选择日期",
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.clickable { showPicker = true }
@@ -175,22 +177,29 @@ fun OutlinedDatePickerField(
     }
 }
 
-/** yyyy-MM-dd 字符串 → 毫秒时间戳（解析失败返回 null，由 DatePicker 使用今日默认值） */
+/** yyyy-MM-dd 字符串 → 毫秒时间戳（解析失败返回 null，由 DatePicker 使用今日默认值）
+ *  线程安全：基于 [LocalDate.parse] + [DateTimeFormatter]，替代 [java.text.SimpleDateFormat] */
 private fun parseDateToMillis(dateStr: String): Long? {
     if (dateStr.isBlank()) return null
     return try {
-        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        sdf.isLenient = false
-        sdf.parse(dateStr)?.time
+        val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault())
+        LocalDate.parse(dateStr, formatter)
+            .atStartOfDay(ZoneId.systemDefault())
+            .toInstant()
+            .toEpochMilli()
     } catch (e: Exception) {
         null
     }
 }
 
-/** 毫秒时间戳 → yyyy-MM-dd 字符串（DatePicker 返回的是 UTC 当天零点毫秒） */
+/** 毫秒时间戳 → yyyy-MM-dd 字符串（DatePicker 返回的是 UTC 当天零点毫秒）
+ *  线程安全：基于 [Instant.ofEpochMilli] + [ZoneId] 系统时区转换 */
 private fun formatMillisToDate(millis: Long): String {
-    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-    return sdf.format(Date(millis))
+    val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault())
+    return Instant.ofEpochMilli(millis)
+        .atZone(ZoneId.systemDefault())
+        .toLocalDate()
+        .format(formatter)
 }
 
 // =================== 时间选择器 ===================
@@ -224,7 +233,7 @@ fun OutlinedTimePickerField(
             .clickable { showPicker = true },
         trailingIcon = {
             Icon(
-                Icons.Filled.Schedule,
+                Icons.Outlined.Schedule,
                 contentDescription = "选择时间",
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.clickable { showPicker = true }

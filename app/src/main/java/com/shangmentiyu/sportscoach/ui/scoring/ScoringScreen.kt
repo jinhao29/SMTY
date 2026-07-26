@@ -6,9 +6,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -61,7 +61,7 @@ fun ScoringScreen(
                 colors = glassTopAppBarColors(),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
                     }
                 }
             )
@@ -136,7 +136,7 @@ fun ScoringScreen(
                             label = { Text("+ 添加自定义项目") },
                             leadingIcon = {
                                 Icon(
-                                    Icons.Filled.Add,
+                                    Icons.Outlined.Add,
                                     contentDescription = null,
                                     modifier = Modifier.size(16.dp)
                                 )
@@ -300,7 +300,7 @@ private fun CustomScoreRow(
             Spacer(modifier = Modifier.width(8.dp))
             IconButton(onClick = onRemove) {
                 Icon(
-                    Icons.Filled.Delete,
+                    Icons.Outlined.Delete,
                     contentDescription = "移除",
                     tint = MaterialTheme.colorScheme.error,
                     modifier = Modifier.size(20.dp)

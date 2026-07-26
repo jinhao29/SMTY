@@ -2,6 +2,10 @@ package com.shangmentiyu.sportscoach.core
 
 import com.shangmentiyu.sportscoach.data.model.Lesson
 import com.shangmentiyu.sportscoach.data.model.Student
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
+import java.util.Locale
 import kotlin.math.sqrt
 
 /**
@@ -80,15 +84,19 @@ object DataAnalyzer {
         if (history.size < 2) return null  // 数据不足
 
         // 将日期转为相对第 N 天的整数序列
-        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
-        val baseTime = try { dateFormat.parse(history.first().date)?.time ?: 0L } catch (_: Exception) { 0L }
-        val dayMillis = 24 * 3600 * 1000L
+        // 线程安全：使用 [LocalDate] + [ChronoUnit.DAYS.between]，替代 [java.text.SimpleDateFormat] 解析
+        val dateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault())
+        val baseDate = try { LocalDate.parse(history.first().date, dateFormat) } catch (_: Exception) { null }
 
         // x = 相对天数，y = 分数
-        val points = history.map { tp ->
-            val t = try { dateFormat.parse(tp.date)?.time ?: 0L } catch (_: Exception) { 0L }
-            ((t - baseTime) / dayMillis).toFloat() to tp.score.toFloat()
+        val points = history.mapNotNull { tp ->
+            val date = try { LocalDate.parse(tp.date, dateFormat) } catch (_: Exception) { null }
+                ?: return@mapNotNull null
+            val base = baseDate ?: return@mapNotNull null
+            val dayOffset = ChronoUnit.DAYS.between(base, date).toFloat()
+            dayOffset to tp.score.toFloat()
         }
+        if (points.size < 2) return null
 
         // 最小二乘法拟合
         val n = points.size

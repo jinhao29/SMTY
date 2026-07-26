@@ -162,12 +162,44 @@ object Standards {
         "13" to "中考",
     )
 
-    /** 年级编码转中文显示名 */
+    /**
+     * 年级编码转中文显示名（用于卡片副标题等"短显示"场景）。
+     *
+     * 显示规则：
+     * - 学龄前（"0" 或空串）：返回空串（UI 不显示年级，仅显示年龄）
+     * - 小学 1-6 年级：返回 "一年级" ~ "六年级"（去掉"小学"前缀，更简洁）
+     * - 初中 7-9：返回 "初一" / "初二" / "初三"
+     * - 高中 10-12：返回 "高一" / "高二" / "高三"
+     * - 中考 13：返回 "中考"
+     *
+     * 如需显示完整名称（如 "小学一年级"），使用 [GRADE_OPTIONS] 或 [gradeFullLabel]。
+     */
     fun gradeLabel(code: String): String {
+        val g = code.toIntOrNull() ?: 0
+        // 学龄前：返回空串，由调用方决定是否显示
+        if (g == 0 || code.isEmpty()) return ""
+        // 小学：X 年级
+        if (g in 1..6) return "${chineseNum(g)}年级"
+        // 初中 / 高中 / 中考
         for ((c, label) in GRADE_OPTIONS) {
             if (c == code) return label
         }
-        return if (code.isEmpty()) "学龄前" else "年级${code}"
+        return "年级$code"
+    }
+
+    /** 完整年级名（保留"小学"前缀，用于表单选择项等需要明确学段的场景） */
+    fun gradeFullLabel(code: String): String {
+        for ((c, label) in GRADE_OPTIONS) {
+            if (c == code) return label
+        }
+        return if (code.isEmpty()) "学龄前(3-7岁)" else "年级$code"
+    }
+
+    /** 数字转中文（1-10） */
+    private fun chineseNum(n: Int): String = when (n) {
+        1 -> "一"; 2 -> "二"; 3 -> "三"; 4 -> "四"; 5 -> "五"
+        6 -> "六"; 7 -> "七"; 8 -> "八"; 9 -> "九"; 10 -> "十"
+        else -> n.toString()
     }
 
     /** 根据年级编码获取标准列表（统一入口）

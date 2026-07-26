@@ -164,7 +164,7 @@ object ShareUtils {
         var y = padding
 
         // === 标题 ===
-        val gradeLabel = student?.let { Standards.gradeLabel(it.grade) } ?: ""
+        val gradeLabel = student?.let { Standards.gradeFullLabel(it.grade) } ?: ""
         paint.color = Color.WHITE
         paint.textSize = 42f
         paint.typeface = Typeface.DEFAULT_BOLD
@@ -334,7 +334,7 @@ object ShareUtils {
     private fun gradeText(grade: String?): String {
         if (grade.isNullOrBlank()) return ""
         return try {
-            Standards.gradeLabel(grade)
+            Standards.gradeFullLabel(grade)
         } catch (e: Exception) {
             ""
         }

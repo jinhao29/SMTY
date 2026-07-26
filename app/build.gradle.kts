@@ -1,8 +1,81 @@
+import java.io.File
+import java.util.Properties
+
 plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.plugin.compose")
-    id("com.google.devtools.ksp")
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.plugin.compose)
+    alias(libs.plugins.ksp)
+}
+
+// === 版本号自动化（CI 优先 / 本地 fallback） ===
+// 策略：
+// 1. CI 环境（GitHub Actions）：优先读取 GITHUB_RUN_NUMBER 环境变量
+//    - versionCode = GITHUB_RUN_NUMBER（严格递增，每次 push +1）
+//    - versionName = 1.0.<GITHUB_RUN_NUMBER>（与 Release tag 严格一致）
+//    - 不写回 version_code.txt，避免污染本地基准值
+// 2. 本地环境（Android Studio 直接打包）：
+//    - versionCode：读取根目录 version_code.txt 作为基准值；release 构建时 +1 并写回文件
+//    - versionName：动态生成 "1.0.<自 epoch 以来的天数>"，便于按日期追溯版本
+// 3. fallback：所有解析失败时 versionCode=1，versionName="1.0"，保证本地直接 AS 打包不报错
+//
+// 设计说明：
+// - GitHub Actions run_number 在仓库维度严格递增，可保证每次构建 versionCode 唯一递增
+// - 本地 release 构建递增 versionCode 并写回文件；debug 构建使用基准值避免污染
+// - 文件不存在时初始化为 0，首次本地 release 后 versionCode=1
+
+val ciRunNumber: Int = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: -1
+val isCiBuild: Boolean = ciRunNumber > 0
+
+val versionCodeFile: File = rootProject.file("version_code.txt")
+val baseVersionCode: Int = if (versionCodeFile.exists()) {
+    versionCodeFile.readText().trim().toIntOrNull() ?: 0
+} else {
+    versionCodeFile.parentFile?.mkdirs()
+    versionCodeFile.writeText("0")
+    0
+}
+
+// 检测当前构建是否包含 release 任务（基于命令行参数）
+// 例如：assembleRelease、bundleRelease、installRelease
+val isReleaseBuild: Boolean = gradle.startParameter.taskNames.any { taskName ->
+    taskName.contains("Release", ignoreCase = true)
+}
+
+// CI 构建使用 GITHUB_RUN_NUMBER；本地 release 构建递增 version_code.txt；其他用基准值
+val effectiveVersionCode: Int = when {
+    isCiBuild -> ciRunNumber
+    isReleaseBuild -> {
+        val newCode = baseVersionCode + 1
+        versionCodeFile.writeText(newCode.toString())
+        newCode
+    }
+    else -> baseVersionCode
+}
+
+// versionName：CI 用 1.0.<run_number>；本地用 1.0.<天数>
+// 86400000L = 24 * 60 * 60 * 1000（一天的毫秒数）
+val dynamicVersionName: String = if (isCiBuild) {
+    "1.0.$ciRunNumber"
+} else {
+    val daysSinceEpoch: Int = (System.currentTimeMillis() / 86400000L).toInt()
+    "1.0.$daysSinceEpoch"
+}
+
+// === Release 签名配置（CI 通过 Secrets 注入 / 本地可选 keystore.properties） ===
+// 设计要点：
+// - CI 环境：GitHub Actions 解码 KEYSTORE_BASE64 Secret 写入 keystore.jks + keystore.properties
+//   build.gradle.kts 检测到 keystore.properties 自动切换 release 签名
+// - 本地环境：开发者可手动放置 keystore.properties + keystore.jks 使用 release 签名
+// - Fallback：未配置 keystore.properties 时使用 debug 签名，保证 AS 直接打包不报错
+//   ⚠️ 注意：debug 签名的 APK 无法覆盖安装到已安装 release 签名的设备
+//           GitHub Release 必须配置 KEYSTORE_BASE64 Secret 以使用 release 签名
+val signingPropsFile: File = rootProject.file("keystore.properties")
+val hasSigningProps: Boolean = signingPropsFile.exists()
+val signingProps: Properties = Properties().apply {
+    if (hasSigningProps) {
+        load(java.io.FileInputStream(signingPropsFile))
+    }
 }
 
 android {
@@ -13,14 +86,31 @@ android {
         applicationId = "com.shangmentiyu.sportscoach"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = effectiveVersionCode
+        versionName = dynamicVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
         }
         // 仓库已改为 public，自动更新无需任何 Token
+    }
+
+    signingConfigs {
+        // 仅在 keystore.properties 存在时创建 release 签名配置
+        // 未配置时 fallback 到 debug 签名（Android Studio 直接打包不报错）
+        if (hasSigningProps) {
+            create("release") {
+                storeFile = file(signingProps.getProperty("storeFile"))
+                storePassword = signingProps.getProperty("storePassword")
+                keyAlias = signingProps.getProperty("keyAlias")
+                keyPassword = signingProps.getProperty("keyPassword")
+                // 启用全签名方案，兼容 Android 5.0+ 至最新版本
+                enableV1Signing = true   // JAR signing（Android 7.0 以下兼容）
+                enableV2Signing = true   // APK Signature Scheme v2（Android 7.0+）
+                enableV3Signing = true   // APK Signature Scheme v3（Android 9+，支持密钥轮换）
+            }
+        }
     }
 
     buildTypes {
@@ -35,8 +125,15 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // 个人使用：release 构建使用 debug 签名，确保 GitHub Actions 可直接生成可安装 APK
-            signingConfig = signingConfigs.getByName("debug")
+            // CI 配置了 keystore.properties 时使用正式 release 签名
+            // 否则 fallback 到 debug 签名（仅本地开发用，不可发布到 GitHub Release）
+            // ⚠️ UpdateChecker 警告：发布到 GitHub 的 APK 必须使用 release 签名，
+            //    否则覆盖安装时会报"解析包错误 / 应用未安装"
+            signingConfig = if (hasSigningProps) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 
@@ -47,6 +144,15 @@ android {
 
     kotlinOptions {
         jvmTarget = "17"
+    }
+
+    // === 单元测试配置（v22 引入） ===
+    // 启用单元测试返回 Robolectric 等需要 Android 资源的测试框架
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            isReturnDefaultValues = true
+        }
     }
 
     buildFeatures {
@@ -65,6 +171,10 @@ android {
             excludes += "META-INF/NOTICE"
             excludes += "META-INF/NOTICE.txt"
             excludes += "META-INF/notice.txt"
+            // v22 新增：测试框架（Truth / AutoValue / Robolectric）依赖的元数据文件
+            excludes += "META-INF/INDEX.LIST"
+            excludes += "META-INF/io.netty.versions.properties"
+            excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
         }
     }
 }
@@ -73,63 +183,80 @@ android {
 // 升级到 Room 2.7.1（原生支持 KSP2）已解决，无需额外 ksp 参数。
 
 dependencies {
-    // Compose BOM
-    val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
+    // === v25 优化6：依赖版本统一通过 gradle/libs.versions.toml 管理 ===
+    // 升级依赖时只需修改 libs.versions.toml 一处，避免版本号散落导致冲突
+
+    // Compose BOM（统一管理 Compose 各库版本）
+    val composeBom = platform(libs.androidx.compose.bom)
     implementation(composeBom)
 
     // AndroidX 核心
-    implementation("androidx.core:core-ktx:1.15.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
     // lifecycle-process：提供 ProcessLifecycleOwner，用于监听应用前后台生命周期
     // 启动优化时用它把 WorkManager 初始化延迟到应用前台，避免冷启动阻塞首帧
-    implementation("androidx.lifecycle:lifecycle-process:2.8.7")
-    implementation("androidx.activity:activity-compose:1.9.3")
+    implementation(libs.androidx.lifecycle.process)
+    implementation(libs.androidx.activity.compose)
 
     // Compose
-    implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.ui:ui-graphics")
-    implementation("androidx.compose.ui:ui-tooling-preview")
-    implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.material:material-icons-extended")
-    implementation("androidx.navigation:navigation-compose:2.8.5")
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.ui.graphics)
+    implementation(libs.androidx.compose.ui.tooling.preview)
+    implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material.icons.extended)
+    implementation(libs.androidx.navigation.compose)
 
     // Room 数据库（2.7.1 原生支持 KSP2，解决 Kotlin 2.2.10 + KSP 2.3.2 兼容性问题）
-    implementation("androidx.room:room-runtime:2.7.1")
-    implementation("androidx.room:room-ktx:2.7.1")
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
     // room-paging：Room 与 Paging 3 集成，自动处理分页查询
-    implementation("androidx.room:room-paging:2.7.1")
-    ksp("androidx.room:room-compiler:2.7.1")
+    implementation(libs.androidx.room.paging)
+    ksp(libs.androidx.room.compiler)
 
     // Paging 3：分页加载历史课时列表，避免一次性加载 5000+ 条记录导致内存峰值与卡顿
-    implementation("androidx.paging:paging-runtime-ktx:3.3.5")
-    implementation("androidx.paging:paging-compose:3.3.5")
+    implementation(libs.androidx.paging.runtime.ktx)
+    implementation(libs.androidx.paging.compose)
 
     // 数据存储
-    implementation("androidx.datastore:datastore-preferences:1.1.1")
+    implementation(libs.androidx.datastore.preferences)
 
     // Apache POI（Excel 导入导出，与桌面端互通）
-    implementation("org.apache.poi:poi:5.3.0")
-    implementation("org.apache.poi:poi-ooxml:5.3.0")
+    implementation(libs.apache.poi)
+    implementation(libs.apache.poi.ooxml)
 
     // 文件选择器
-    implementation("androidx.documentfile:documentfile:1.0.1")
+    implementation(libs.androidx.documentfile)
 
     // 图片加载（签到照片缩略图）
-    implementation("io.coil-kt:coil-compose:2.7.0")
+    implementation(libs.coil.compose)
+    // 全屏图片查看器：使用纯 Compose 原生手势 API 实现，无需第三方依赖
+    // 支持：双指缩放、单指/双指拖拽平移、双击还原 1:1、回弹边界
 
     // 安全加密存储（签到照片加密，符合 PIPL 对生物特征的加密存储要求）
-    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    implementation(libs.androidx.security.crypto)
 
     // ===== 自动更新检测功能依赖 =====
     // OkHttp：网络请求（访问 GitHub API 下载 APK）
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation(libs.okhttp)
     // Gson：解析 GitHub Release JSON
-    implementation("com.google.code.gson:gson:2.11.0")
+    implementation(libs.gson)
     // WorkManager：定期后台检查更新
-    implementation("androidx.work:work-runtime-ktx:2.10.0")
+    implementation(libs.androidx.work.runtime.ktx)
 
     // 调试工具
-    debugImplementation("androidx.compose.ui:ui-tooling")
-    debugImplementation("androidx.compose.ui:ui-test-manifest")
+    debugImplementation(libs.androidx.compose.ui.tooling)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
+
+    // ===== 单元测试基建（v22 引入） =====
+    // JUnit 4：标准单元测试框架，用于纯逻辑模块（如 HeightPredictionProcessor）的算法验证
+    testImplementation(libs.junit)
+    // kotlinx-coroutines-test：测试协程挂起函数（ViewModel / Repository）
+    testImplementation(libs.kotlinx.coroutines.test)
+    // Robolectric：在 JVM 上运行需要 Android Context 的单元测试（无需真机）
+    testImplementation(libs.robolectric)
+    // AndroidX Core Testing： LiveData / Room 等组件的测试支持
+    testImplementation(libs.androidx.core.testing)
+    // Truth：Google 推荐的流式断言库，使测试断言更易读（可选）
+    testImplementation(libs.truth)
 }

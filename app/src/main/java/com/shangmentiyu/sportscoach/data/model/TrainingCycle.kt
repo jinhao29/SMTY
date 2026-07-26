@@ -1,5 +1,6 @@
 package com.shangmentiyu.sportscoach.data.model
 
+import androidx.compose.runtime.Stable
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.shangmentiyu.sportscoach.core.JsonSafe
@@ -14,11 +15,16 @@ import org.json.JSONObject
  *
  * 安全性：[parseWeeklyPlans] 走 [JsonSafe] 兜底，脏数据返回空列表，
  * 不会因为周期 JSON 异常导致训练计划页崩溃。
+ *
+ * 性能：v26 优化2添加 [Stable] 注解，Compose 编译器按字段对比实例，
+ * 减少 LazyColumn 滑动时的无效重组。
  */
+@Stable
 @Entity(tableName = "training_cycles")
 data class TrainingCycle(
     @PrimaryKey val id: String = java.util.UUID.randomUUID().toString().take(8),
-    val studentName: String,                  // 学员姓名
+    val studentName: String,                  // 学员姓名（软关联，保留用于显示）
+    val studentId: String? = null,            // 学员唯一ID（软关联外键，v20 引入，旧数据 NULL）
     val name: String,                         // 周期名称（如"暑期4周体能强化"）
     val goal: String = "",                    // 周期目标
     val totalWeeks: Int = 4,                  // 总周数
@@ -71,7 +77,10 @@ data class TrainingCycle(
 
 /**
  * 单周训练计划（不持久化，作为 TrainingCycle.weeklyPlanJson 的元素）。
+ *
+ * 性能：v26 优化2添加 [Stable] 注解，作为 Compose State 使用时避免无效重组。
  */
+@Stable
 data class WeeklyPlan(
     val weekIndex: Int = 1,           // 第几周（1-based）
     val title: String = "",           // 周标题（如"基础适应周"）

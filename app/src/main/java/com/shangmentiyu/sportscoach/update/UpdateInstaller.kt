@@ -98,4 +98,21 @@ object UpdateInstaller {
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         return PendingIntent.getActivity(context, 0, installIntent, flags)
     }
+
+    /**
+     * 创建"打开 App 主界面"的 PendingIntent（v33 功能 2 新增）。
+     *
+     * 用于下载中通知点击：
+     * - 避免通知栏"死按钮"（点击无反应）
+     * - 点击直接打开 App，让教练查看下载进度浮层
+     *
+     * @return 打开 MainActivity 的 PendingIntent
+     */
+    fun createOpenAppPendingIntent(context: Context): PendingIntent {
+        val intent = Intent(context, com.shangmentiyu.sportscoach.MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        }
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        return PendingIntent.getActivity(context, 1, intent, flags)
+    }
 }

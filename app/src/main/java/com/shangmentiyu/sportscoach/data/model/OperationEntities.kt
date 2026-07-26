@@ -1,5 +1,6 @@
 package com.shangmentiyu.sportscoach.data.model
 
+import androidx.compose.runtime.Stable
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -10,9 +11,12 @@ import androidx.room.PrimaryKey
  * 每次签到会消耗对应课程包的剩余课时。
  */
 @Entity(tableName = "lesson_packages")
+// v26 优化2：@Stable 让 LazyColumn 课时包列表按字段对比，避免无效重组
+@Stable
 data class LessonPackage(
     @PrimaryKey val id: String = java.util.UUID.randomUUID().toString().take(8),
-    val studentName: String,              // 学员姓名
+    val studentName: String,              // 学员姓名（软关联，保留用于显示）
+    val studentId: String? = null,        // 学员唯一ID（软关联外键，v20 引入，旧数据 NULL）
     val name: String,                     // 套餐名称（如"10次卡"、"30次卡"）
     val totalLessons: Int,                // 总课时数
     val usedLessons: Int = 0,             // 已用课时数
@@ -53,16 +57,18 @@ data class LessonPackage(
     fun daysToExpiry(): Int {
         if (expireDate.isBlank()) return Int.MAX_VALUE
         return try {
-            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
-            val expiry = sdf.parse(expireDate)?.time ?: return Int.MAX_VALUE
-            val now = System.currentTimeMillis()
-            ((expiry - now) / (24 * 3600 * 1000L)).toInt()
+            // 线程安全：使用 [LocalDate] + [ChronoUnit.DAYS.between]，替代 [java.text.SimpleDateFormat]
+            val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd", java.util.Locale.getDefault())
+            val expiry = java.time.LocalDate.parse(expireDate, formatter)
+            val today = java.time.LocalDate.now()
+            java.time.temporal.ChronoUnit.DAYS.between(today, expiry).toInt()
         } catch (_: Exception) { Int.MAX_VALUE }
     }
 
     private fun todayString(): String =
-        java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
-            .format(java.util.Date())
+        // 线程安全：[LocalDate.now] + [DateTimeFormatter] 不可变，无 Calendar 状态污染
+        java.time.LocalDate.now()
+            .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd", java.util.Locale.getDefault()))
 }
 
 /**
@@ -71,6 +77,8 @@ data class LessonPackage(
  * 记录教练基础信息与绩效统计（统计在业务层计算）。
  */
 @Entity(tableName = "coaches")
+// v26 优化2：@Stable 让 LazyColumn 教练列表按字段对比，避免无效重组
+@Stable
 data class Coach(
     @PrimaryKey val name: String,         // 教练姓名（主键）
     val phone: String = "",               // 联系电话
@@ -91,9 +99,12 @@ data class Coach(
  * content 字段存储本节课的训练内容 JSON（ExerciseItem 列表）。
  */
 @Entity(tableName = "schedules")
+// v26 优化2：@Stable 让 LazyColumn 排课列表按字段对比，避免无效重组
+@Stable
 data class Schedule(
     @PrimaryKey val id: String = java.util.UUID.randomUUID().toString().take(8),
-    val studentName: String,              // 学员姓名
+    val studentName: String,              // 学员姓名（软关联，保留用于显示）
+    val studentId: String? = null,        // 学员唯一ID（软关联外键，v20 引入，旧数据 NULL）
     val coachName: String = "",           // 教练姓名
     val dayOfWeek: Int,                   // 周几（1=周一 ... 7=周日）
     val startTime: String,                // HH:mm
@@ -131,6 +142,8 @@ data class Schedule(
  * 每次排课保存时更新 updatedAt，下拉列表按 updatedAt 降序展示。
  */
 @Entity(tableName = "schedule_memory", primaryKeys = ["coachName", "field", "value"])
+// v26 优化2：@Stable 让 LazyColumn 记忆列表按字段对比，避免无效重组
+@Stable
 data class ScheduleMemory(
     val coachName: String,               // 教练姓名
     val field: String,                   // 字段名："time" 或 "location"

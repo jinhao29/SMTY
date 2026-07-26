@@ -1,7 +1,6 @@
 package com.shangmentiyu.sportscoach.ui.score
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,16 +18,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Assessment
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.TrendingDown
-import androidx.compose.material.icons.filled.TrendingFlat
-import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.outlined.Assessment
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.TrendingDown
+import androidx.compose.material.icons.outlined.TrendingFlat
+import androidx.compose.material.icons.outlined.TrendingUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -43,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -55,13 +53,15 @@ import com.shangmentiyu.sportscoach.ui.theme.FeatureIconBlue
 import com.shangmentiyu.sportscoach.ui.theme.FeatureIconGreen
 import com.shangmentiyu.sportscoach.ui.theme.FeatureIconOrange
 import com.shangmentiyu.sportscoach.ui.theme.FeatureIconPurple
+import com.shangmentiyu.sportscoach.ui.theme.FeatureIconTeal
+import com.shangmentiyu.sportscoach.ui.theme.GradientEnd
+import com.shangmentiyu.sportscoach.ui.theme.GradientStart
 import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
 import com.shangmentiyu.sportscoach.ui.theme.ScoreFail
 import com.shangmentiyu.sportscoach.ui.theme.ScoreGood
 import com.shangmentiyu.sportscoach.ui.theme.ScorePass
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
-import com.shangmentiyu.sportscoach.ui.theme.VitalBlueStart
-import com.shangmentiyu.sportscoach.ui.theme.VitalPurpleEnd
+import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
 
 /**
  * 查看成绩 Tab：学员选择 + 概览统计 + 成绩对比 + 按项目分组的历史成绩（含进步/退步趋势 + 编辑/删除）。
@@ -177,18 +177,17 @@ private fun StudentPicker(
 ) {
     Column(
         modifier = Modifier.fillMaxWidth()
-            .background(Color.White, RoundedCornerShape(10.dp))
-            .border(
-                width = 1.5.dp,
-                brush = Brush.linearGradient(
-                    colors = listOf(VitalBlueStart, VitalPurpleEnd)
-                ),
-                shape = RoundedCornerShape(10.dp)
+            .shadow(
+                elevation = 4.dp,
+                shape = RoundedCornerShape(10.dp),
+                ambientColor = Color(0x1A000000),
+                spotColor = Color(0x1A000000)
             )
+            .background(Color.White, RoundedCornerShape(10.dp))
     ) {
         Box(
             modifier = Modifier.fillMaxWidth().height(4.dp).background(
-                Brush.linearGradient(colors = listOf(VitalBlueStart, VitalPurpleEnd))
+                Brush.linearGradient(colors = listOf(GradientStart, GradientEnd))
             )
         )
         Row(
@@ -215,7 +214,7 @@ private fun StudentPicker(
                     fontWeight = FontWeight.SemiBold)
             }
             Icon(
-                if (expanded) Icons.Filled.ExpandMore else Icons.Filled.ChevronRight,
+                if (expanded) Icons.Outlined.ExpandMore else Icons.Outlined.ChevronRight,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                 modifier = Modifier.size(20.dp)
@@ -225,7 +224,7 @@ private fun StudentPicker(
             students.forEach { name ->
                 Box(
                     modifier = Modifier.padding(start = 28.dp).fillMaxWidth()
-                        .height(0.5.dp).background(MaterialTheme.colorScheme.outline.copy(alpha = 0.6f))
+                        .height(0.5.dp).background(appDividerColor())
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth().clickable { onSelect(name) }
@@ -241,7 +240,7 @@ private fun StudentPicker(
                         modifier = Modifier.weight(1f)
                     )
                     if (name == selected) {
-                        Icon(Icons.Filled.ChevronRight, contentDescription = null,
+                        Icon(Icons.Outlined.ChevronRight, contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                     }
                 }
@@ -257,27 +256,26 @@ private fun StudentPicker(
 private fun OverviewStats(overview: AnalyticsViewModel.OverviewStats) {
     Column(
         modifier = Modifier.fillMaxWidth()
-            .background(Color.White, RoundedCornerShape(10.dp))
-            .border(
-                width = 1.5.dp,
-                brush = Brush.linearGradient(
-                    colors = listOf(VitalBlueStart, VitalPurpleEnd)
-                ),
-                shape = RoundedCornerShape(10.dp)
+            .shadow(
+                elevation = 4.dp,
+                shape = RoundedCornerShape(10.dp),
+                ambientColor = Color(0x1A000000),
+                spotColor = Color(0x1A000000)
             )
+            .background(Color.White, RoundedCornerShape(10.dp))
     ) {
         Box(
             modifier = Modifier.fillMaxWidth().height(4.dp).background(
-                Brush.linearGradient(colors = listOf(VitalBlueStart, VitalPurpleEnd))
+                Brush.linearGradient(colors = listOf(GradientStart, GradientEnd))
             )
         )
         Row(
             modifier = Modifier.fillMaxWidth().padding(vertical = Spacing.md),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            StatCell(label = "总成绩", value = overview.totalCount.toString(), bgColor = FeatureIconBlue)
+            StatCell(label = "总成绩", value = overview.totalCount.toString(), bgColor = FeatureIconPurple)
             StatDivider()
-            StatCell(label = "参与项目", value = overview.projectCount.toString(), bgColor = FeatureIconGreen)
+            StatCell(label = "参与项目", value = overview.projectCount.toString(), bgColor = FeatureIconBlue)
             StatDivider()
             StatCell(label = "最近测试", value = overview.latestDate.takeLast(5), bgColor = FeatureIconOrange, small = true)
         }
@@ -291,7 +289,7 @@ private fun StatCell(label: String, value: String, bgColor: Color, small: Boolea
             modifier = Modifier.size(28.dp).background(bgColor, RoundedCornerShape(7.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Filled.Assessment, contentDescription = null,
+            Icon(Icons.Outlined.Assessment, contentDescription = null,
                 tint = Color.White, modifier = Modifier.size(16.dp))
         }
         Spacer(Modifier.height(6.dp))
@@ -309,7 +307,7 @@ private fun StatCell(label: String, value: String, bgColor: Color, small: Boolea
 @Composable
 private fun StatDivider() {
     Box(modifier = Modifier.width(0.5.dp).height(56.dp)
-        .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)))
+        .background(appDividerColor()))
 }
 
 /**
@@ -347,25 +345,24 @@ private fun ProjectSection(
         // === 历史成绩时间线 ===
         Column(
             modifier = Modifier.fillMaxWidth()
-                .background(Color.White, RoundedCornerShape(10.dp))
-                .border(
-                    width = 1.5.dp,
-                    brush = Brush.linearGradient(
-                        colors = listOf(VitalBlueStart, VitalPurpleEnd)
-                    ),
-                    shape = RoundedCornerShape(10.dp)
+                .shadow(
+                    elevation = 4.dp,
+                    shape = RoundedCornerShape(10.dp),
+                    ambientColor = Color(0x1A000000),
+                    spotColor = Color(0x1A000000)
                 )
+                .background(Color.White, RoundedCornerShape(10.dp))
         ) {
             Box(
                 modifier = Modifier.fillMaxWidth().height(4.dp).background(
-                    Brush.linearGradient(colors = listOf(VitalBlueStart, VitalPurpleEnd))
+                    Brush.linearGradient(colors = listOf(GradientStart, GradientEnd))
                 )
             )
             records.forEachIndexed { index, record ->
                 if (index > 0) {
                     Box(
                         modifier = Modifier.padding(start = Spacing.cardPadding).fillMaxWidth()
-                            .height(0.5.dp).background(MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                            .height(0.5.dp).background(appDividerColor())
                     )
                 }
                 // 相邻记录：下标 index+1 是时间更早的一条（降序排列）
@@ -393,9 +390,9 @@ private fun ScoreCompareCard(records: List<AnalyticsViewModel.ScoreRecord>) {
     val last = records.first()   // 最近一次
     val delta = last.score - first.score
     val (trendIcon, trendColor, trendText) = when {
-        delta > 0.5 -> Triple(Icons.Filled.TrendingUp, FeatureIconGreen, "进步")
-        delta < -0.5 -> Triple(Icons.Filled.TrendingDown, ScoreFail, "退步")
-        else -> Triple(Icons.Filled.TrendingFlat, MaterialTheme.colorScheme.outline, "持平")
+        delta > 0.5 -> Triple(Icons.Outlined.TrendingUp, FeatureIconPurple, "进步")
+        delta < -0.5 -> Triple(Icons.Outlined.TrendingDown, FeatureIconTeal, "退步")
+        else -> Triple(Icons.Outlined.TrendingFlat, MaterialTheme.colorScheme.outline, "持平")
     }
 
     Row(
@@ -481,11 +478,11 @@ private fun ScoreRecordRow(
             if (prevRecord != null) {
                 val delta = record.score - prevRecord.score
                 val (trendIcon, trendColor, trendText) = when {
-                    delta > 0.5 -> Triple(Icons.Filled.TrendingUp, FeatureIconGreen,
+                    delta > 0.5 -> Triple(Icons.Outlined.TrendingUp, FeatureIconPurple,
                         "↑ ${"%.1f".format(delta)} 较上次")
-                    delta < -0.5 -> Triple(Icons.Filled.TrendingDown, ScoreFail,
+                    delta < -0.5 -> Triple(Icons.Outlined.TrendingDown, FeatureIconTeal,
                         "↓ ${"%.1f".format(kotlin.math.abs(delta))} 较上次")
-                    else -> Triple(Icons.Filled.TrendingFlat, MaterialTheme.colorScheme.outline,
+                    else -> Triple(Icons.Outlined.TrendingFlat, MaterialTheme.colorScheme.outline,
                         "→ 持平")
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -506,12 +503,12 @@ private fun ScoreRecordRow(
 
         // 编辑 + 删除按钮
         IconButton(onClick = onEdit, modifier = Modifier.size(28.dp)) {
-            Icon(Icons.Filled.Edit, contentDescription = "编辑",
+            Icon(Icons.Outlined.Edit, contentDescription = "编辑",
                 modifier = Modifier.size(14.dp),
                 tint = MaterialTheme.colorScheme.primary)
         }
         IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
-            Icon(Icons.Filled.Delete, contentDescription = "删除",
+            Icon(Icons.Outlined.Delete, contentDescription = "删除",
                 modifier = Modifier.size(14.dp),
                 tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f))
         }
@@ -557,7 +554,7 @@ private fun EmptyHint(title: String, subtitle: String) {
             ),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Filled.Assessment, contentDescription = null,
+            Icon(Icons.Outlined.Assessment, contentDescription = null,
                 tint = FeatureIconPurple, modifier = Modifier.size(28.dp))
         }
         Spacer(Modifier.height(Spacing.md))

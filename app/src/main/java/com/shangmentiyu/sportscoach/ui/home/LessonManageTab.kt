@@ -14,17 +14,18 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Remove
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Remove
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -163,9 +164,8 @@ fun LessonManageTab(vm: HomeViewModel) {
             },
             onSave = { newPurchase, newExpire, newUsed ->
                 val safeUsed = newUsed.coerceIn(0, pkg.totalLessons)
-                val today = java.text.SimpleDateFormat(
-                    "yyyy-MM-dd", java.util.Locale.getDefault()
-                ).format(java.util.Date())
+                val today = java.time.LocalDate.now()
+                    .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd", java.util.Locale.getDefault()))
                 val newStatus = when {
                     safeUsed >= pkg.totalLessons -> "已用完"
                     newExpire.isNotBlank() && newExpire < today -> "已过期"
@@ -228,7 +228,7 @@ private fun PackageCard(
                 Spacer(Modifier.weight(1f))
                 IconButton(onClick = onRename, modifier = Modifier.size(28.dp)) {
                     Icon(
-                        Icons.Filled.Edit,
+                        Icons.Outlined.Edit,
                         contentDescription = "改名",
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(16.dp)
@@ -236,7 +236,7 @@ private fun PackageCard(
                 }
                 IconButton(onClick = onEdit, modifier = Modifier.size(28.dp)) {
                     Icon(
-                        Icons.Filled.ChevronRight,
+                        Icons.Outlined.ChevronRight,
                         contentDescription = "编辑课时包",
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(16.dp)
@@ -244,7 +244,7 @@ private fun PackageCard(
                 }
                 IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
                     Icon(
-                        Icons.Filled.Delete,
+                        Icons.Outlined.Delete,
                         contentDescription = "删除课时包",
                         tint = MaterialTheme.colorScheme.error,
                         modifier = Modifier.size(16.dp)
@@ -284,30 +284,30 @@ private fun PackageCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                OutlinedButton(
+                Button(
                     onClick = onAdd,
                     modifier = Modifier.weight(1f),
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(20.dp)
                 ) {
-                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(4.dp))
                     Text("增添", style = MaterialTheme.typography.labelMedium)
                 }
-                OutlinedButton(
+                Button(
                     onClick = onReduce,
                     modifier = Modifier.weight(1f),
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(20.dp)
                 ) {
-                    Icon(Icons.Filled.Remove, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Icon(Icons.Outlined.Remove, contentDescription = null, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(4.dp))
                     Text("减少", style = MaterialTheme.typography.labelMedium)
                 }
-                OutlinedButton(
+                Button(
                     onClick = onGift,
                     modifier = Modifier.weight(1f),
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(20.dp)
                 ) {
-                    Icon(Icons.Filled.ChevronRight, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Icon(Icons.Outlined.ChevronRight, contentDescription = null, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(4.dp))
                     Text("赠送", style = MaterialTheme.typography.labelMedium)
                 }
@@ -460,13 +460,13 @@ private fun EditPackageDialog(
                 )
 
                 // 直接消课按钮
-                OutlinedButton(
+                Button(
                     onClick = onConsume,
                     modifier = Modifier.fillMaxWidth(),
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(20.dp),
                     enabled = pkg.remainingLessons > 0
                 ) {
-                    Icon(Icons.Filled.Remove, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Icon(Icons.Outlined.Remove, contentDescription = null, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(4.dp))
                     Text("直接消课 1 节 (剩余 ${pkg.remainingLessons})")
                 }

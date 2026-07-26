@@ -88,5 +88,42 @@ class VoiceAnnouncer(context: Context) {
     companion object {
         private const val TAG = "VoiceAnnouncer"
         private const val UTTERANCE_ID = "score_announce"
+
+        // === v31 优化3：应用级单例，由 SportsCoachApp 初始化 ===
+        // - 避免每次进入学员列表都重新初始化 TTS 引擎
+        // - 全局开关由 SettingsRepository.voiceModeEnabled 持久化驱动
+        // - sign() 签到时直接 announce()，无需持有 Context
+        @Volatile
+        private var instance: VoiceAnnouncer? = null
+
+        /** 在 Application.onCreate 中调用，初始化全局 TTS 引擎。重复调用幂等。 */
+        fun init(context: Context) {
+            if (instance != null) return
+            synchronized(this) {
+                if (instance != null) return
+                instance = VoiceAnnouncer(context.applicationContext)
+            }
+        }
+
+        /** 切换语音播报总开关（不影响 TTS 引擎生命周期） */
+        fun setEnabled(enabled: Boolean) {
+            instance?.isEnabled = enabled
+        }
+
+        /**
+         * 播报任意文本（受 [isEnabled] 控制）。
+         *
+         * - 调用前必须已通过 [init] 初始化；未初始化时静默忽略
+         * - 主要调用方：HomeViewModel.sign() 在签到成功后播报学员信息
+         */
+        fun announce(text: String) {
+            instance?.speak(text)
+        }
+
+        /** 应用退出时释放资源（一般由系统自动处理，无需手动调用） */
+        fun releaseGlobal() {
+            instance?.release()
+            instance = null
+        }
     }
 }

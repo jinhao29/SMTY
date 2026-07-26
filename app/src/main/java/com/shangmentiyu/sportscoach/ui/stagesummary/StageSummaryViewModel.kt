@@ -10,9 +10,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Date
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
@@ -78,8 +77,9 @@ class StageSummaryViewModel(
 
     /** 计算时间范围 */
     private fun computeRange(option: Int, lessons: List<com.shangmentiyu.sportscoach.data.model.Lesson>): Pair<String, String> {
-        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        val today = sdf.format(Date())
+        // 线程安全：使用 [LocalDate] + [DateTimeFormatter] 替代 [SimpleDateFormat]
+        val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault())
+        val today = LocalDate.now().format(formatter)
         return when (option) {
             0 -> shiftDays(today, -6) to today                      // 最近7天（含今日）
             1 -> shiftDays(today, -29) to today                     // 最近30天
@@ -94,12 +94,9 @@ class StageSummaryViewModel(
 
     private fun shiftDays(dateStr: String, days: Int): String {
         return try {
-            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-            val cal = Calendar.getInstance().apply {
-                time = sdf.parse(dateStr) ?: Date()
-                add(Calendar.DAY_OF_MONTH, days)
-            }
-            sdf.format(cal.time)
+            val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault())
+            val date = LocalDate.parse(dateStr, formatter)
+            date.plusDays(days.toLong()).format(formatter)
         } catch (_: Exception) { dateStr }
     }
 }

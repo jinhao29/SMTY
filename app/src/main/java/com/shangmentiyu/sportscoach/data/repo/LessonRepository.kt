@@ -9,26 +9,30 @@ import com.shangmentiyu.sportscoach.data.model.Lesson
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import java.text.SimpleDateFormat
-import java.util.Date
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.UUID
 
 /**
  * 课时 Repository（管理层）。
  *
- * 注意：[SimpleDateFormat] 非线程安全，禁止作为成员变量持有；
- * 统一通过 [todayDateStr] / [nowTimeStr] 在方法内新建实例使用。
+ * 日期/时间格式化统一使用 [DateTimeFormatter]（线程安全），可安全地在多协程并发场景下共享调用。
+ * [DateTimeFormatter] 内部不可变，无 [SimpleDateFormat] 的 Calendar 共享状态污染问题。
  */
 class LessonRepository(private val dao: LessonDao) {
 
-    /** 当前日期字符串（yyyy-MM-dd），每次调用新建 SimpleDateFormat 实例，避免并发污染 */
-    private fun todayDateStr(): String =
-        SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+    private val dateFormatter: DateTimeFormatter =
+        DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault())
+    private val timeFormatter: DateTimeFormatter =
+        DateTimeFormatter.ofPattern("HH:mm", Locale.getDefault())
 
-    /** 当前时间字符串（HH:mm），每次调用新建 SimpleDateFormat 实例 */
-    private fun nowTimeStr(): String =
-        SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
+    /** 当前日期字符串（yyyy-MM-dd），基于 [LocalDate.now] 线程安全获取 */
+    private fun todayDateStr(): String = LocalDate.now().format(dateFormatter)
+
+    /** 当前时间字符串（HH:mm），基于 [LocalTime.now] 线程安全获取 */
+    private fun nowTimeStr(): String = LocalTime.now().format(timeFormatter)
 
     fun getAllLessons(): Flow<List<Lesson>> = dao.getAll()
     fun getLessonsByStudent(name: String): Flow<List<Lesson>> = dao.getByStudent(name)
@@ -89,6 +93,17 @@ class LessonRepository(private val dao: LessonDao) {
      * @param fromDate 起始日期 YYYY-MM-DD（含）
      */
     fun getFrom(fromDate: String): Flow<List<Lesson>> = dao.getFrom(fromDate)
+
+    /**
+     * 查询从指定日期起的"未签退"课时（按日期升序、时间升序）。
+     *
+     * 与 [getFrom] 区别：过滤掉已签退（signOutTime 非空）的课时。
+     * 用于学员列表"下一节课"显示——签退后的课时视为已完成，
+     * 不应再作为"下一节课"显示给教练。
+     *
+     * @param fromDate 起始日期 YYYY-MM-DD（含）
+     */
+    fun getUpcomingFrom(fromDate: String): Flow<List<Lesson>> = dao.getUpcomingFrom(fromDate)
 
     suspend fun getById(id: String): Lesson? = dao.getById(id)
 

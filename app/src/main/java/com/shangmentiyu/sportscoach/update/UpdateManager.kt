@@ -1,12 +1,15 @@
 package com.shangmentiyu.sportscoach.update
 
 import android.content.Context
+import android.util.Log
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import androidx.work.workDataOf
 import java.util.concurrent.TimeUnit
 
 /**
@@ -16,19 +19,49 @@ import java.util.concurrent.TimeUnit
  * 1. 注册 WorkManager 定期检查任务（每天一次，Wi-Fi 下执行）
  * 2. 提供即时检查入口（应用启动时或用户手动触发）
  * 3. 提供手动安装入口（用户点击通知或"检查更新"按钮后调用）
+ * 4. 失败重试策略（v22 引入）：检查失败后分别在 1 小时、6 小时后台重试，
+ *    超过最大重试次数后等待下次定期任务。
  *
  * 使用方式：
  * - Application.onCreate() 中调用 UpdateManager.schedulePeriodicCheck(context)
  * - Application.onCreate() 中调用 UpdateManager.checkNow(context) 进行首次即时检查
- * - 设置页"检查更新"按钮调用 UpdateManager.checkNow(context)
+ * - 设置页"检查更新"按钮调用 UpdateManager.checkNowSync() 获取同步结果
+ *
+ * v2 修复（404 / 网络异常兜底）：
+ * - 404（仓库未发布 Release）和网络异常现已在 [UpdateChecker] 内部
+ *   统一降级为 [UpdateResult.UpToDate]，不再触发错误弹窗
+ * - 本层仅做日志埋点，不重复处理异常
+ *
+ * v22 失败重试策略：
+ * - 首次失败 → 1 小时后后台重试（[scheduleRetryIfNeeded] + retryCount=1）
+ * - 二次失败 → 6 小时后后台重试（retryCount=2）
+ * - 三次失败 → 不再重试，等待下次定期任务（24h 后自动触发）
+ * - 成功或发现新版本 → 自动取消已排队的重试任务，避免重复执行
  */
 object UpdateManager {
+
+    private const val TAG = "UpdateManager"
 
     /** 定期检查任务的唯一名称（用于去重，避免重复注册） */
     private const val PERIODIC_WORK_NAME = "smty_periodic_update_check"
 
     /** 即时检查任务的唯一名称 */
     private const val ONESHOT_WORK_NAME = "smty_oneshot_update_check"
+
+    /** 失败重试任务的唯一名称（与即时检查区分，避免互相 REPLACE） */
+    private const val RETRY_WORK_NAME = "smty_update_retry"
+
+    /** Worker 输入数据 Key：当前重试次数（0=首次检查，1=第一次重试，2=第二次重试） */
+    const val KEY_RETRY_COUNT = "retry_count"
+
+    /** 最大重试次数：超过后等待下次定期任务（24h 后自动触发） */
+    private const val MAX_RETRY_COUNT = 2
+
+    /** 第一次重试延迟（小时）：检查失败后 1 小时再次尝试 */
+    private const val RETRY_DELAY_FIRST_HOURS = 1L
+
+    /** 第二次重试延迟（小时）：第一次重试失败后 6 小时再次尝试 */
+    private const val RETRY_DELAY_SECOND_HOURS = 6L
 
     /**
      * 注册定期更新检查任务（每天一次）。
@@ -39,22 +72,28 @@ object UpdateManager {
      * @param context 上下文
      */
     fun schedulePeriodicCheck(context: Context) {
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.UNMETERED)  // Wi-Fi 或不计量网络
-            .build()
+        try {
+            val constraints = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.UNMETERED)  // Wi-Fi 或不计量网络
+                .build()
 
-        // 每 24 小时检查一次（WorkManager 最短周期为 15 分钟）
-        val periodicRequest = PeriodicWorkRequestBuilder<UpdateCheckWorker>(
-            24, TimeUnit.HOURS
-        )
-            .setConstraints(constraints)
-            .build()
+            // 每 24 小时检查一次（WorkManager 最短周期为 15 分钟）
+            val periodicRequest = PeriodicWorkRequestBuilder<UpdateCheckWorker>(
+                24, TimeUnit.HOURS
+            )
+                .setConstraints(constraints)
+                .build()
 
-        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-            PERIODIC_WORK_NAME,
-            ExistingPeriodicWorkPolicy.KEEP,
-            periodicRequest
-        )
+            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                PERIODIC_WORK_NAME,
+                ExistingPeriodicWorkPolicy.KEEP,
+                periodicRequest
+            )
+            Log.i(TAG, "定期更新检查任务已注册（24h 周期，Wi-Fi 约束）")
+        } catch (e: Exception) {
+            // WorkManager 初始化失败不阻塞应用启动
+            Log.e(TAG, "注册定期检查任务失败：${e.message}", e)
+        }
     }
 
     /**
@@ -64,22 +103,104 @@ object UpdateManager {
      * - 应用首次启动
      * - 用户点击"检查更新"按钮（旧版，无反馈）
      *
+     * 网络约束（v23 强化）：
+     * - 改为 [NetworkType.UNMETERED]（Wi-Fi 或不计量网络）
+     * - 与 [schedulePeriodicCheck] 一致，确保"下载 APK 步骤"仅在 Wi-Fi 下执行
+     * - 设置页"检查更新"按钮同步检查版本（[checkNowSync]，不走 WorkManager）
+     *   仍可在任何网络下立即返回版本信息，仅"下载 APK"步骤受 Wi-Fi 约束
+     *
+     * 异常兜底：WorkManager.enqueue 失败不阻塞调用方。
+     * 同时取消已排队的失败重试任务（用户主动触发视为新一轮检查）。
+     *
      * @param context 上下文
      */
     fun checkNow(context: Context) {
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)  // 任何可用网络
-            .build()
+        try {
+            // 用户主动触发时取消已排队的失败重试任务，避免重复执行
+            cancelRetryChain(context)
 
-        val oneShotRequest = OneTimeWorkRequestBuilder<UpdateCheckWorker>()
-            .setConstraints(constraints)
-            .build()
+            val constraints = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.UNMETERED)  // 仅 Wi-Fi / 不计量网络
+                .build()
 
-        WorkManager.getInstance(context).enqueueUniqueWork(
-            ONESHOT_WORK_NAME,
-            androidx.work.ExistingWorkPolicy.REPLACE,
-            oneShotRequest
-        )
+            val oneShotRequest = OneTimeWorkRequestBuilder<UpdateCheckWorker>()
+                .setConstraints(constraints)
+                .setInputData(workDataOf(KEY_RETRY_COUNT to 0))
+                .build()
+
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                ONESHOT_WORK_NAME,
+                ExistingWorkPolicy.REPLACE,
+                oneShotRequest
+            )
+            Log.d(TAG, "已投递即时更新检查任务")
+        } catch (e: Exception) {
+            Log.e(TAG, "投递即时检查任务失败：${e.message}", e)
+        }
+    }
+
+    /**
+     * 失败重试调度（v22 引入）。
+     *
+     * 调用时机：[UpdateCheckWorker] 收到 [UpdateResult.Error] 或捕获异常时调用。
+     *
+     * 重试策略：
+     * - retryCount = 0（首次失败） → 1 小时后重试（retryCount=1）
+     * - retryCount = 1（第一次重试失败） → 6 小时后重试（retryCount=2）
+     * - retryCount >= 2（已重试 2 次） → 不再重试，等待下次定期任务
+     *
+     * 约束：v23 改为 [NetworkType.UNMETERED]，与 [checkNow] / [schedulePeriodicCheck] 一致，
+     * 确保"下载 APK 步骤"仅在 Wi-Fi 下执行，避免重试链持续消耗移动数据。
+     * 去重：使用 RETRY_WORK_NAME + ExistingWorkPolicy.REPLACE，避免多次失败堆积重试任务。
+     *
+     * @param context 上下文
+     * @param currentRetryCount 当前重试次数（首次失败传 0，第一次重试失败传 1）
+     */
+    internal fun scheduleRetryIfNeeded(context: Context, currentRetryCount: Int) {
+        if (currentRetryCount >= MAX_RETRY_COUNT) {
+            Log.i(TAG, "已达最大重试次数 ($MAX_RETRY_COUNT)，等待下次定期任务自动触发")
+            return
+        }
+
+        val nextRetryCount = currentRetryCount + 1
+        val delayHours = if (nextRetryCount == 1) RETRY_DELAY_FIRST_HOURS else RETRY_DELAY_SECOND_HOURS
+
+        try {
+            val constraints = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.UNMETERED)
+                .build()
+
+            val retryRequest = OneTimeWorkRequestBuilder<UpdateCheckWorker>()
+                .setConstraints(constraints)
+                .setInitialDelay(delayHours, TimeUnit.HOURS)
+                .setInputData(workDataOf(KEY_RETRY_COUNT to nextRetryCount))
+                .addTag(RETRY_WORK_NAME)
+                .build()
+
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                RETRY_WORK_NAME,
+                ExistingWorkPolicy.REPLACE,
+                retryRequest
+            )
+            Log.i(TAG, "已排程失败重试：第 $nextRetryCount 次重试将在 ${delayHours}h 后执行")
+        } catch (e: Exception) {
+            Log.e(TAG, "排程失败重试任务异常：${e.message}", e)
+        }
+    }
+
+    /**
+     * 取消已排队的失败重试任务。
+     *
+     * 调用时机：
+     * - 用户主动 [checkNow]：视为新一轮检查，旧的重试任务不再有意义
+     * - [UpdateCheckWorker] 成功或发现新版本：重试链自然终止
+     */
+    internal fun cancelRetryChain(context: Context) {
+        try {
+            WorkManager.getInstance(context).cancelUniqueWork(RETRY_WORK_NAME)
+        } catch (e: Exception) {
+            Log.w(TAG, "取消重试链异常（可忽略）：${e.message}")
+        }
     }
 
     /**
@@ -89,13 +210,35 @@ object UpdateManager {
      * - 设置页"检查更新"按钮：用户点击后立即看到结果（成功/失败/已是最新）
      * - 失败时携带详细错误信息（HTTP 状态码、网络异常等），便于诊断
      *
+     * 异常兜底说明：
+     * - 404（仓库未发布 Release）和网络异常已在 [UpdateChecker] 内部
+     *   降级为 [UpdateResult.UpToDate]，因此本方法不会因网络问题返回 Error
+     * - 仅 JSON 解析失败、HTTP 5xx 等严重错误才返回 [UpdateResult.Error]
+     *
      * 与 [checkNow] 区别：
      * - checkNow 投递到 WorkManager 后台执行，无返回值，仅通过通知反馈
      * - checkNowSync 直接在调用协程中执行，立即返回 UpdateResult
      *
      * @return 更新检查结果
      */
-    suspend fun checkNowSync(): UpdateResult = UpdateChecker.checkForUpdate()
+    suspend fun checkNowSync(): UpdateResult {
+        return try {
+            val result = UpdateChecker.checkForUpdate()
+            when (result) {
+                is UpdateResult.UpToDate ->
+                    Log.i(TAG, "检查完成：当前已是最新版本")
+                is UpdateResult.NewVersionAvailable ->
+                    Log.i(TAG, "检查完成：发现新版本 ${result.tagName}")
+                is UpdateResult.Error ->
+                    Log.w(TAG, "检查失败：${result.message}")
+            }
+            result
+        } catch (e: Exception) {
+            // 兜底：理论上 UpdateChecker 已 try-catch，这里再兜一层防止崩溃
+            Log.e(TAG, "checkNowSync 未捕获异常：${e.message}", e)
+            UpdateResult.UpToDate
+        }
+    }
 
     /**
      * 手动触发安装（用户点击"检查更新"且 APK 已下载时调用）。
@@ -104,13 +247,23 @@ object UpdateManager {
      * @return true 成功启动安装界面；false 需要先开启未知来源权限
      */
     fun installUpdate(context: Context): Boolean {
-        return UpdateInstaller.installApk(context)
+        return try {
+            UpdateInstaller.installApk(context)
+        } catch (e: Exception) {
+            Log.e(TAG, "启动安装失败：${e.message}", e)
+            false
+        }
     }
 
     /**
      * 检查本地是否已存在下载好的 APK 文件。
      */
     fun hasDownloadedApk(context: Context): Boolean {
-        return UpdateInstaller.getApkFile(context).exists()
+        return try {
+            UpdateInstaller.getApkFile(context).exists()
+        } catch (e: Exception) {
+            Log.e(TAG, "检查本地 APK 失败：${e.message}", e)
+            false
+        }
     }
 }

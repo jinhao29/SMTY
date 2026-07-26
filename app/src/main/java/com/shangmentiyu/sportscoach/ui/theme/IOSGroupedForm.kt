@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -45,7 +45,7 @@ import androidx.compose.ui.unit.dp
  * 视觉规格：
  * - 白色背景（appSurface）
  * - 10dp 圆角（与 GlassCard 一致）
- * - 2dp 柔和投影（低 alpha 黑色，模拟 iOS 卡片阴影）
+ * - 6dp 柔和投影（低 alpha 黑色，模拟 iOS 卡片阴影，提升浮动感）
  * - 12dp 内边距（紧凑，避免过大）
  *
  * @param contentPadding 内边距，默认 12dp
@@ -60,10 +60,10 @@ fun IOSCard(
         modifier = modifier
             .fillMaxWidth()
             .shadow(
-                elevation = 2.dp,
+                elevation = 6.dp,
                 shape = RoundedCornerShape(10.dp),
-                ambientColor = Color.Black.copy(alpha = 0.04f),
-                spotColor = Color.Black.copy(alpha = 0.08f)
+                ambientColor = Color.Black.copy(alpha = 0.06f),
+                spotColor = Color.Black.copy(alpha = 0.12f)
             )
             .clip(RoundedCornerShape(10.dp))
             .background(appSurface())
@@ -89,7 +89,7 @@ fun IOSSectionHeader(
     Text(
         text = text,
         style = MaterialTheme.typography.labelMedium,
-        color = appOnSurface().copy(alpha = 0.55f),
+        color = appOnSurfaceVariant(),
         fontWeight = FontWeight.Medium,
         modifier = modifier.padding(start = Spacing.xs, bottom = Spacing.xs)
     )
@@ -138,7 +138,7 @@ fun IOSColorPillSelector(
             ) {
                 if (isSelected) {
                     Icon(
-                        Icons.Filled.Check,
+                        Icons.Outlined.Check,
                         contentDescription = "已选中",
                         tint = Color.White,
                         modifier = Modifier.size(16.dp)

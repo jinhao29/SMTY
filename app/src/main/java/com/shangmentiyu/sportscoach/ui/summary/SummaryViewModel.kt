@@ -71,7 +71,7 @@ class SummaryViewModel(
     /** 根据课堂记录与学员信息拼装小结文本。 */
     private fun generateSummary(lesson: Lesson, student: Student?): String {
         val sb = StringBuilder()
-        val gradeLabel = student?.let { Standards.gradeLabel(it.grade) } ?: ""
+        val gradeLabel = student?.let { Standards.gradeFullLabel(it.grade) } ?: ""
         sb.append("【${lesson.studentName} $gradeLabel 课堂小结 ${lesson.date}】\n\n")
 
         sb.append("课时信息：${lesson.duration}分钟 · ${lesson.lessonType} · ${lesson.attendance} · ${lesson.coach.ifBlank { "未指定教练" }}")

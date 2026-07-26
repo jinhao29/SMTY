@@ -1,6 +1,5 @@
 package com.shangmentiyu.sportscoach.ui.theme
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -53,16 +52,13 @@ fun GlassCard(
     content: @Composable ColumnScope.() -> Unit
 ) {
     // 通过 MaterialTheme.colorScheme 自动跟随系统 Dark Mode
-    val primaryColor = MaterialTheme.colorScheme.primary
-    val borderColor = if (glow) primaryColor.copy(alpha = 0.15f) else Color.Transparent
     val containerColor = MaterialTheme.colorScheme.surface
 
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(10.dp),
         colors = CardDefaults.cardColors(containerColor = containerColor),
-        border = if (glow) BorderStroke(1.dp, borderColor) else null,
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column {
             // 顶部 4dp 渐变装饰条（活力蓝紫渐变）

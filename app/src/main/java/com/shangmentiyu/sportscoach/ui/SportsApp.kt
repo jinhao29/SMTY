@@ -1,18 +1,32 @@
 package com.shangmentiyu.sportscoach.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.SportsScore
+import androidx.compose.material.icons.outlined.Computer
+import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.SportsScore
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -26,6 +40,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -41,36 +58,93 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.shangmentiyu.sportscoach.core.ScheduleReminderWorker
 import com.shangmentiyu.sportscoach.ui.growth.GrowthScreen
 import com.shangmentiyu.sportscoach.ui.home.AddStudentScreen
 import com.shangmentiyu.sportscoach.ui.home.HomeScreen
 import com.shangmentiyu.sportscoach.ui.home.HomeViewModel
+import com.shangmentiyu.sportscoach.ui.diet.DietManageScreen
+import com.shangmentiyu.sportscoach.ui.heightprediction.HeightPredictionScreen
 import com.shangmentiyu.sportscoach.ui.lesson.LessonScreen
 import com.shangmentiyu.sportscoach.ui.score.ScoreScreen
 import com.shangmentiyu.sportscoach.ui.settings.SettingsScreen
+import com.shangmentiyu.sportscoach.ui.settings.SettingsViewModel
 import com.shangmentiyu.sportscoach.ui.summary.SummaryScreen
+import com.shangmentiyu.sportscoach.ui.theme.DarkOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.FeatureIconPurple
-import com.shangmentiyu.sportscoach.ui.theme.VitalPurpleStart
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
 import com.shangmentiyu.sportscoach.ui.theme.appSurface
 import com.shangmentiyu.sportscoach.ui.training.TrainingPlanScreen
 import com.shangmentiyu.sportscoach.ui.operation.OperationScreen
 import com.shangmentiyu.sportscoach.ui.schedule.ScheduleScreen
-import androidx.compose.foundation.background
-import androidx.compose.material.icons.filled.Download
 import com.shangmentiyu.sportscoach.update.UpdateInstaller
 import com.shangmentiyu.sportscoach.update.UpdateProgressBus
+import kotlinx.coroutines.delay
 
 /** 底部导航项 */
 data class BottomItem(val route: String, val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
+
+/**
+ * 桌面端连接状态栏（v32 优化3 新增）。
+ *
+ * - 桌面端在线（60 秒内收到心跳）：显示绿色指示灯 + "已连接：电脑端 192.168.x.x"
+ * - 桌面端离线：不显示（AnimatedVisibility 自动收起，避免占用顶部空间）
+ *
+ * 数据来源：[SettingsViewModel.desktopConnection] StateFlow
+ * 内部 5 秒轮询一次 SharedPreferences，保证 UI 与 Service 接收线程同步
+ */
+@Composable
+private fun DesktopConnectionBanner(
+    connection: SettingsViewModel.DesktopConnection?
+) {
+    AnimatedVisibility(
+        visible = connection?.isAlive == true,
+        enter = fadeIn() + slideInVertically(initialOffsetY = { -it }),
+        exit = fadeOut() + slideOutVertically(targetOffsetY = { -it })
+    ) {
+        val host = connection?.host ?: ""
+        Surface(
+            color = Color(0xFFE8F5E9),  // 浅绿背景
+            contentColor = Color(0xFF2E7D32),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Computer,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = Color(0xFF2E7D32)
+                )
+                // 绿色脉冲指示灯
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(Color(0xFF4CAF50), CircleShape)
+                )
+                Text(
+                    text = "已连接：电脑端 $host",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color(0xFF2E7D32),
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    }
+}
 
 @Composable
 fun SportsApp() {
     val navController = rememberNavController()
     val bottomItems = listOf(
-        BottomItem(Routes.HOME, "主页", Icons.Filled.Home),
-        BottomItem(Routes.SCORE, "成绩查看", Icons.Filled.SportsScore),
-        BottomItem(Routes.SETTINGS, "设置详情", Icons.Filled.Settings),
+        BottomItem(Routes.HOME, "主页", Icons.Outlined.Home),
+        BottomItem(Routes.SCORE, "成绩查看", Icons.Outlined.SportsScore),
+        BottomItem(Routes.SETTINGS, "设置详情", Icons.Outlined.Settings),
     )
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -84,9 +158,64 @@ fun SportsApp() {
     val updateProgress by UpdateProgressBus.progress.collectAsState()
     val context = LocalContext.current
 
+    // === v28 优化6：订阅首页未签到数与今日排课红点状态 ===
+    // 用于底部导航栏主页 Tab 显示数字角标（未签到数）或红点（仅有排课）
+    val homeVm: HomeViewModel = viewModel(
+        factory = AppViewModelFactory(context.applicationContext as android.app.Application)
+    )
+    val unsignedTodayCount by homeVm.unsignedTodayCount.collectAsState()
+    val hasTodayScheduleBadge by homeVm.hasTodayScheduleBadge.collectAsState()
+
+    // === v32 优化3：桌面端连接状态订阅（绿色指示灯）===
+    // 5 秒轮询一次 SharedPreferences，让 UI 与 UdpDesktopDiscoveryService 接收线程保持同步
+    val settingsVm: SettingsViewModel = viewModel(
+        factory = AppViewModelFactory(context.applicationContext as android.app.Application)
+    )
+    val desktopConnection by settingsVm.desktopConnection.collectAsState()
+    LaunchedEffect(Unit) {
+        while (true) {
+            settingsVm.refreshDesktopConnection()
+            delay(5000L)
+        }
+    }
+
+    // === v28 优化4：监听通知点击 Intent，自动跳转到今日排课页 ===
+    // 业务背景：ScheduleReminderWorker 发送的通知点击后会启动 MainActivity，
+    // Intent 中带 EXTRA_NAVIGATE_TO = "operation"，SportsApp 读取后跳转
+    // 使用 singleTop + LaunchedEffect 确保只触发一次（读完即清空 extra）
+    var pendingNavigateTarget by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        // 从 Activity Intent 读取跳转目标
+        val targetActivity = context as? android.app.Activity
+        val intent = targetActivity?.intent
+        val target = intent?.getStringExtra(ScheduleReminderWorker.EXTRA_NAVIGATE_TO)
+        if (!target.isNullOrEmpty()) {
+            pendingNavigateTarget = target
+            // 立即清除 extra，避免旋转屏 / 重建时再次触发
+            intent?.removeExtra(ScheduleReminderWorker.EXTRA_NAVIGATE_TO)
+        }
+    }
+    // 当 pendingNavigateTarget 变化时执行跳转
+    LaunchedEffect(pendingNavigateTarget) {
+        when (pendingNavigateTarget) {
+            ScheduleReminderWorker.EXTRA_VALUE_OPERATION -> {
+                navController.navigate(Routes.OPERATION) {
+                    // 从主页 Tab 跳过去，主页保留返回栈
+                    launchSingleTop = true
+                }
+            }
+        }
+        // 跳转完成，清空待处理目标
+        pendingNavigateTarget = null
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
         containerColor = appGroupedBackground(),
+        topBar = {
+            // v32 优化3：桌面端连接状态栏（仅在线时显示绿色指示灯）
+            DesktopConnectionBanner(desktopConnection)
+        },
         bottomBar = {
             if (showBottomBar) {
                 NavigationBar(
@@ -106,14 +235,43 @@ fun SportsApp() {
                                     restoreState = true
                                 }
                             },
-                            icon = { Icon(item.icon, contentDescription = item.label) },
+                            // === v28 优化6：主页 Tab 增加动态 Badge 角标 ===
+                            // - 未签到数 > 0：显示数字角标（强提示教练今日还有课未签到）
+                            // - 仅有今日排课但已全部签到：显示小圆点（提示今日有课已处理完）
+                            // - 无今日排课：不显示任何角标
+                            icon = {
+                                if (item.route == Routes.HOME) {
+                                    BadgedBox(
+                                        badge = {
+                                            when {
+                                                unsignedTodayCount > 0 -> {
+                                                    // 数字角标：未签到的课程数
+                                                    Badge {
+                                                        Text(
+                                                            text = unsignedTodayCount.coerceAtMost(99).toString()
+                                                        )
+                                                    }
+                                                }
+                                                hasTodayScheduleBadge -> {
+                                                    // 小圆点：今日有排课但已全部签到
+                                                    Badge()
+                                                }
+                                            }
+                                        }
+                                    ) {
+                                        Icon(item.icon, contentDescription = item.label)
+                                    }
+                                } else {
+                                    Icon(item.icon, contentDescription = item.label)
+                                }
+                            },
                             label = { Text(item.label) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = FeatureIconPurple,
                                 selectedTextColor = FeatureIconPurple,
-                                unselectedIconColor = Color(0xFF8E8E93),
-                                unselectedTextColor = Color(0xFF8E8E93),
-                                indicatorColor = VitalPurpleStart.copy(alpha = 0.1f)
+                                unselectedIconColor = DarkOnSurfaceVariant,
+                                unselectedTextColor = DarkOnSurfaceVariant,
+                                indicatorColor = Color.Transparent
                             )
                         )
                     }
@@ -135,7 +293,9 @@ fun SportsApp() {
                     onEditStudent = { student -> navController.navigate(Routes.editStudent(student.name)) },
                     onLessonCheckIn = { navController.navigate(Routes.LESSON_CHECKIN) },
                     onOperation = { navController.navigate(Routes.OPERATION) },
-                    onSchedule = { navController.navigate(Routes.SCHEDULE) }
+                    onSchedule = { navController.navigate(Routes.SCHEDULE) },
+                    onHeightPrediction = { studentName -> navController.navigate(Routes.heightPrediction(studentName)) },
+                    onDietManage = { studentName -> navController.navigate(Routes.dietManage(studentName)) }
                 )
             }
             composable(Routes.SCORE) {
@@ -234,6 +394,26 @@ fun SportsApp() {
                     studentName = studentName,
                     onBack = { navController.popBackStack() },
                     onApplied = { lessonId -> navController.navigate(Routes.lesson(lessonId)) }
+                )
+            }
+            composable(
+                route = Routes.HEIGHT_PREDICTION,
+                arguments = listOf(navArgument("studentName") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val studentName = backStackEntry.arguments?.getString("studentName") ?: ""
+                HeightPredictionScreen(
+                    studentName = studentName,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable(
+                route = Routes.DIET_MANAGE,
+                arguments = listOf(navArgument("studentName") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val studentName = backStackEntry.arguments?.getString("studentName") ?: ""
+                DietManageScreen(
+                    studentName = studentName,
+                    onBack = { navController.popBackStack() }
                 )
             }
 
@@ -349,7 +529,7 @@ fun SportsApp() {
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.Download,
+                                imageVector = Icons.Outlined.Download,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary
                             )
@@ -388,13 +568,13 @@ fun SportsApp() {
                                 text = "更新下载失败",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFFFF3B30)
+                                color = FeatureIconPurple
                             )
                             Spacer(Modifier.height(8.dp))
                             Text(
                                 text = p.message,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF3C3C43)
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                             )
                         }
                     }

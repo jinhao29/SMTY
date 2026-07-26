@@ -13,8 +13,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Date
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
@@ -159,20 +159,16 @@ class CoachDailyReportViewModel(
     )
 
     companion object {
-        /**
-         * 注意：[SimpleDateFormat] 非线程安全，禁止作为成员变量持有；
-         * 每次调用新建实例，避免多协程并发解析时 Calendar 状态污染。
-         */
-        fun today(): String =
-            SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        /** [DateTimeFormatter] 不可变且线程安全，作为单例共享 */
+        private val dateFormatter: DateTimeFormatter =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault())
 
+        fun today(): String = LocalDate.now().format(dateFormatter)
+
+        /** 增减指定天数（线程安全：基于 [LocalDate] 不可变对象） */
         fun shiftDays(dateStr: String, days: Int): String = try {
-            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-            val cal = java.util.Calendar.getInstance().apply {
-                time = sdf.parse(dateStr) ?: Date()
-                add(java.util.Calendar.DAY_OF_MONTH, days)
-            }
-            sdf.format(cal.time)
+            val date = LocalDate.parse(dateStr, dateFormatter)
+            date.plusDays(days.toLong()).format(dateFormatter)
         } catch (_: Exception) { dateStr }
     }
 }

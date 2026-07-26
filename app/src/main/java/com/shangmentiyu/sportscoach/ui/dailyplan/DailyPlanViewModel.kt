@@ -11,9 +11,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Date
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
@@ -93,43 +92,26 @@ class DailyPlanViewModel(
     }
 
     companion object {
-        /**
-         * 注意：[SimpleDateFormat] 非线程安全，禁止作为成员变量持有；
-         * 每次调用新建实例，避免多协程并发解析时 Calendar 状态污染。
-         */
-        fun today(): String =
-            SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        /** [DateTimeFormatter] 不可变且线程安全，作为单例共享，无 Calendar 状态污染 */
+        private val dateFormatter: DateTimeFormatter =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault())
 
+        fun today(): String = LocalDate.now().format(dateFormatter)
+
+        /** 增减指定天数（线程安全：基于 [LocalDate] 不可变对象） */
         fun shiftDays(dateStr: String, days: Int): String {
             return try {
-                val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-                val cal = Calendar.getInstance().apply {
-                    time = sdf.parse(dateStr) ?: Date()
-                    add(Calendar.DAY_OF_MONTH, days)
-                }
-                sdf.format(cal.time)
+                val date = LocalDate.parse(dateStr, dateFormatter)
+                date.plusDays(days.toLong()).format(dateFormatter)
             } catch (_: Exception) { dateStr }
         }
 
         /** 解析日期对应的 ISO 周几（1=周一 ... 7=周日） */
         fun parseDayOfWeek(dateStr: String): Int {
             return try {
-                val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-                val cal = Calendar.getInstance().apply {
-                    time = sdf.parse(dateStr) ?: Date()
-                }
-                // Calendar.MONDAY=2 ... SUNDAY=1 → 转 ISO: 1=周一 ... 7=周日
-                val c = cal.get(Calendar.DAY_OF_WEEK)
-                when (c) {
-                    Calendar.MONDAY -> 1
-                    Calendar.TUESDAY -> 2
-                    Calendar.WEDNESDAY -> 3
-                    Calendar.THURSDAY -> 4
-                    Calendar.FRIDAY -> 5
-                    Calendar.SATURDAY -> 6
-                    Calendar.SUNDAY -> 7
-                    else -> 0
-                }
+                val date = LocalDate.parse(dateStr, dateFormatter)
+                // java.time.DayOfWeek: MONDAY=1 ... SUNDAY=7，与 ISO 周几完全一致
+                date.dayOfWeek.value
             } catch (_: Exception) { 0 }
         }
     }

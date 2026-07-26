@@ -12,26 +12,21 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.border
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconBlue
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconGreen
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconOrange
+import com.shangmentiyu.sportscoach.ui.theme.GradientStart
 import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
 import com.shangmentiyu.sportscoach.ui.theme.ScoreFail
 import com.shangmentiyu.sportscoach.ui.theme.ScorePass
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
-import com.shangmentiyu.sportscoach.ui.theme.VitalBlueStart
-import com.shangmentiyu.sportscoach.ui.theme.VitalPurpleEnd
 
 /**
  * 主页共用 iOS 风格组件集合。
@@ -40,7 +35,7 @@ import com.shangmentiyu.sportscoach.ui.theme.VitalPurpleEnd
  * 供主页 4 个 Tab 复用，保持视觉一致性。
  */
 
-/** iOS Inset Grouped 卡片：纯白 + 10dp 圆角 + 1.5dp 活力渐变全包裹边框 */
+/** iOS Inset Grouped 卡片：纯白 + 10dp 圆角 + 4.dp 柔和阴影 */
 @Composable
 internal fun IosCard(
     modifier: Modifier = Modifier,
@@ -48,15 +43,14 @@ internal fun IosCard(
 ) {
     Column(
         modifier = modifier
+            .shadow(
+                elevation = 4.dp,
+                shape = RoundedCornerShape(10.dp),
+                ambientColor = Color(0x1A000000),
+                spotColor = Color(0x1A000000)
+            )
             .background(
                 color = Color.White,
-                shape = RoundedCornerShape(10.dp)
-            )
-            .border(
-                width = 1.5.dp,
-                brush = Brush.linearGradient(
-                    colors = listOf(VitalBlueStart, VitalPurpleEnd)
-                ),
                 shape = RoundedCornerShape(10.dp)
             )
     ) {
@@ -64,7 +58,7 @@ internal fun IosCard(
     }
 }
 
-/** iOS Inset Grouped 列表卡片：允许多行内容 + 渐变全包裹边框 */
+/** iOS Inset Grouped 列表卡片：允许多行内容 + 柔和阴影 */
 @Composable
 internal fun IosGroupedListCard(
     modifier: Modifier = Modifier,
@@ -73,15 +67,14 @@ internal fun IosGroupedListCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .shadow(
+                elevation = 4.dp,
+                shape = RoundedCornerShape(10.dp),
+                ambientColor = Color(0x1A000000),
+                spotColor = Color(0x1A000000)
+            )
             .background(
                 color = Color.White,
-                shape = RoundedCornerShape(10.dp)
-            )
-            .border(
-                width = 1.5.dp,
-                brush = Brush.linearGradient(
-                    colors = listOf(VitalBlueStart, VitalPurpleEnd)
-                ),
                 shape = RoundedCornerShape(10.dp)
             )
     ) {
@@ -96,7 +89,7 @@ internal fun IosSectionHeader(text: String) {
         text = text.uppercase(),
         style = MaterialTheme.typography.labelLarge,
         fontWeight = FontWeight.SemiBold,
-        color = VitalBlueStart,
+        color = GradientStart,
         modifier = Modifier.padding(
             start = Spacing.screenH,
             end = Spacing.screenH,
@@ -116,7 +109,7 @@ internal fun StatItem(label: String, value: String) {
             text = value,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
-            color = VitalBlueStart
+            color = GradientStart
         )
         Spacer(modifier = Modifier.height(2.dp))
         Text(
@@ -162,13 +155,13 @@ internal fun RemainingBadge(remaining: Int) {
     )
 }
 
-/** 根据姓名首字符 hash 分配 iOS 系统色头像背景 */
+/** 根据姓名首字符 hash 分配紫/灰色系头像背景 */
 internal fun avatarColorFor(name: String): Color {
     val colors = listOf(
-        Color(0xFFFF3B30), // 红
-        Color(0xFF34C759), // 绿
-        Color(0xFFFF9500), // 橙
-        Color(0xFF007AFF)  // 蓝
+        Color(0xFF6A5ACD), // 主紫
+        Color(0xFF8A79D9), // 浅紫
+        Color(0xFFB8AEE6), // 淡紫
+        Color(0xFF8E8E93)  // 灰
     )
     val idx = name.firstOrNull()?.code?.rem(4) ?: 0
     return colors[(idx + 4).rem(4)]

@@ -4,8 +4,9 @@ import com.shangmentiyu.sportscoach.data.model.Lesson
 import com.shangmentiyu.sportscoach.data.model.Student
 import org.json.JSONArray
 import org.json.JSONObject
-import java.text.SimpleDateFormat
-import java.util.Calendar
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
@@ -26,6 +27,8 @@ import java.util.Locale
  *
  * 安全性：成绩 JSON 解析全部走 [JsonSafe] 兜底，
  * 单条脏数据跳过，不影响整体报告生成。
+ *
+ * 线程安全：日期格式化使用 [DateTimeFormatter]（不可变），可安全在多协程并发场景下共享调用。
  */
 object ReportGenerator {
 
@@ -41,11 +44,10 @@ object ReportGenerator {
     const val MILESTONE_HIGH_PERFORMANCE = "高表现"   // 平均表现 ≥ 9
 
     /**
-     * 日期格式化工具：[SimpleDateFormat] 非线程安全，禁止作为成员变量持有，
-     * 每次调用新建实例，避免多协程并发解析时 Calendar 状态污染。
+     * 日期格式化工具：[DateTimeFormatter] 不可变且线程安全，可作为单例共享。
      */
-    private fun newDateFormat(): SimpleDateFormat =
-        SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    private val dateFormatter: DateTimeFormatter =
+        DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault())
 
     /**
      * 计算报告周期起止日期。
@@ -53,15 +55,10 @@ object ReportGenerator {
      * @param refDate 参考日期（默认今天）
      * @return Pair<startDate, endDate>，endDate 为 refDate，startDate 为前推 N 天
      */
-    fun computePeriod(type: String, refDate: java.util.Date = java.util.Date()): Pair<String, String> {
-        val endCal = Calendar.getInstance().apply { time = refDate }
+    fun computePeriod(type: String, refDate: LocalDate = LocalDate.now()): Pair<String, String> {
         val days = if (type == TYPE_WEEKLY) 7 else 30
-        val startCal = Calendar.getInstance().apply {
-            time = refDate
-            add(Calendar.DAY_OF_YEAR, -(days - 1))
-        }
-        val sdf = newDateFormat()
-        return sdf.format(startCal.time) to sdf.format(endCal.time)
+        val start = refDate.minusDays((days - 1).toLong())
+        return start.format(dateFormatter) to refDate.format(dateFormatter)
     }
 
     /**
@@ -76,7 +73,7 @@ object ReportGenerator {
         student: Student,
         lessons: List<Lesson>,
         type: String,
-        refDate: java.util.Date = java.util.Date()
+        refDate: LocalDate = LocalDate.now()
     ): String {
         val (startDate, endDate) = computePeriod(type, refDate)
         val startMillis = parseMillis(startDate)
@@ -347,7 +344,10 @@ object ReportGenerator {
 
     private fun parseMillis(dateStr: String): Long {
         return try {
-            newDateFormat().parse(dateStr)?.time ?: 0L
+            LocalDate.parse(dateStr, dateFormatter)
+                .atStartOfDay(ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli()
         } catch (_: Exception) { 0L }
     }
 }

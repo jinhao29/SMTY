@@ -18,6 +18,10 @@ interface LessonPackageDao {
     @Query("SELECT * FROM lesson_packages WHERE status = '活跃' ORDER BY purchaseDate DESC")
     fun getActive(): Flow<List<LessonPackage>>
 
+    /** v26 优化4：一次性获取全部课时包（非 Flow，用于孤儿数据自检） */
+    @Query("SELECT * FROM lesson_packages")
+    suspend fun getAllOnce(): List<LessonPackage>
+
     @Query("SELECT * FROM lesson_packages WHERE id = :id")
     suspend fun getById(id: String): LessonPackage?
 

@@ -2,7 +2,6 @@ package com.shangmentiyu.sportscoach.ui.home
 
 import android.app.Application
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,8 +18,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material3.Button
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import androidx.compose.material3.ButtonDefaults
@@ -45,7 +44,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -56,7 +55,9 @@ import com.shangmentiyu.sportscoach.core.BmiProcessor
 import com.shangmentiyu.sportscoach.core.Standards
 import com.shangmentiyu.sportscoach.data.model.Student
 import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
+import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
+import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.IosDatePickerRow
 import com.shangmentiyu.sportscoach.ui.theme.appOnPrimary
 import com.shangmentiyu.sportscoach.ui.theme.appSurface
@@ -144,7 +145,7 @@ fun AddStudentScreen(
                 ),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
                     }
                 },
                 actions = {
@@ -174,7 +175,7 @@ fun AddStudentScreen(
                             }
                         }
                     }) {
-                        Icon(Icons.Filled.Check, contentDescription = "保存", tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.Outlined.Check, contentDescription = "保存", tint = MaterialTheme.colorScheme.primary)
                     }
                 }
             )
@@ -222,7 +223,7 @@ fun AddStudentScreen(
                     if (!isPreschool) {
                         IosFormDropdownRow(
                             label = "年级",
-                            displayValue = Standards.gradeLabel(grade),
+                            displayValue = Standards.gradeFullLabel(grade),
                             expanded = expanded,
                             onExpandedChange = { expanded = it },
                             options = Standards.GRADE_OPTIONS.filter { it.first != "0" }.map { (code, label) -> code to label },
@@ -315,7 +316,7 @@ fun AddStudentScreen(
                                     .padding(start = 80.dp)
                                     .fillMaxWidth()
                                     .height(0.5.dp)
-                                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.6f))
+                                    .background(appDividerColor())
                             )
                         }
                     }
@@ -433,7 +434,7 @@ fun AddStudentScreen(
                                     fontWeight = FontWeight.SemiBold)
                             }
                             if (student?.gender != gender) Text("性别：${student?.gender} → $gender", style = MaterialTheme.typography.bodySmall)
-                            if (student?.grade != effectiveGrade) Text("年级：${Standards.gradeLabel(student?.grade ?: "1")} → ${Standards.gradeLabel(effectiveGrade)}", style = MaterialTheme.typography.bodySmall)
+                            if (student?.grade != effectiveGrade) Text("年级：${Standards.gradeFullLabel(student?.grade ?: "1")} → ${Standards.gradeFullLabel(effectiveGrade)}", style = MaterialTheme.typography.bodySmall)
                             if (student?.school != school && school.isNotBlank()) Text("学校：${student?.school} → $school", style = MaterialTheme.typography.bodySmall)
                             if (student?.phone != phone && phone.isNotBlank()) Text("电话：${student?.phone} → $phone", style = MaterialTheme.typography.bodySmall)
                             if (student?.age != ageInt && ageInt > 0) Text("年龄：${student?.age} → $ageInt", style = MaterialTheme.typography.bodySmall)
@@ -494,7 +495,7 @@ private fun IosFormSectionHeader(text: String) {
         text = text.uppercase(),
         style = MaterialTheme.typography.labelMedium,
         fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+        color = appOnSurfaceVariant(),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 4.dp, vertical = Spacing.xs)
@@ -511,17 +512,13 @@ private fun IosFormCard(content: @Composable () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.White, RoundedCornerShape(10.dp))
-            .border(
-                width = 1.5.dp,
-                brush = Brush.linearGradient(
-                    colors = listOf(
-                        com.shangmentiyu.sportscoach.ui.theme.VitalBlueStart,
-                        com.shangmentiyu.sportscoach.ui.theme.VitalPurpleEnd
-                    )
-                ),
-                shape = RoundedCornerShape(10.dp)
+            .shadow(
+                elevation = 4.dp,
+                shape = RoundedCornerShape(10.dp),
+                ambientColor = Color(0x1A000000),
+                spotColor = Color(0x1A000000)
             )
+            .background(Color.White, RoundedCornerShape(10.dp))
     ) {
         content()
     }
@@ -562,7 +559,7 @@ private fun IosFormRow(
                 Text(
                     value,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    color = appOnSurfaceVariant(),
                     modifier = Modifier.weight(1f)
                 )
             } else {
@@ -599,7 +596,7 @@ private fun IosFormRow(
                     .padding(start = 80.dp)
                     .fillMaxWidth()
                     .height(0.5.dp)
-                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.6f))
+                    .background(appDividerColor())
             )
         }
     }
@@ -663,7 +660,7 @@ private fun IosFormSelectorRow(
                     .padding(start = 80.dp)
                     .fillMaxWidth()
                     .height(0.5.dp)
-                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.6f))
+                    .background(appDividerColor())
             )
         }
     }
@@ -728,7 +725,7 @@ private fun IosFormDropdownRow(
                     .padding(start = 80.dp)
                     .fillMaxWidth()
                     .height(0.5.dp)
-                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.6f))
+                    .background(appDividerColor())
             )
         }
     }
@@ -765,7 +762,7 @@ private fun IosBmiDisplayRow(
             Text(
                 "BMI",
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                color = appOnSurfaceVariant(),
                 fontWeight = FontWeight.SemiBold
             )
             if (bmiResult.valid) {
@@ -839,8 +836,8 @@ private fun IosBmiDisplayRow(
     }
 }
 
-/** 返回今天的日期字符串 YYYY-MM-DD */
+/** 返回今天的日期字符串 YYYY-MM-DD（线程安全：基于 [java.time.LocalDate]） */
 private fun todayStr(): String {
-    return java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
-        .format(java.util.Date())
+    return java.time.LocalDate.now()
+        .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd", java.util.Locale.getDefault()))
 }

@@ -1,7 +1,6 @@
 package com.shangmentiyu.sportscoach.ui.analytics
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,11 +18,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Assessment
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Category
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.outlined.Assessment
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.Category
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -37,6 +36,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -47,15 +48,16 @@ import com.shangmentiyu.sportscoach.ui.theme.FeatureIconBlue
 import com.shangmentiyu.sportscoach.ui.theme.FeatureIconGreen
 import com.shangmentiyu.sportscoach.ui.theme.FeatureIconOrange
 import com.shangmentiyu.sportscoach.ui.theme.FeatureIconPurple
+import com.shangmentiyu.sportscoach.ui.theme.GradientEnd
+import com.shangmentiyu.sportscoach.ui.theme.GradientStart
 import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
 import com.shangmentiyu.sportscoach.ui.theme.ScoreFail
 import com.shangmentiyu.sportscoach.ui.theme.ScoreGood
 import com.shangmentiyu.sportscoach.ui.theme.ScorePass
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
-import com.shangmentiyu.sportscoach.ui.theme.VitalBlueStart
-import com.shangmentiyu.sportscoach.ui.theme.VitalPurpleEnd
+import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
+import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appSurface
-import androidx.compose.ui.graphics.Brush
 
 /**
  * 成绩记录主页：展示学员真实体测成绩历史。
@@ -129,7 +131,7 @@ fun AnalyticsScreen(onBack: () -> Unit) {
                     Text(
                         "真实体测成绩追踪 · 跳绳 · 跑步 · 肺活量",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        color = appOnSurfaceVariant()
                     )
                     Spacer(Modifier.height(Spacing.lg))
                 }
@@ -139,7 +141,7 @@ fun AnalyticsScreen(onBack: () -> Unit) {
             if (students.isEmpty()) {
                 item {
                     EmptyHint(
-                        icon = Icons.Filled.Assessment,
+                        icon = Icons.Outlined.Assessment,
                         title = "暂无学员",
                         subtitle = "请先在「学员管理」中添加学员"
                     )
@@ -170,7 +172,7 @@ fun AnalyticsScreen(onBack: () -> Unit) {
             if (recordsByProject.isEmpty()) {
                 item {
                     EmptyHint(
-                        icon = Icons.Filled.Assessment,
+                        icon = Icons.Outlined.Assessment,
                         title = "暂无成绩记录",
                         subtitle = "在「成绩录入」中保存成绩后，将自动汇总到这里"
                     )
@@ -204,14 +206,13 @@ private fun StudentPickerCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.White, RoundedCornerShape(10.dp))
-            .border(
-                width = 1.5.dp,
-                brush = Brush.linearGradient(
-                    colors = listOf(VitalBlueStart, VitalPurpleEnd)
-                ),
-                shape = RoundedCornerShape(10.dp)
+            .shadow(
+                elevation = 4.dp,
+                shape = RoundedCornerShape(10.dp),
+                ambientColor = Color(0x1A000000),
+                spotColor = Color(0x1A000000)
             )
+            .background(Color.White, RoundedCornerShape(10.dp))
     ) {
         // 顶部 4dp 渐变装饰条（活力蓝紫）
         Box(
@@ -220,7 +221,7 @@ private fun StudentPickerCard(
                 .height(4.dp)
                 .background(
                     brush = Brush.linearGradient(
-                        colors = listOf(VitalBlueStart, VitalPurpleEnd)
+                        colors = listOf(GradientStart, GradientEnd)
                     )
                 )
         )
@@ -251,7 +252,7 @@ private fun StudentPickerCard(
                 Text(
                     "当前学员",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                    color = appOnSurfaceVariant()
                 )
                 Text(
                     selected ?: "未选择",
@@ -261,7 +262,7 @@ private fun StudentPickerCard(
                 )
             }
             Icon(
-                if (expanded) Icons.Filled.ExpandMore else Icons.Filled.ChevronRight,
+                if (expanded) Icons.Outlined.ExpandMore else Icons.Outlined.ChevronRight,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                 modifier = Modifier.size(20.dp)
@@ -276,7 +277,7 @@ private fun StudentPickerCard(
                         .padding(start = 28.dp)
                         .fillMaxWidth()
                         .height(0.5.dp)
-                        .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.6f))
+                        .background(appDividerColor())
                 )
                 Row(
                     modifier = Modifier
@@ -294,7 +295,7 @@ private fun StudentPickerCard(
                     )
                     if (name == selected) {
                         Icon(
-                            Icons.Filled.ChevronRight,
+                            Icons.Outlined.ChevronRight,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(16.dp)
@@ -314,14 +315,13 @@ private fun OverviewStatsCard(overview: AnalyticsViewModel.OverviewStats) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.White, RoundedCornerShape(10.dp))
-            .border(
-                width = 1.5.dp,
-                brush = Brush.linearGradient(
-                    colors = listOf(VitalBlueStart, VitalPurpleEnd)
-                ),
-                shape = RoundedCornerShape(10.dp)
+            .shadow(
+                elevation = 4.dp,
+                shape = RoundedCornerShape(10.dp),
+                ambientColor = Color(0x1A000000),
+                spotColor = Color(0x1A000000)
             )
+            .background(Color.White, RoundedCornerShape(10.dp))
     ) {
         // 顶部 4dp 渐变装饰条（活力蓝紫）
         Box(
@@ -330,7 +330,7 @@ private fun OverviewStatsCard(overview: AnalyticsViewModel.OverviewStats) {
                 .height(4.dp)
                 .background(
                     brush = Brush.linearGradient(
-                        colors = listOf(VitalBlueStart, VitalPurpleEnd)
+                        colors = listOf(GradientStart, GradientEnd)
                     )
                 )
         )
@@ -343,13 +343,13 @@ private fun OverviewStatsCard(overview: AnalyticsViewModel.OverviewStats) {
             StatCell(
                 label = "总成绩",
                 value = overview.totalCount.toString(),
-                iconBgColor = FeatureIconBlue
+                iconBgColor = FeatureIconPurple
             )
             StatDivider()
             StatCell(
                 label = "参与项目",
                 value = overview.projectCount.toString(),
-                iconBgColor = FeatureIconGreen
+                iconBgColor = FeatureIconBlue
             )
             StatDivider()
             StatCell(
@@ -380,9 +380,9 @@ private fun StatCell(
             contentAlignment = Alignment.Center
         ) {
             when (label) {
-                "总成绩" -> Icon(Icons.Filled.Assessment, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-                "参与项目" -> Icon(Icons.Filled.Category, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-                "最近测试" -> Icon(Icons.Filled.CalendarMonth, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                "总成绩" -> Icon(Icons.Outlined.Assessment, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                "参与项目" -> Icon(Icons.Outlined.Category, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                "最近测试" -> Icon(Icons.Outlined.CalendarMonth, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
             }
         }
         Text(
@@ -394,7 +394,7 @@ private fun StatCell(
         Text(
             label,
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+            color = appOnSurfaceVariant()
         )
     }
 }
@@ -405,7 +405,7 @@ private fun StatDivider() {
         modifier = Modifier
             .width(0.5.dp)
             .height(56.dp)
-            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+            .background(appDividerColor())
     )
 }
 
@@ -443,14 +443,13 @@ private fun ProjectSection(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color.White, RoundedCornerShape(10.dp))
-                .border(
-                    width = 1.5.dp,
-                    brush = Brush.linearGradient(
-                        colors = listOf(VitalBlueStart, VitalPurpleEnd)
-                    ),
-                    shape = RoundedCornerShape(10.dp)
+                .shadow(
+                    elevation = 4.dp,
+                    shape = RoundedCornerShape(10.dp),
+                    ambientColor = Color(0x1A000000),
+                    spotColor = Color(0x1A000000)
                 )
+                .background(Color.White, RoundedCornerShape(10.dp))
         ) {
             // 顶部 4dp 渐变装饰条（活力蓝紫）
             Box(
@@ -459,7 +458,7 @@ private fun ProjectSection(
                     .height(4.dp)
                     .background(
                         brush = Brush.linearGradient(
-                            colors = listOf(VitalBlueStart, VitalPurpleEnd)
+                            colors = listOf(GradientStart, GradientEnd)
                         )
                     )
             )
@@ -471,7 +470,7 @@ private fun ProjectSection(
                         .padding(start = Spacing.cardPadding)
                         .fillMaxWidth()
                         .height(0.5.dp)
-                        .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                        .background(appDividerColor())
                 )
             }
 
@@ -546,7 +545,7 @@ private fun ScoreRecordRow(
                     .padding(start = Spacing.cardPadding)
                     .fillMaxWidth()
                     .height(0.5.dp)
-                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                    .background(appDividerColor())
             )
         }
         Row(
@@ -646,7 +645,7 @@ private fun EmptyHint(
         Text(
             subtitle,
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+            color = appOnSurfaceVariant()
         )
     }
 }

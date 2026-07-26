@@ -19,14 +19,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.outlined.CameraAlt
+import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,13 +38,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
-import coil.compose.AsyncImage
+import com.shangmentiyu.sportscoach.R
 import com.shangmentiyu.sportscoach.core.PhotoCrypto
 import com.shangmentiyu.sportscoach.ui.theme.GlassCard
+import com.shangmentiyu.sportscoach.ui.theme.SafeAsyncImage
 import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
 import java.io.File
 
@@ -66,9 +68,12 @@ import java.io.File
  * 权限：CAMERA 为危险权限，点击拍照按钮时先检查并请求运行时权限，
  * 授权后才启动系统相机，避免未授权直接 launch 导致 SecurityException 闪退。
  *
+ * === v25 优化3 ===：所有界面文案统一迁移到 strings.xml，
+ * 通过 [stringResource] 引用，支持多语言扩展与代码精简。
+ *
  * @param photoPath 当前照片路径（空=未拍照）
  * @param onPhotoCaptured 照片拍摄成功回调，参数为新照片的绝对路径
- * @param title 卡片标题（默认"课前签到拍照"，签退场景传入"课后签退拍照"）
+ * @param title 卡片标题（默认调用 stringResource(R.string.photo_pre_class_title)）
  * @param emptyHint 未拍照时的占位提示文案
  * @param captureBtnText 拍摄按钮文案
  */
@@ -76,9 +81,9 @@ import java.io.File
 fun SignPhotoCard(
     photoPath: String,
     onPhotoCaptured: (String) -> Unit,
-    title: String = "课前签到拍照",
-    emptyHint: String = "暂未拍摄签到照",
-    captureBtnText: String = "拍摄签到照"
+    title: String = stringResource(R.string.photo_pre_class_title),
+    emptyHint: String = stringResource(R.string.photo_empty_hint_pre),
+    captureBtnText: String = stringResource(R.string.photo_capture_btn_pre)
 ) {
     val context = LocalContext.current
     // 暂存拍照目标：Uri 用于启动系统相机，临时明文文件路径用于加密前回写
@@ -164,7 +169,7 @@ fun SignPhotoCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                Icons.Filled.PhotoCamera,
+                Icons.Outlined.PhotoCamera,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(20.dp)
@@ -182,14 +187,18 @@ fun SignPhotoCard(
         if (photoPath.isNotBlank() && File(photoPath).exists()) {
             // 已有照片：显示缩略图（从加密字节加载）+ 重新拍摄按钮
             if (photoBytes != null) {
-                AsyncImage(
+                // === v28 优化5：使用 SafeAsyncImage 提供 Coil 容错兜底 ===
+                // === v34：启用全屏预览，教练可双指缩放查看签到照片细节 ===
+                // 防止照片损坏或解密失败导致 Compose 渲染崩溃
+                SafeAsyncImage(
                     model = photoBytes,
                     contentDescription = "签到照片",
                     contentScale = ContentScale.Crop,
+                    cornerRadius = 8.dp,
+                    enableZoomPreview = true,
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(16f / 9f)
-                        .clip(RoundedCornerShape(8.dp))
                 )
             } else {
                 // 解密中占位
@@ -202,7 +211,7 @@ fun SignPhotoCard(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        "加载中…",
+                        stringResource(R.string.photo_load_placeholder),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                     )
@@ -214,15 +223,15 @@ fun SignPhotoCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    "已记录（已加密存储）",
+                    stringResource(R.string.photo_recorded_encrypted),
                     style = MaterialTheme.typography.bodySmall,
                     color = ScoreExcellent,
                     modifier = Modifier.weight(1f)
                 )
-                OutlinedButton(onClick = { startCapture() }) {
-                    Icon(Icons.Filled.CameraAlt, contentDescription = null, modifier = Modifier.size(16.dp))
+                TextButton(onClick = { startCapture() }) {
+                    Icon(Icons.Outlined.CameraAlt, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(4.dp))
-                    Text("重新拍摄")
+                    Text(stringResource(R.string.photo_recapture), color = MaterialTheme.colorScheme.primary)
                 }
             }
         } else {
@@ -237,7 +246,7 @@ fun SignPhotoCard(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(
-                        Icons.Filled.CameraAlt,
+                        Icons.Outlined.CameraAlt,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                         modifier = Modifier.size(40.dp)
@@ -253,7 +262,7 @@ fun SignPhotoCard(
             if (permissionDenied) {
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "未授予相机权限，请在系统设置中开启后重试",
+                    stringResource(R.string.photo_permission_denied),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error
                 )
@@ -264,7 +273,7 @@ fun SignPhotoCard(
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
-                Icon(Icons.Filled.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(Icons.Outlined.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(4.dp))
                 Text(captureBtnText)
             }

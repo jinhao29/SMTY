@@ -1,6 +1,11 @@
 package com.shangmentiyu.sportscoach.core
 
 import com.shangmentiyu.sportscoach.data.model.Lesson
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
+import java.util.Locale
 
 /**
  * 五维能力分析器：把体测成绩映射到速度/力量/耐力/柔韧/灵敏五个维度。
@@ -143,29 +148,42 @@ object AbilityAnalyzer {
     }
 
     /**
+     * === v28 优化3：根据体测项目名查询所属维度 ===
+     *
+     * 用于 [TrainingContentRecommender] 将"弱项项目"映射为"训练维度"，
+     * 从而匹配对应的训练模板。
+     *
+     * @param projectName 体测项目名（如 "50米跑"）
+     * @return 所属维度（如 "速度"）；若项目未配置映射，返回 null
+     */
+    fun getDimensionByProject(projectName: String): String? =
+        PROJECT_MAPPING[projectName]
+
+    /**
      * 周期对比：计算最近N天与上N天的平均分对比。
      * @return Pair(近期平均分, 上期平均分)
+     *
+     * 线程安全：基于 [LocalDate] 与 [ChronoUnit] 计算，无 [java.text.SimpleDateFormat] 的 Calendar 状态污染。
      */
     fun periodCompare(scores: List<ScoreEntry>, recentDays: Int = 30): Pair<Double, Double> {
         if (scores.isEmpty()) return 0.0 to 0.0
-        val dates = scores.map { it.date }.sorted()
-        val lastDate = dates.last()
-        val lastMillis = try {
-            java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).parse(lastDate)?.time ?: 0L
-        } catch (_: Exception) { 0L }
-        val recentThreshold = lastMillis - recentDays * 24 * 3600 * 1000L
-        val priorThreshold = recentThreshold - recentDays * 24 * 3600 * 1000L
+        val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault())
+        val dates = scores.mapNotNull { runCatching { LocalDate.parse(it.date, formatter) }.getOrNull() }
+        if (dates.isEmpty()) return 0.0 to 0.0
+        val lastDate = dates.max()
+        // 周期阈值（以最近一次成绩为基准前推 N 天）
+        val recentStart = lastDate.minusDays(recentDays.toLong())
+        val priorStart = recentStart.minusDays(recentDays.toLong())
 
-        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
         var recentSum = 0.0
         var recentCount = 0
         var priorSum = 0.0
         var priorCount = 0
         for (entry in scores) {
-            val millis = try { dateFormat.parse(entry.date)?.time ?: 0L } catch (_: Exception) { 0L }
+            val date = try { LocalDate.parse(entry.date, formatter) } catch (_: Exception) { null } ?: continue
             when {
-                millis >= recentThreshold -> { recentSum += entry.score; recentCount++ }
-                millis >= priorThreshold -> { priorSum += entry.score; priorCount++ }
+                date >= recentStart -> { recentSum += entry.score; recentCount++ }
+                date >= priorStart -> { priorSum += entry.score; priorCount++ }
             }
         }
         val recentAvg = if (recentCount > 0) recentSum / recentCount else 0.0

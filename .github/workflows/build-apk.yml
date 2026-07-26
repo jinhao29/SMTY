@@ -1,9 +1,14 @@
 name: Build APK
 
-# 触发条件：推送到 main 分支 或 手动触发
+# === 触发条件 ===
+# 1. 推送到 main / master 分支 —— 自动构建并发布 v1.0.<run_number> 预览版
+# 2. 推送 v* 形式的 tag —— 自动构建并发布正式版（tag 名即版本号）
+# 3. 手动触发 workflow_dispatch
+# 限制：仅 push 到主分支才触发，避免 feature 分支频繁触发无意义 Release
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "master" ]
+    tags: [ "v*" ]
   workflow_dispatch:
 
 jobs:
@@ -27,14 +32,57 @@ jobs:
       - name: 授予 gradlew 执行权限
         run: chmod +x ./gradlew
 
-      - name: 同步 versionName 与 Release tag
-        # 将 app/build.gradle.kts 中的 versionName 替换为 1.0.<run_number>
-        # 确保构建出的 APK 内嵌版本号与 Release tag (v1.0.<run_number>) 一致，
-        # 客户端通过语义化版本比较能正确判断是否需要更新。
+      - name: 计算版本号与 Release tag
+        # - tag 触发（推送 v1.2.3）：使用 tag 名作为 Release tag，versionName 取 tag 去掉 v 前缀
+        # - 分支/手动触发：使用 v1.0.<run_number> 作为 Release tag，versionName = 1.0.<run_number>
+        # - versionCode 统一使用 GITHUB_RUN_NUMBER（严格递增），通过环境变量注入 build.gradle.kts
+        #   保证 APK 内嵌 versionCode / versionName 与 GitHub Releases tag 严格一致，
+        #   客户端通过语义化版本比较能正确判断是否需要更新
+        id: ver
         run: |
-          sed -i 's/versionName = ".*"/versionName = "1.0.${{ github.run_number }}"/' app/build.gradle.kts
-          echo "已设置 versionName = 1.0.${{ github.run_number }}"
-          grep 'versionName' app/build.gradle.kts
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"            # 例如 v1.2.3
+            VER="${TAG#v}"                            # 例如 1.2.3
+            echo "release_tag=${TAG}" >> $GITHUB_OUTPUT
+            echo "version_name=${VER}" >> $GITHUB_OUTPUT
+            echo "is_tag=true" >> $GITHUB_OUTPUT
+          else
+            TAG="v1.0.${GITHUB_RUN_NUMBER}"
+            VER="1.0.${GITHUB_RUN_NUMBER}"
+            echo "release_tag=${TAG}" >> $GITHUB_OUTPUT
+            echo "version_name=${VER}" >> $GITHUB_OUTPUT
+            echo "is_tag=false" >> $GITHUB_OUTPUT
+          fi
+          echo "Release tag = $TAG, versionName = $VER, versionCode = $GITHUB_RUN_NUMBER"
+
+      - name: 配置 Release 签名
+        # 若已配置 KEYSTORE_BASE64 Secret，则解码 keystore + 写入 keystore.properties
+        # build.gradle.kts 检测到 keystore.properties 时自动切换 release 签名
+        # 未配置则 fallback 到 debug 签名（仅本地开发体验，不可用于正式发布）
+        # ⚠️ UpdateChecker 警告：发布到 GitHub 的 APK 必须使用 release 签名
+        #    必须在仓库 Settings → Secrets and variables → Actions 配置以下 4 个 Secrets：
+        #    - KEYSTORE_BASE64：base64 编码的 .jks 或 .keystore 文件
+        #    - KEYSTORE_PASSWORD：keystore 文件密码
+        #    - KEY_ALIAS：key alias
+        #    - KEY_PASSWORD：key 密码
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::warning::未配置 KEYSTORE_BASE64 Secret，将使用 debug 签名 fallback。正式发布必须配置 release 签名，否则老版本无法覆盖安装！"
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > keystore.jks
+          cat > keystore.properties << EOF
+          storeFile=../keystore.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+          echo "已配置 release 签名（keystore.jks + keystore.properties）"
 
       - name: 替换 settings.gradle.kts 为官方源
         # CI 环境在海外，使用国内镜像反而可能导致插件版本同步延迟，
@@ -77,8 +125,13 @@ jobs:
           EOF
 
       - name: 构建 Release APK
-        # 项目 build.gradle.kts 中 release 构建类型已配置 debug 签名，
-        # 可直接生成可安装的 release APK（个人使用，无需正式签名）
+        # 通过 GITHUB_RUN_NUMBER 环境变量注入让 build.gradle.kts 动态读取
+        # build.gradle.kts 检测到 GITHUB_RUN_NUMBER > 0 时：
+        # - versionCode = GITHUB_RUN_NUMBER（严格递增，每次 push +1）
+        # - versionName = 1.0.<GITHUB_RUN_NUMBER>（与 Release tag 严格一致）
+        # 无需 sed 替换 build.gradle.kts，环境变量注入最稳健
+        env:
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
         run: ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: 获取 APK 路径
@@ -101,23 +154,38 @@ jobs:
           retention-days: 30
 
       - name: 创建 Release 并上传 APK
+        # tag 触发时使用推送的 tag 名（正式版），否则使用 v1.0.<run_number>（预览版）
+        # softprops/action-gh-release@v2 会自动创建对应 tag 并发布 Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: v1.0.${{ github.run_number }}
+          tag_name: ${{ steps.ver.outputs.release_tag }}
+          name: ${{ steps.ver.outputs.release_tag }}
           body: |
-            # 自动构建版本 v1.0.${{ github.run_number }}
+            # 自动构建版本 ${{ steps.ver.outputs.release_tag }}
 
             由 GitHub Actions 自动构建并发布。
 
+            **触发方式:** ${{ steps.ver.outputs.is_tag == 'true' && 'Tag 推送（正式版）' || '分支推送/手动触发（预览版）' }}
             **提交信息:** ${{ github.event.head_commit.message }}
             **提交时间:** ${{ github.event.head_commit.timestamp }}
+            **APK 内嵌版本号:** ${{ steps.ver.outputs.version_name }}
+            **versionCode:** ${{ github.run_number }}
+            **签名方式:** ${{ secrets.KEYSTORE_BASE64 != '' && '正式 release 签名' || 'debug 签名（fallback，未配置 KEYSTORE_BASE64 Secret）' }}
 
             ## 安装方式
             下载下方 APK 文件，直接点击安装即可覆盖更新。
+
+            ## 版本号说明
+            - `v1.0.x` 系列：主分支自动构建的预览版
+            - `v1.x.x`（无 run_number 后缀）：通过 `git tag v1.x.x && git push --tags` 触发的正式版
+
+            ## 签名说明
+            若签名方式显示为 "debug 签名"，说明未配置 release 签名 Secret，
+            此 APK 无法覆盖安装到已安装 release 版本的设备，请在仓库 Settings → Secrets 配置以下 4 个：
+            `KEYSTORE_BASE64` / `KEYSTORE_PASSWORD` / `KEY_ALIAS` / `KEY_PASSWORD`
           files: ${{ steps.apk.outputs.apk_path }}
           draft: false
-          prerelease: false
+          prerelease: ${{ steps.ver.outputs.is_tag == 'false' }}
         env:
           # GITHUB_TOKEN 由 Actions 自动注入，兼容私有仓库
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

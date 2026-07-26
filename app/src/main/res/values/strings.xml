@@ -1,3 +1,128 @@
 <resources>
+    <!-- ============================================================ -->
+    <!-- === v25 优化3：字符串资源集中管理（按功能模块组织） === -->
+    <!--                                                              -->
+    <!-- 迁移策略：                                                    -->
+    <!-- 1. 高频复用文案（如"保存"、"取消"、"删除"、"确定"）必须抽取   -->
+    <!-- 2. 业务名词（如"训练课"、"活跃"）必须抽取                    -->
+    <!-- 3. UI 标签（Tab 标题、按钮文案、对话框标题）必须抽取          -->
+    <!-- 4. 长描述文案（如提示语）可保留在代码中，避免资源文件膨胀    -->
+    <!--                                                              -->
+    <!-- 命名约定：                                                    -->
+    <!-- <模块>_<功能>_<位置>                                         -->
+    <!-- 例：home_tab_pre_class（首页·Tab·课前准备）                  -->
+    <!-- ============================================================ -->
+
     <string name="app_name">体育教学助手</string>
+
+    <!-- === 通用按钮文案 === -->
+    <string name="common_save">保存</string>
+    <string name="common_cancel">取消</string>
+    <string name="common_delete">删除</string>
+    <string name="common_confirm">确定</string>
+    <string name="common_edit">编辑</string>
+    <string name="common_close">关闭</string>
+    <string name="common_back">返回</string>
+    <string name="common_reset">重置</string>
+    <string name="common_search">搜索</string>
+    <string name="common_loading">加载中…</string>
+    <string name="common_retry">重试</string>
+
+    <!-- === 业务名词 === -->
+    <string name="term_training_lesson">训练课</string>
+    <string name="term_test_lesson">体测课</string>
+    <string name="term_technique_lesson">技术课</string>
+    <string name="term_recovery_lesson">恢复课</string>
+    <string name="term_status_active">活跃</string>
+    <string name="term_status_used_up">已用完</string>
+    <string name="term_status_expired">已过期</string>
+    <string name="term_status_refunded">已退费</string>
+    <string name="term_attendance_on_time">准时</string>
+    <string name="term_attendance_leave">请假</string>
+    <string name="term_attendance_absent">旷课</string>
+
+    <!-- === 首页 Tab 标题 === -->
+    <string name="home_tab_pre_class">课前准备</string>
+    <string name="home_tab_lesson_manage">课时管理</string>
+    <string name="home_tab_post_class">课后反馈</string>
+    <string name="home_tab_student_list">学员列表</string>
+
+    <!-- === 首页到期预警横幅 === -->
+    <string name="expiry_banner_prefix">【提醒】</string>
+    <string name="expiry_banner_expire_today">今日到期</string>
+    <string name="expiry_banner_expire_tomorrow">明日到期</string>
+    <string name="expiry_banner_expire_in_days">将于 %1$d 天后过期</string>
+    <string name="expiry_banner_remaining">剩余 %1$d 节课，建议尽快安排！</string>
+
+    <!-- === 学员列表 === -->
+    <string name="student_list_empty_title">还没有学员</string>
+    <string name="student_list_empty_hint">点击右下角 + 添加学员</string>
+    <string name="student_list_section_header">学员列表（%1$d/%2$d）</string>
+    <string name="student_list_add">添加学员</string>
+    <string name="student_list_filter_title">筛选与排序</string>
+    <string name="student_list_sort_label">排序</string>
+    <string name="student_list_grade_label">年级</string>
+    <string name="student_list_search_label">搜索姓名</string>
+    <string name="student_list_clear_query">清空</string>
+    <string name="student_list_next_lesson">下一节：%1$s %2$s</string>
+    <string name="student_list_edit_next_lesson">修改下一节课</string>
+    <string name="student_list_remaining_badge">剩余 %1$d 课时</string>
+    <string name="student_list_no_package">未购课</string>
+    <string name="student_list_height_prediction">身高预测</string>
+    <string name="student_list_diet">饮食</string>
+    <string name="student_list_sign">签到</string>
+    <string name="student_list_delete_dialog_title">删除学员</string>
+    <string name="student_list_delete_dialog_content">确认删除学员「%1$s」及其所有课时记录？此操作不可撤销。</string>
+    <string name="student_list_edit_dialog_title">修改下一节课时间</string>
+    <string name="student_list_edit_dialog_student">学员：%1$s</string>
+    <string name="student_list_edit_dialog_date_label">上课日期</string>
+    <string name="student_list_edit_dialog_time_label">上课时间</string>
+
+    <!-- === 排序与年级选项 === -->
+    <string name="sort_default">默认排序</string>
+    <string name="sort_remaining_asc">剩余课时 ↑</string>
+    <string name="sort_upcoming_first">今日/明日有课优先</string>
+    <string name="sort_name_pinyin">拼音 A→Z</string>
+    <string name="grade_all">全部年级</string>
+    <string name="grade_primary">小学</string>
+    <string name="grade_junior">初中</string>
+    <string name="grade_senior">高中</string>
+    <string name="grade_zhongkao">中考</string>
+
+    <!-- === 签到拍照卡片 === -->
+    <string name="photo_pre_class_title">课前签到拍照</string>
+    <string name="photo_post_class_title">课后签退拍照</string>
+    <string name="photo_empty_hint_pre">暂未拍摄签到照</string>
+    <string name="photo_capture_btn_pre">拍摄签到照</string>
+    <string name="photo_capture_btn_post">拍摄签退照</string>
+    <string name="photo_recorded_encrypted">已记录（已加密存储）</string>
+    <string name="photo_recapture">重新拍摄</string>
+    <string name="photo_load_placeholder">加载中…</string>
+    <string name="photo_permission_denied">未授予相机权限，请在系统设置中开启后重试</string>
+
+    <!-- === 排课编辑对话框 === -->
+    <string name="schedule_save_btn">保存课程</string>
+    <string name="schedule_validate_at_least_one_day">请至少选择一个周几</string>
+    <string name="schedule_conflict_title">排课冲突</string>
+    <string name="schedule_conflict_content">该时间段已有其他学员排课，是否强制替换？</string>
+    <string name="schedule_conflict_force_replace">强制替换</string>
+
+    <!-- === Excel 导入策略 === -->
+    <string name="import_strategy_title">选择导入策略</string>
+    <string name="import_strategy_append">追加（同名则跳过）</string>
+    <string name="import_strategy_overwrite">覆盖（同名则覆盖全部）</string>
+    <string name="import_strategy_update">更新部分（保留历史与课时包）</string>
+    <string name="import_strategy_append_desc">仅新增不存在的学员，遇到同名学员跳过</string>
+    <string name="import_strategy_overwrite_desc">同名学员的全部资料被新数据覆盖</string>
+    <string name="import_strategy_update_desc">更新身高/体重等指标，保留历史排课与课时包</string>
+
+    <!-- === 学员管理 === -->
+    <string name="student_validate_name_blank">姓名不能为空</string>
+    <string name="student_validate_name_too_long">姓名长度不能超过 20 个字符</string>
+    <string name="student_validate_gender_invalid">性别字段异常：仅允许「男」「女」或空</string>
+    <string name="student_validate_age_invalid">年龄数据异常：应在 1~100 岁之间</string>
+    <string name="student_validate_height_invalid">身高数据异常：应在 30~250 cm 之间</string>
+    <string name="student_validate_weight_invalid">体重数据异常：应在 5~300 kg 之间</string>
+    <string name="student_validate_bmi_invalid">BMI 数据异常：应在 5~80 之间</string>
+    <string name="student_rename_duplicate">学员「%1$s」已存在，请更换姓名</string>
 </resources>

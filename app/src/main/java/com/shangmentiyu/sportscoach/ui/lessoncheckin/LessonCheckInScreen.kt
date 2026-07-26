@@ -2,7 +2,6 @@ package com.shangmentiyu.sportscoach.ui.lessoncheckin
 
 import android.app.Application
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,10 +20,10 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -42,7 +41,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -63,20 +62,19 @@ import com.shangmentiyu.sportscoach.ui.theme.AttendanceOnTime
 import com.shangmentiyu.sportscoach.ui.theme.FeatureIconBlue
 import com.shangmentiyu.sportscoach.ui.theme.FeatureIconGreen
 import com.shangmentiyu.sportscoach.ui.theme.FeatureIconOrange
+import com.shangmentiyu.sportscoach.ui.theme.FeatureIconPink
 import com.shangmentiyu.sportscoach.ui.theme.FeatureIconPurple
 import com.shangmentiyu.sportscoach.ui.theme.ScoreFail
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
-import com.shangmentiyu.sportscoach.ui.theme.VitalBlueStart
-import com.shangmentiyu.sportscoach.ui.theme.VitalPurpleEnd
+import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
+import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appSurface
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 
 /**
@@ -97,8 +95,9 @@ class LessonCheckInViewModel(
     val students: StateFlow<List<Student>> = studentRepo.getAllStudents()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    /** 今日日期 YYYY-MM-DD */
-    val today: String = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+    /** 今日日期 YYYY-MM-DD（线程安全：基于 [java.time.LocalDate] + [java.time.format.DateTimeFormatter]） */
+    val today: String = java.time.LocalDate.now()
+        .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault()))
 
     /** 今日所有签到课时（按时间倒序） */
     // 优化：直接用 SQL WHERE date = today 查询，命中 idx_lessons_date 索引，
@@ -195,7 +194,7 @@ fun LessonCheckInScreen(
                 ),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
                     }
                 }
             )
@@ -227,7 +226,7 @@ fun LessonCheckInScreen(
                             Spacer(Modifier.height(Spacing.xs))
                             Text("今日 ${vm.today} · 已签到 ${todayLessons.size} 人",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                                color = appOnSurfaceVariant())
                             Spacer(Modifier.height(Spacing.lg))
                         }
                     }
@@ -253,7 +252,7 @@ fun LessonCheckInScreen(
                                         .padding(start = 76.dp)
                                         .fillMaxWidth()
                                         .height(0.5.dp)
-                                        .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.6f))
+                                        .background(appDividerColor())
                                 )
                             }
                             SignRow(
@@ -322,14 +321,13 @@ private fun TodaySignedCard(lesson: Lesson, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.White, RoundedCornerShape(10.dp))
-            .border(
-                width = 1.5.dp,
-                brush = Brush.linearGradient(
-                    colors = listOf(VitalBlueStart, VitalPurpleEnd)
-                ),
-                shape = RoundedCornerShape(10.dp)
+            .shadow(
+                elevation = 4.dp,
+                shape = RoundedCornerShape(10.dp),
+                ambientColor = Color(0x1A000000),
+                spotColor = Color(0x1A000000)
             )
+            .background(Color.White, RoundedCornerShape(10.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = Spacing.md, vertical = Spacing.md),
         verticalAlignment = Alignment.CenterVertically,
@@ -341,7 +339,7 @@ private fun TodaySignedCard(lesson: Lesson, onClick: () -> Unit) {
                 .background(AttendanceOnTime.copy(alpha = 0.15f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Filled.Check, contentDescription = null,
+            Icon(Icons.Outlined.Check, contentDescription = null,
                 tint = AttendanceOnTime, modifier = Modifier.size(20.dp))
         }
         Column(modifier = Modifier.weight(1f)) {
@@ -351,7 +349,7 @@ private fun TodaySignedCard(lesson: Lesson, onClick: () -> Unit) {
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
         }
-        Icon(Icons.Filled.PlayArrow, contentDescription = null,
+        Icon(Icons.Outlined.PlayArrow, contentDescription = null,
             tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
     }
 }
@@ -374,7 +372,7 @@ private fun SignRow(
                     .padding(start = 76.dp)
                     .fillMaxWidth()
                     .height(0.5.dp)
-                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+                    .background(appDividerColor())
             )
         }
         Row(
@@ -432,7 +430,7 @@ private fun SignRow(
                     .background(MaterialTheme.colorScheme.primary, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Filled.Add, contentDescription = "签到",
+                Icon(Icons.Outlined.Add, contentDescription = "签到",
                     tint = Color.White, modifier = Modifier.size(20.dp))
             }
         }
@@ -465,7 +463,7 @@ private fun EmptyHint(title: String, subtitle: String) {
                 .background(FeatureIconPurple.copy(alpha = 0.12f), RoundedCornerShape(14.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Filled.Add, contentDescription = null,
+            Icon(Icons.Outlined.Add, contentDescription = null,
                 tint = FeatureIconPurple, modifier = Modifier.size(28.dp))
         }
         Spacer(Modifier.height(Spacing.md))
@@ -479,7 +477,13 @@ private fun EmptyHint(title: String, subtitle: String) {
 /** 根据姓名 hash 分配 iOS 系统色头像背景 */
 @Composable
 private fun avatarColorFor(name: String): Color {
-    val colors = listOf(MaterialTheme.colorScheme.primary, FeatureIconOrange, FeatureIconGreen, FeatureIconBlue, FeatureIconPurple)
+    val colors = listOf(
+        FeatureIconPurple,
+        FeatureIconBlue,
+        FeatureIconPink,
+        FeatureIconGreen,
+        FeatureIconOrange
+    )
     val hash = if (name.isNotEmpty()) name.first().hashCode() else 0
     return colors[((hash % colors.size) + colors.size) % colors.size]
 }
@@ -487,7 +491,7 @@ private fun avatarColorFor(name: String): Color {
 /** 拼接副信息：年级 · 剩余课时 */
 private fun subtitleFor(student: Student, remaining: Int): String {
     val parts = mutableListOf<String>()
-    parts.add(com.shangmentiyu.sportscoach.core.Standards.gradeLabel(student.grade))
+    parts.add(com.shangmentiyu.sportscoach.core.Standards.gradeFullLabel(student.grade))
     parts.add(
         when {
             remaining < 0 -> "无课时包"

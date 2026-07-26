@@ -15,21 +15,21 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.ChevronLeft
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -80,7 +80,7 @@ fun CoachDailyReportScreen(
                 colors = glassTopAppBarColors(),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
                     }
                 }
             )
@@ -106,8 +106,8 @@ fun CoachDailyReportScreen(
                         }) {
                             Text(selectedStudent ?: "全部学员",
                                 color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-                            Icon(if (studentPickerExpanded) Icons.Filled.KeyboardArrowUp
-                                 else Icons.Filled.KeyboardArrowDown,
+                            Icon(if (studentPickerExpanded) Icons.Outlined.KeyboardArrowUp
+                                 else Icons.Outlined.KeyboardArrowDown,
                                 contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         }
                     }
@@ -130,7 +130,7 @@ fun CoachDailyReportScreen(
                                     color = if (selectedStudent == s.name) MaterialTheme.colorScheme.primary
                                             else MaterialTheme.colorScheme.onSurface)
                                 if (selectedStudent == s.name) {
-                                    Icon(Icons.Filled.Check, contentDescription = null,
+                                    Icon(Icons.Outlined.Check, contentDescription = null,
                                         tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                                 }
                             }
@@ -149,7 +149,7 @@ fun CoachDailyReportScreen(
                                 color = if (selectedStudent == null) MaterialTheme.colorScheme.primary
                                         else MaterialTheme.colorScheme.onSurface)
                             if (selectedStudent == null) {
-                                Icon(Icons.Filled.Check, contentDescription = null,
+                                Icon(Icons.Outlined.Check, contentDescription = null,
                                     tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                             }
                         }
@@ -165,16 +165,19 @@ fun CoachDailyReportScreen(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     IconButton(onClick = { vm.previousDay() }) {
-                        Icon(Icons.Filled.ChevronLeft, contentDescription = "前一天")
+                        Icon(Icons.Outlined.ChevronLeft, contentDescription = "前一天")
                     }
                     Text(selectedDate, style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                     IconButton(onClick = { vm.nextDay() }) {
-                        Icon(Icons.Filled.ChevronRight, contentDescription = "后一天")
+                        Icon(Icons.Outlined.ChevronRight, contentDescription = "后一天")
                     }
                 }
-                OutlinedButton(onClick = { vm.goToday() }, modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp)) { Text("回到今天") }
+                TextButton(
+                    onClick = { vm.goToday() },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp)
+                ) { Text("回到今天", color = MaterialTheme.colorScheme.primary) }
             }
 
             // 日报概览
@@ -293,8 +296,11 @@ private fun LessonEffectCard(
             }
 
             Spacer(modifier = Modifier.height(8.dp))
-            OutlinedButton(onClick = onClick, modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(8.dp)) { Text("查看课时详情") }
+            TextButton(
+                onClick = onClick,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp)
+            ) { Text("查看课时详情", color = MaterialTheme.colorScheme.primary) }
         }
     }
 }

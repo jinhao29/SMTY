@@ -21,21 +21,21 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.TextSnippet
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.TableChart
-import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PhotoCamera
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.ViewList
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.TextSnippet
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.TableChart
+import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material.icons.outlined.ViewList
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -44,7 +44,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
@@ -70,7 +69,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.compose.AsyncImage
 import com.shangmentiyu.sportscoach.core.JsonSafe
 import com.shangmentiyu.sportscoach.core.PhotoCrypto
 import com.shangmentiyu.sportscoach.data.model.ExerciseItem
@@ -79,6 +77,9 @@ import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
 import com.shangmentiyu.sportscoach.ui.theme.FeatureIconBlue
 import com.shangmentiyu.sportscoach.ui.theme.FeatureIconGreen
 import com.shangmentiyu.sportscoach.ui.theme.FeatureIconOrange
+import com.shangmentiyu.sportscoach.ui.theme.SafeAsyncImage
+import com.shangmentiyu.sportscoach.ui.theme.FeatureIconPurple
+import com.shangmentiyu.sportscoach.ui.theme.FeatureIconTeal
 import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
 import com.shangmentiyu.sportscoach.ui.theme.ScoreFail
 import com.shangmentiyu.sportscoach.ui.theme.ScoreGood
@@ -131,7 +132,7 @@ fun SummaryScreen(
                 colors = glassTopAppBarColors(),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
                     }
                 }
             )
@@ -221,21 +222,24 @@ fun SummaryScreen(
 
             // 7. 操作按钮第一行：重生成 | 复制 | 保存
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                OutlinedButton(onClick = { vm.regenerate() }, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                TextButton(
+                    onClick = { vm.regenerate() },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("重生成", style = MaterialTheme.typography.bodySmall)
+                    Text("重生成", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                 }
-                OutlinedButton(
+                TextButton(
                     onClick = {
                         copyToClipboard(context, summary)
                         snackbar = "已复制到剪贴板"
                     },
                     modifier = Modifier.weight(1f)
                 ) {
-                    Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Outlined.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("复制", style = MaterialTheme.typography.bodySmall)
+                    Text("复制", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                 }
                 Button(
                     onClick = {
@@ -243,7 +247,7 @@ fun SummaryScreen(
                     },
                     modifier = Modifier.weight(1f)
                 ) {
-                    Icon(Icons.Filled.Save, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Outlined.Save, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("保存", style = MaterialTheme.typography.bodySmall)
                 }
@@ -254,7 +258,7 @@ fun SummaryScreen(
                 onClick = { showShareDialog = true },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(Icons.Outlined.Share, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text("分享给家长", style = MaterialTheme.typography.bodyMedium)
             }
@@ -305,7 +309,7 @@ private fun ShareMethodDialog(
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.Share, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Icon(Icons.Outlined.Share, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("选择分享方式", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 }
@@ -318,21 +322,21 @@ private fun ShareMethodDialog(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 ShareOptionButton(
-                    icon = Icons.AutoMirrored.Filled.TextSnippet,
+                    icon = Icons.AutoMirrored.Outlined.TextSnippet,
                     title = "分享文本",
                     subtitle = "推荐微信好友",
                     onClick = { onDismiss(); onShareText() }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 ShareOptionButton(
-                    icon = Icons.Filled.PhotoLibrary,
+                    icon = Icons.Outlined.PhotoLibrary,
                     title = "分享图片报告",
                     subtitle = "推荐家长查看",
                     onClick = { onDismiss(); lesson?.let { onShareImage(it) } }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 ShareOptionButton(
-                    icon = Icons.Filled.TableChart,
+                    icon = Icons.Outlined.TableChart,
                     title = "分享 Excel 文件",
                     subtitle = "完整数据报表",
                     onClick = { onDismiss(); lesson?.let { onShareExcel(it) } }
@@ -360,15 +364,15 @@ private fun ShareOptionButton(
     subtitle: String,
     onClick: () -> Unit
 ) {
-    OutlinedButton(
+    TextButton(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
     ) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp))
+        Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
         }
     }
@@ -404,14 +408,18 @@ private fun SignPhotoDisplayCard(photoPath: String) {
 
     IOSCard {
         if (photoBytes != null) {
-            AsyncImage(
+            // === v28 优化5：使用 SafeAsyncImage 提供 Coil 容错兜底 ===
+            // === v34：启用全屏预览，教练可双指缩放查看签到照片细节 ===
+            // 防止照片损坏或解密失败导致 Compose 渲染崩溃
+            SafeAsyncImage(
                 model = photoBytes,
                 contentDescription = "签到照片",
                 contentScale = ContentScale.Crop,
+                cornerRadius = 10.dp,
+                enableZoomPreview = true,
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(16f / 9f)
-                    .clip(RoundedCornerShape(10.dp))
             )
         } else {
             Box(
@@ -434,14 +442,14 @@ private fun SignPhotoDisplayCard(photoPath: String) {
 @Composable
 private fun LessonInfoCard(lesson: Lesson) {
     IOSCard {
-        InfoRow(icon = Icons.Filled.Schedule, label = "时长", value = "${lesson.duration}分钟")
-        InfoRow(icon = Icons.Filled.CheckCircle, label = "类型", value = lesson.lessonType)
-        InfoRow(icon = Icons.Filled.Person, label = "出勤", value = lesson.attendance)
+        InfoRow(icon = Icons.Outlined.Schedule, label = "时长", value = "${lesson.duration}分钟")
+        InfoRow(icon = Icons.Outlined.CheckCircle, label = "类型", value = lesson.lessonType)
+        InfoRow(icon = Icons.Outlined.Person, label = "出勤", value = lesson.attendance)
         if (lesson.coach.isNotBlank()) {
-            InfoRow(icon = Icons.Filled.Person, label = "教练", value = lesson.coach)
+            InfoRow(icon = Icons.Outlined.Person, label = "教练", value = lesson.coach)
         }
         if (lesson.location.isNotBlank()) {
-            InfoRow(icon = Icons.Filled.LocationOn, label = "地点", value = lesson.location)
+            InfoRow(icon = Icons.Outlined.LocationOn, label = "地点", value = lesson.location)
         }
     }
 }
@@ -457,7 +465,7 @@ private fun TrainingContentCard(exercises: List<ExerciseItem>) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                Icons.Filled.ViewList,
+                Icons.Outlined.ViewList,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(18.dp)
@@ -502,9 +510,9 @@ private fun ExerciseDisplayRow(item: ExerciseItem) {
         horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
     ) {
         Icon(
-            imageVector = if (item.done) Icons.Filled.CheckCircle else Icons.Filled.Schedule,
+            imageVector = if (item.done) Icons.Outlined.CheckCircle else Icons.Outlined.Schedule,
             contentDescription = null,
-            tint = if (item.done) FeatureIconGreen else MaterialTheme.colorScheme.outline,
+            tint = if (item.done) FeatureIconPurple else MaterialTheme.colorScheme.outline,
             modifier = Modifier.size(16.dp)
         )
         Column(modifier = Modifier.weight(1f)) {
@@ -542,7 +550,7 @@ private fun EvalDisplayCard(
     coachComment: String
 ) {
     IOSCard {
-        InfoRow(icon = Icons.Filled.Star, label = "训练态度", value = attitude)
+        InfoRow(icon = Icons.Outlined.Star, label = "训练态度", value = attitude)
 
         // 整体表现进度条
         Spacer(Modifier.height(4.dp))
@@ -551,7 +559,7 @@ private fun EvalDisplayCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                Icons.Filled.Star,
+                Icons.Outlined.Star,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(16.dp)
@@ -571,10 +579,10 @@ private fun EvalDisplayCard(
                     .height(6.dp)
                     .clip(RoundedCornerShape(3.dp)),
                 color = when {
-                    performance >= 8 -> FeatureIconGreen
+                    performance >= 8 -> FeatureIconPurple
                     performance >= 6 -> FeatureIconBlue
                     performance >= 4 -> FeatureIconOrange
-                    else -> MaterialTheme.colorScheme.error
+                    else -> FeatureIconTeal
                 },
                 trackColor = MaterialTheme.colorScheme.surfaceVariant
             )
@@ -615,9 +623,9 @@ private fun EvalDisplayCard(
                     .background(
                         Brush.horizontalGradient(
                             listOf(
-                                FeatureIconBlue.copy(alpha = 0.08f),
-                                FeatureIconOrange.copy(alpha = 0.05f)
-                            )
+                            FeatureIconPurple.copy(alpha = 0.08f),
+                            FeatureIconBlue.copy(alpha = 0.05f)
+                        )
                         )
                     )
                     .padding(Spacing.sm)

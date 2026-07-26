@@ -1,6 +1,5 @@
 package com.shangmentiyu.sportscoach.ui.theme
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -52,8 +51,6 @@ fun GlassAlertDialog(
     dismissButton: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
-    val primaryColor = MaterialTheme.colorScheme.primary
-    val borderColor = primaryColor.copy(alpha = 0.15f)
     val containerColor = MaterialTheme.colorScheme.surface
 
     Dialog(
@@ -63,16 +60,13 @@ fun GlassAlertDialog(
             decorFitsSystemWindows = false
         )
     ) {
-        // 使用 Surface 包裹获得蓝色边框（与 GlassCard glow=true 一致）
         Surface(
             modifier = Modifier
                 .padding(horizontal = 24.dp)
                 .fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             color = containerColor,
-            border = BorderStroke(1.dp, borderColor),
-            tonalElevation = 0.dp,
-            shadowElevation = 0.dp
+            shadowElevation = 4.dp
         ) {
             Column {
                 // 顶部 4dp 蓝紫渐变装饰条（与 GlassCard 一致）
