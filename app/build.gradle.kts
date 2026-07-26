@@ -9,59 +9,17 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-// === 版本号自动化（CI 优先 / 本地 fallback） ===
+// === 版本号自动化（CI 注入环境变量 / 本地 fallback） ===
 // 策略：
-// 1. CI 环境（GitHub Actions）：优先读取 GITHUB_RUN_NUMBER 环境变量
-//    - versionCode = GITHUB_RUN_NUMBER（严格递增，每次 push +1）
-//    - versionName = 1.0.<GITHUB_RUN_NUMBER>（与 Release tag 严格一致）
-//    - 不写回 version_code.txt，避免污染本地基准值
-// 2. 本地环境（Android Studio 直接打包）：
-//    - versionCode：读取根目录 version_code.txt 作为基准值；release 构建时 +1 并写回文件
-//    - versionName：动态生成 "1.0.<自 epoch 以来的天数>"，便于按日期追溯版本
-// 3. fallback：所有解析失败时 versionCode=1，versionName="1.0"，保证本地直接 AS 打包不报错
-//
+// 1. CI 环境（GitHub Actions）：workflow 通过 GITHUB_ENV 注入 VERSION_CODE 和 VERSION_NAME
+//    - VERSION_CODE = github.run_number（严格递增，每次 push +1）
+//    - VERSION_NAME = 1.0.<github.run_number>（与 Release tag 严格一致）
+// 2. 本地环境（Android Studio 直接打包）：环境变量不存在时使用默认值
+//    - versionCode = 1
+//    - versionName = "1.0.0-local"
 // 设计说明：
-// - GitHub Actions run_number 在仓库维度严格递增，可保证每次构建 versionCode 唯一递增
-// - 本地 release 构建递增 versionCode 并写回文件；debug 构建使用基准值避免污染
-// - 文件不存在时初始化为 0，首次本地 release 后 versionCode=1
-
-val ciRunNumber: Int = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: -1
-val isCiBuild: Boolean = ciRunNumber > 0
-
-val versionCodeFile: File = rootProject.file("version_code.txt")
-val baseVersionCode: Int = if (versionCodeFile.exists()) {
-    versionCodeFile.readText().trim().toIntOrNull() ?: 0
-} else {
-    versionCodeFile.parentFile?.mkdirs()
-    versionCodeFile.writeText("0")
-    0
-}
-
-// 检测当前构建是否包含 release 任务（基于命令行参数）
-// 例如：assembleRelease、bundleRelease、installRelease
-val isReleaseBuild: Boolean = gradle.startParameter.taskNames.any { taskName ->
-    taskName.contains("Release", ignoreCase = true)
-}
-
-// CI 构建使用 GITHUB_RUN_NUMBER；本地 release 构建递增 version_code.txt；其他用基准值
-val effectiveVersionCode: Int = when {
-    isCiBuild -> ciRunNumber
-    isReleaseBuild -> {
-        val newCode = baseVersionCode + 1
-        versionCodeFile.writeText(newCode.toString())
-        newCode
-    }
-    else -> baseVersionCode
-}
-
-// versionName：CI 用 1.0.<run_number>；本地用 1.0.<天数>
-// 86400000L = 24 * 60 * 60 * 1000（一天的毫秒数）
-val dynamicVersionName: String = if (isCiBuild) {
-    "1.0.$ciRunNumber"
-} else {
-    val daysSinceEpoch: Int = (System.currentTimeMillis() / 86400000L).toInt()
-    "1.0.$daysSinceEpoch"
-}
+// - github.run_number 在仓库维度严格递增，可保证每次构建 versionCode 唯一递增
+// - 本地默认值保证 AS 直接打包不报错，发布版本号由 CI 严格控制
 
 // === Release 签名配置（CI 通过 Secrets 注入 / 本地可选 keystore.properties） ===
 // 设计要点：
@@ -87,8 +45,11 @@ android {
         applicationId = "com.shangmentiyu.sportscoach"
         minSdk = 26
         targetSdk = 35
-        versionCode = effectiveVersionCode
-        versionName = dynamicVersionName
+
+        // 让版本号自动读取环境变量，并设置默认本地开发版本
+        // CI 环境通过 workflow 注入 VERSION_CODE / VERSION_NAME，本地 fallback 到默认值
+        versionCode = (System.getenv("VERSION_CODE")?.toIntOrNull() ?: 1)
+        versionName = (System.getenv("VERSION_NAME") ?: "1.0.0-local")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
