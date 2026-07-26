@@ -15,7 +15,9 @@
 
 [versions]
 # === Gradle 插件版本 ===
-agp = "9.3.1"                          # Android Gradle Plugin
+# AGP 8.13.0 + Kotlin 2.2.10 是经过验证的稳定组合
+# AGP 9.0 是"史诗级大坑"：移除 BaseExtension 导致大量插件强转失败
+agp = "8.13.0"
 kotlin = "2.2.10"                      # Kotlin 编译器（与 Compose Compiler 同步）
 ksp = "2.2.10-2.0.2"                    # Kotlin Symbol Processing（必须与 Kotlin 2.2.10 严格匹配，格式：kotlinVersion-kspVersion）
 

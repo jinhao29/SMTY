@@ -84,44 +84,20 @@ jobs:
           EOF
           echo "已配置 release 签名（keystore.jks + keystore.properties）"
 
-      - name: 切换镜像源为官方源（CI 环境）
-        # CI 环境在海外，国内阿里云/腾讯云镜像可能返回错误响应干扰 fallback，
-        # 直接使用官方源最稳定。
-        # 同时替换 settings.gradle.kts 移除国内镜像，仅保留官方源：
-        # - google() → Google Maven（androidx/com.google.devtools 等）
-        # - mavenCentral() → Maven Central（kotlin/ksp 等）
-        # - gradlePluginPortal() → Gradle Plugin Portal（第三方插件）
-        # 本地开发不受影响：settings.gradle.kts 在 git 中保留国内镜像加速
+      - name: 切换 Gradle wrapper 为官方源（CI 环境）
+        # CI 环境在海外，使用官方源下载 Gradle 最稳定
+        # 本地开发不受影响：gradle-wrapper.properties 在 git 中保留国内镜像加速
         run: |
           cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
           distributionBase=GRADLE_USER_HOME
           distributionPath=wrapper/dists
-          distributionUrl=https\://services.gradle.org/distributions/gradle-9.5.0-all.zip
+          distributionUrl=https\://services.gradle.org/distributions/gradle-8.13-all.zip
           networkTimeout=60000
           validateDistributionUrl=true
           zipStoreBase=GRADLE_USER_HOME
           zipStorePath=wrapper/dists
           EOF
-
-          cat > settings.gradle.kts << 'EOF'
-          pluginManagement {
-              repositories {
-                  google()
-                  mavenCentral()
-                  gradlePluginPortal()
-              }
-          }
-          dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
-          rootProject.name = "SportsCoach"
-          include(":app")
-          EOF
-          echo "已切换镜像源为官方源（settings.gradle.kts + gradle-wrapper.properties）"
+          echo "已切换 Gradle wrapper 为官方源（gradle-8.13-all.zip）"
 
       - name: 构建 Release APK
         # 通过 GITHUB_RUN_NUMBER 环境变量注入让 build.gradle.kts 动态读取
