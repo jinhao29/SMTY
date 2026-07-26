@@ -77,20 +77,23 @@ android {
 
     buildTypes {
         release {
-            // 开启代码混淆与资源压缩：
-            // - 移除未使用代码，APK 体积可减 30-50%
-            // - 增加反编译难度，保护业务逻辑与学员数据处理代码
+            // === 强制开启代码混淆与资源压缩 ===
+            // - isMinifyEnabled=true：移除未使用代码（R8 优化），APK 体积可减 30-50%
+            // - isShrinkResources=true：移除未使用资源（与 R8 配合）
             // - proguard-rules.pro 已配置 POI/Room/Compose/DataStore 等 keep 规则
+            //   防止关键类被混淆优化掉导致运行时 NoClassDefFoundError
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // === 显式绑定 release 签名配置 ===
             // CI 配置了 keystore.properties 时使用正式 release 签名
             // 否则 fallback 到 debug 签名（仅本地开发用，不可发布到 GitHub Release）
             // ⚠️ UpdateChecker 警告：发布到 GitHub 的 APK 必须使用 release 签名，
             //    否则覆盖安装时会报"解析包错误 / 应用未安装"
+            //    必须保证 KEYSTORE_BASE64 Secret 被正确解码到 app/../keystore.jks 路径
             signingConfig = if (hasSigningProps) {
                 signingConfigs.getByName("release")
             } else {

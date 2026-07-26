@@ -25,6 +25,7 @@ import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.SportsScore
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
@@ -36,6 +37,7 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -157,6 +159,13 @@ fun SportsApp() {
     // 更新下载进度订阅：来自 UpdateProgressBus（Worker → UI 跨进程通信）
     val updateProgress by UpdateProgressBus.progress.collectAsState()
     val context = LocalContext.current
+
+    // === 安装确认弹窗状态（无感下载 + 弹窗安装） ===
+    // 下载完成后不直接跳转安装器，先弹窗让用户确认
+    // - showInstallDialog：控制 AlertDialog 显示
+    // - pendingInstallVersion：待安装版本号（用于弹窗文案展示）
+    var showInstallDialog by remember { mutableStateOf(false) }
+    var pendingInstallVersion by remember { mutableStateOf("") }
 
     // === v28 优化6：订阅首页未签到数与今日排课红点状态 ===
     // 用于底部导航栏主页 Tab 显示数字角标（未签到数）或红点（仅有排课）
@@ -508,11 +517,15 @@ fun SportsApp() {
                 }
             }
             is UpdateProgressBus.UpdateProgress.Done -> {
-                // 下载完成：触发系统安装器，重置总线
-                LaunchedEffect(Unit) {
-                    runCatching { UpdateInstaller.installApk(context) }
+                // 下载完成：不直接跳转安装器，改为触发 AlertDialog 让用户确认安装
+                // 用 LaunchedEffect + key(p.version) 保证每次新版本下载完成只触发一次
+                LaunchedEffect(p.version) {
+                    pendingInstallVersion = p.version
+                    showInstallDialog = true
+                    // 重置进度总线，避免 Done 状态持续触发弹窗
                     UpdateProgressBus.reset()
                 }
+                // 下载完成瞬间短暂浮层提示（主交互由 AlertDialog 承载）
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -535,7 +548,7 @@ fun SportsApp() {
                             )
                             Spacer(Modifier.height(8.dp))
                             Text(
-                                text = "新版本 ${p.version} 下载完成，正在启动安装…",
+                                text = "新版本 ${p.version} 下载完成",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = Color.Black
                             )
@@ -581,6 +594,49 @@ fun SportsApp() {
                 }
             }
             UpdateProgressBus.UpdateProgress.Idle -> { /* 无更新进行中，不显示浮层 */ }
+        }
+
+        // === 安装确认弹窗（无感下载 + 弹窗安装） ===
+        // 下载完成后弹出，让用户决定是否立即安装
+        // - "立即安装"：触发系统安装器（UpdateInstaller.installApk）
+        // - "稍后" / 点外部关闭：仅关闭弹窗，下次进入 App 或下次检查更新时再提示
+        if (showInstallDialog) {
+            AlertDialog(
+                onDismissRequest = {
+                    // 用户点击弹窗外部关闭：视为"稍后"
+                    showInstallDialog = false
+                },
+                title = {
+                    Text(
+                        text = "发现新版本",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
+                text = {
+                    Text(text = "发现新版本 $pendingInstallVersion，是否立即安装更新？")
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            // 立即安装：触发系统安装界面
+                            showInstallDialog = false
+                            runCatching { UpdateInstaller.installApk(context) }
+                        }
+                    ) {
+                        Text("立即安装")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            // 稍后：关闭弹窗，下次进入 App 再检测
+                            showInstallDialog = false
+                        }
+                    ) {
+                        Text("稍后")
+                    }
+                }
+            )
         }
     }
 }

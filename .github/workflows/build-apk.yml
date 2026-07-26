@@ -52,8 +52,12 @@ jobs:
         #    - KEYSTORE_PASSWORD：keystore 文件密码
         #    - KEY_ALIAS：key alias
         #    - KEY_PASSWORD：key 密码
-        # 显式声明 shell: bash 确保 Linux/Windows runner 都用 bash 解释器
-        # （ubuntu-latest 默认 bash，windows-latest 默认 pwsh，base64 -d 是 bash 语法）
+        # 路径解析说明：
+        # - keystore.jks 写入仓库根目录（$PWD = 仓库根，CI 在仓库根目录执行）
+        # - keystore.properties 也写入仓库根目录
+        # - build.gradle.kts 中 rootProject.file("keystore.properties") 解析到仓库根目录
+        # - storeFile=../keystore.jks 在 app 模块下解析 = app/../keystore.jks = 仓库根目录/keystore.jks
+        # - 显式声明 shell: bash 确保 Linux/Windows runner 都用 bash 解释器
         shell: bash
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -66,13 +70,17 @@ jobs:
             exit 0
           fi
           echo "$KEYSTORE_BASE64" | base64 -d > keystore.jks
-          cat > keystore.properties << EOF
-          storeFile=../keystore.jks
-          storePassword=$KEYSTORE_PASSWORD
-          keyAlias=$KEY_ALIAS
-          keyPassword=$KEY_PASSWORD
-          EOF
-          echo "已配置 release 签名（keystore.jks + keystore.properties）"
+          # 使用 printf 逐行写入避免 heredoc 缩进污染 properties 文件
+          # Properties.load() 对前导空格不敏感，但显式顶格更稳健
+          printf 'storeFile=../keystore.jks\n' > keystore.properties
+          printf 'storePassword=%s\n' "$KEYSTORE_PASSWORD" >> keystore.properties
+          printf 'keyAlias=%s\n' "$KEY_ALIAS" >> keystore.properties
+          printf 'keyPassword=%s\n' "$KEY_PASSWORD" >> keystore.properties
+          echo "==== keystore.properties 内容（密码已脱敏） ===="
+          sed 's/=\(.\{4\}\).*/=\1***/' keystore.properties
+          echo "==== keystore.jks 文件信息 ===="
+          ls -la keystore.jks
+          file keystore.jks
 
       - name: 切换 Gradle wrapper 为官方源（CI 环境）
         # CI 环境在海外，使用官方源下载 Gradle 最稳定

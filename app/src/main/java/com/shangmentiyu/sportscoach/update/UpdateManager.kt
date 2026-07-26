@@ -10,6 +10,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
+import com.shangmentiyu.sportscoach.BuildConfig
 import java.util.concurrent.TimeUnit
 
 /**
@@ -64,6 +65,15 @@ object UpdateManager {
     private const val RETRY_DELAY_SECOND_HOURS = 6L
 
     /**
+     * 判断当前是否为本地开发版本（versionName 包含 "-local"）。
+     *
+     * 用于在开发期间避免频繁触发 GitHub API 请求导致错误弹窗干扰调试。
+     * 命中后所有更新检查入口（定期/即时/同步）直接短路返回，不发网络请求。
+     */
+    private val isLocalDevBuild: Boolean
+        get() = BuildConfig.VERSION_NAME.contains("-local", ignoreCase = true)
+
+    /**
      * 注册定期更新检查任务（每天一次）。
      *
      * 使用 ExistingPeriodicWorkPolicy.KEEP 确保不重复注册。
@@ -72,6 +82,10 @@ object UpdateManager {
      * @param context 上下文
      */
     fun schedulePeriodicCheck(context: Context) {
+        if (isLocalDevBuild) {
+            Log.d(TAG, "本地开发版本（${BuildConfig.VERSION_NAME}），跳过注册定期更新检查任务")
+            return
+        }
         try {
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.UNMETERED)  // Wi-Fi 或不计量网络
@@ -115,6 +129,10 @@ object UpdateManager {
      * @param context 上下文
      */
     fun checkNow(context: Context) {
+        if (isLocalDevBuild) {
+            Log.d(TAG, "本地开发版本（${BuildConfig.VERSION_NAME}），跳过即时更新检查")
+            return
+        }
         try {
             // 用户主动触发时取消已排队的失败重试任务，避免重复执行
             cancelRetryChain(context)
@@ -222,6 +240,10 @@ object UpdateManager {
      * @return 更新检查结果
      */
     suspend fun checkNowSync(): UpdateResult {
+        if (isLocalDevBuild) {
+            Log.d(TAG, "本地开发版本（${BuildConfig.VERSION_NAME}），跳过同步更新检查，直接返回 UpToDate")
+            return UpdateResult.UpToDate
+        }
         return try {
             val result = UpdateChecker.checkForUpdate()
             when (result) {
