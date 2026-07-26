@@ -112,7 +112,7 @@ jobs:
         # --info：输出详细日志，便于排查 CI 构建失败的具体原因
         env:
           GITHUB_RUN_NUMBER: ${{ github.run_number }}
-        run: ./gradlew assembleRelease --no-daemon --stacktrace --info
+        run: ./gradlew assembleRelease --no-daemon --stacktrace --no-configuration-cache
 
       - name: 获取 APK 路径
         id: apk
