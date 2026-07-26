@@ -85,12 +85,13 @@ jobs:
           echo "已配置 release 签名（keystore.jks + keystore.properties）"
 
       - name: 切换镜像源为官方源（CI 环境）
-        # CI 环境在海外，国内阿里云/腾讯云镜像反而更慢甚至不稳定，
-        # 直接使用 Gradle 官方源最稳定。
-        # ⚠️ 不能整体覆盖 settings.gradle.kts，否则会丢失 Version Catalog (libs.versions.toml)
-        #    引用导致 libs.xxx 全部失效，构建必然失败。
-        # 仅替换 gradle-wrapper.properties 的下载源为官方 services.gradle.org，
-        # settings.gradle.kts 保留原始阿里云+官方兜底配置（GitHub Actions 也能访问阿里云）
+        # CI 环境在海外，国内阿里云/腾讯云镜像可能返回错误响应干扰 fallback，
+        # 直接使用官方源最稳定。
+        # 同时替换 settings.gradle.kts 移除国内镜像，仅保留官方源：
+        # - google() → Google Maven（androidx/com.google.devtools 等）
+        # - mavenCentral() → Maven Central（kotlin/ksp 等）
+        # - gradlePluginPortal() → Gradle Plugin Portal（第三方插件）
+        # 本地开发不受影响：settings.gradle.kts 在 git 中保留国内镜像加速
         run: |
           cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
           distributionBase=GRADLE_USER_HOME
@@ -101,7 +102,26 @@ jobs:
           zipStoreBase=GRADLE_USER_HOME
           zipStorePath=wrapper/dists
           EOF
-          echo "已切换 Gradle 下载源为官方源"
+
+          cat > settings.gradle.kts << 'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "SportsCoach"
+          include(":app")
+          EOF
+          echo "已切换镜像源为官方源（settings.gradle.kts + gradle-wrapper.properties）"
 
       - name: 构建 Release APK
         # 通过 GITHUB_RUN_NUMBER 环境变量注入让 build.gradle.kts 动态读取
