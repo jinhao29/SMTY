@@ -83,12 +83,6 @@ android {
     namespace = "com.shangmentiyu.sportscoach"
     compileSdk = 35
 
-    // AGP 9.0 默认 builtInKotlin=true 会自动应用 Kotlin 插件，
-    // 与显式应用的 org.jetbrains.kotlin.android 冲突（"extension already registered"）。
-    // 显式禁用 builtInKotlin，回退到传统模式：由 plugins block 显式应用 kotlin.android。
-    // 这是 AGP 官方推荐的回退方案，AGP 10 之前都支持。
-    enableKotlin = false
-
     defaultConfig {
         applicationId = "com.shangmentiyu.sportscoach"
         minSdk = 26
