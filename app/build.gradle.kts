@@ -4,7 +4,9 @@ import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
+    // AGP 9.0 默认 android.builtInKotlin=true，com.android.application 会自动应用 Kotlin 插件
+    // 显式应用 org.jetbrains.kotlin.android 会导致 "extension already registered with name 'kotlin'" 冲突
+    // 故移除 alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.plugin.compose)
     alias(libs.plugins.ksp)
 }
