@@ -84,35 +84,13 @@ jobs:
           EOF
           echo "已配置 release 签名（keystore.jks + keystore.properties）"
 
-      - name: 替换 settings.gradle.kts 为官方源
-        # CI 环境在海外，使用国内镜像反而可能导致插件版本同步延迟，
-        # 直接使用官方源（google/mavenCentral/gradlePluginPortal）最稳定。
-        run: |
-          cat > settings.gradle.kts << 'EOF'
-          pluginManagement {
-              repositories {
-                  google()
-                  mavenCentral()
-                  gradlePluginPortal()
-              }
-          }
-          plugins {
-              id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
-          }
-          dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
-
-          rootProject.name = "SportsCoach"
-          include(":app")
-          EOF
-
-      - name: 替换 gradle-wrapper.properties 为官方下载源
-        # CI 环境使用腾讯云镜像可能不稳定，改用官方 Gradle 发行版下载源
+      - name: 切换镜像源为官方源（CI 环境）
+        # CI 环境在海外，国内阿里云/腾讯云镜像反而更慢甚至不稳定，
+        # 直接使用 Gradle 官方源最稳定。
+        # ⚠️ 不能整体覆盖 settings.gradle.kts，否则会丢失 Version Catalog (libs.versions.toml)
+        #    引用导致 libs.xxx 全部失效，构建必然失败。
+        # 仅替换 gradle-wrapper.properties 的下载源为官方 services.gradle.org，
+        # settings.gradle.kts 保留原始阿里云+官方兜底配置（GitHub Actions 也能访问阿里云）
         run: |
           cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
           distributionBase=GRADLE_USER_HOME
@@ -123,6 +101,7 @@ jobs:
           zipStoreBase=GRADLE_USER_HOME
           zipStorePath=wrapper/dists
           EOF
+          echo "已切换 Gradle 下载源为官方源"
 
       - name: 构建 Release APK
         # 通过 GITHUB_RUN_NUMBER 环境变量注入让 build.gradle.kts 动态读取
