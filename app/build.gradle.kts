@@ -1,4 +1,5 @@
 import java.io.File
+import java.io.FileInputStream
 import java.util.Properties
 
 plugins {
@@ -74,7 +75,7 @@ val signingPropsFile: File = rootProject.file("keystore.properties")
 val hasSigningProps: Boolean = signingPropsFile.exists()
 val signingProps: Properties = Properties().apply {
     if (hasSigningProps) {
-        load(java.io.FileInputStream(signingPropsFile))
+        load(FileInputStream(signingPropsFile))
     }
 }
 
@@ -142,6 +143,8 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    // 注意：kotlinOptions 在 AGP 9.0 newDsl 模式下标记为 deprecated
+    // 但 deprecation 警告不会导致构建失败，保持兼容性
     kotlinOptions {
         jvmTarget = "17"
     }
