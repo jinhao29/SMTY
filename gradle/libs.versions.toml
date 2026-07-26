@@ -17,7 +17,7 @@
 # === Gradle 插件版本 ===
 agp = "9.3.1"                          # Android Gradle Plugin
 kotlin = "2.2.10"                      # Kotlin 编译器（与 Compose Compiler 同步）
-ksp = "2.3.2"                          # Kotlin Symbol Processing（Room 编译期代码生成）
+ksp = "2.2.10-2.0.2"                    # Kotlin Symbol Processing（必须与 Kotlin 2.2.10 严格匹配，格式：kotlinVersion-kspVersion）
 
 # === AndroidX Core ===
 coreKtx = "1.15.0"                     # AndroidX Core KTX
