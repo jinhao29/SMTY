@@ -158,9 +158,11 @@ android {
     }
 
     buildFeatures {
+        // Compose 已通过 kotlin.plugin.compose 插件启用，此处显式声明保持清晰
         compose = true
-        // 启用 BuildConfig 生成，使 BuildConfig.VERSION_NAME 等字段可用
+        // AGP 8.x 默认 buildConfig=false，需显式开启以生成 BuildConfig.VERSION_NAME 等字段
         buildConfig = true
+        // 注：viewBinding / dataBinding 未使用（纯 Compose 项目），保持默认 false
     }
 
     packaging {

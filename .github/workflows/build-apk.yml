@@ -65,6 +65,9 @@ jobs:
         #    - KEYSTORE_PASSWORD：keystore 文件密码
         #    - KEY_ALIAS：key alias
         #    - KEY_PASSWORD：key 密码
+        # 显式声明 shell: bash 确保 Linux/Windows runner 都用 bash 解释器
+        # （ubuntu-latest 默认 bash，windows-latest 默认 pwsh，base64 -d 是 bash 语法）
+        shell: bash
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
