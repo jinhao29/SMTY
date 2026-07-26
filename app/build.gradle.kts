@@ -1,6 +1,7 @@
 import java.io.File
 import java.io.FileInputStream
 import java.util.Properties
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
@@ -143,12 +144,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    // 注意：kotlinOptions 在 AGP 9.0 newDsl 模式下标记为 deprecated
-    // 但 deprecation 警告不会导致构建失败，保持兼容性
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
     // === 单元测试配置（v22 引入） ===
     // 启用单元测试返回 Robolectric 等需要 Android 资源的测试框架
     testOptions {
@@ -179,6 +174,16 @@ android {
             excludes += "META-INF/io.netty.versions.properties"
             excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
         }
+    }
+}
+
+// === Kotlin 编译器选项（AGP 9.0 推荐写法，替代 android.kotlinOptions）===
+// AGP 9.0 newDsl 模式下 android.kotlinOptions 已被移除（Unresolved reference 'kotlinOptions'），
+// 迁移到顶层 kotlin { compilerOptions { ... } } DSL。
+// compilerOptions 是 Kotlin Gradle 插件提供的扩展，与 android {} 同级。
+kotlin {
+    compilerOptions {
+        jvmTarget = JvmTarget.JVM_17
     }
 }
 
