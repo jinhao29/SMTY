@@ -38,6 +38,35 @@
 # POI 数字签名相关依赖（App 不使用数字签名功能，运行时不需要）
 -dontwarn org.etsi.**
 -dontwarn com.graphbuilder.**
+# === v34 修复 R8 "Missing class" 编译错误 ===
+# 背景：R8 默认对缺失类直接报错停止编译，导致 Release 包无法生成
+# 缺失类来源：POI 数字签名功能引用的 org.w3.x2000.x09.xmldsig.* 类
+# 这些类是 POI 可选依赖，App 仅使用 POI 的 Excel 读写功能，不使用数字签名
+# 解决：通过 -dontwarn 告诉 R8 忽略缺失类，而不是报错停止
+# 同时通过 -keep 防止这些类被引用的其他类被裁剪
+-dontwarn org.w3.x2000.x09.xmldsig.**
+-dontwarn org.w3.x2000.x09.xmldsig.base.**
+-dontwarn org.w3.x2000.x09.xmldsig.elements.**
+-dontwarn org.w3.x2000.x09.xmldsig.manifest.**
+-dontwarn org.w3.x2000.x09.xmldsig.signatureproperties.**
+-dontwarn org.w3.x2000.x09.xmldsig.signedinfo.**
+-dontwarn org.w3.x2000.x09.xmldsig.keyinfo.**
+-dontwarn org.w3.x2000.x09.xmldsig.object.**
+-dontwarn org.w3.x2000.x09.xmldsig.signature.**
+-dontwarn org.w3.x2000.x09.xmldsig.reference.**
+-dontwarn org.w3.x2000.x09.xmldsig.transforms.**
+-dontwarn org.w3.x2000.x09.xmldsig.digestmethod.**
+-dontwarn org.w3.x2000.x09.xmldsig.signaturevalue.**
+-dontwarn org.w3.x2000.x09.xmldsig.keyinfo.**
+-dontwarn org.w3.x2000.x09.xmldsig.keyvalue.**
+-dontwarn org.w3.x2000.x09.xmldsig.retrievalmethod.**
+-dontwarn org.w3.x2000.x09.xmldsig.x509data.**
+-dontwarn org.w3.x2000.x09.xmldsig.pgpdata.**
+-dontwarn org.w3.x2000.x09.xmldsig.spkidata.**
+-dontwarn org.w3.x2000.x09.xmldsig.keyname.**
+-dontwarn org.w3.x2000.x09.xmldsig.mgmtdata.**
+# 兜底：所有 org.w3.** 缺失类全部忽略
+-dontwarn org.w3.**
 
 # ---------- Room 数据库（实体与 DAO 实现由 KSP 生成，需保留） ----------
 -keep class * extends androidx.room.RoomDatabase { *; }
