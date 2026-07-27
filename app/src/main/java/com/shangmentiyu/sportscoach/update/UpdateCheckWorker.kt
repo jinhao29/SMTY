@@ -196,10 +196,15 @@ class UpdateCheckWorker(
     }
 
     /**
-     * 下载完成通知（功能 2：点击直接跳转安装界面）。
+     * 下载完成通知（v34：点击打开 App，由 App 内弹窗确认是否安装）。
+     *
+     * 设计变更（v34）：
+     * - 旧版：setContentIntent = createInstallPendingIntent → 点击直接跳转系统安装器
+     *   问题：绕过 App 内 AlertDialog 确认，用户被直接推进安装流程
+     * - 新版：setContentIntent = createOpenAppPendingIntent → 点击打开 App MainActivity
+     *   App 启动时检查本地 APK + 持久化标志，自动触发 AlertDialog 让用户确认
      *
      * - 取消下载中通知
-     * - setContentIntent 指向 APK 安装 Intent
      * - setAutoCancel(true)：点击后自动消失
      */
     private fun showReadyNotification(version: String) {
@@ -209,13 +214,18 @@ class UpdateCheckWorker(
         ) as NotificationManager
         manager.cancel(NOTIFICATION_ID_DOWNLOADING)
 
-        val installIntent = UpdateInstaller.createInstallPendingIntent(applicationContext)
+        // 写入持久化标志：App 启动时读取此标志触发安装确认弹窗
+        // 避免用户杀进程后状态丢失，确保下次进入 App 时仍能弹出确认
+        UpdateManager.markUpdateReady(applicationContext, version)
+
+        // 通知点击改为打开 App（不直接安装），由 App 内 AlertDialog 让用户确认
+        val openAppIntent = UpdateInstaller.createOpenAppPendingIntent(applicationContext)
         val builder = NotificationCompat.Builder(applicationContext, NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setContentTitle("新版本 $version 已下载完成")
-            .setContentText("点击安装更新")
+            .setContentText("点击打开应用查看更新")
             .setAutoCancel(true)
-            .setContentIntent(installIntent)
+            .setContentIntent(openAppIntent)
 
         manager.notify(NOTIFICATION_ID_READY, builder.build())
     }

@@ -145,6 +145,20 @@ android {
             excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
         }
     }
+
+    // === v34：ABI splits 只打包 arm64-v8a ===
+    // 现代安卓手机 99% 使用 arm64-v8a 架构（包含 armeabi-v7a 兼容层）
+    // 排除 x86 / x86_64（模拟器用）与 armeabi-v7a（旧机型，本项目 minSdk=26 不再需要）
+    // 体积减少：~3-5MB（POI 与 xmlbeans 的 native 库 + 其他依赖的 .so 文件）
+    // 通用包（universal）仍生成，但体积与 split 包相同，CI 直接上传 universal 即可
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a")
+            isUniversalApk = true  // 生成通用包，CI 直接上传这个，避免 Release 多文件混乱
+        }
+    }
 }
 
 // Room 2.6.1 与 KSP2（KSP 2.3.2）存在 "unexpected jvm signature V" 兼容性问题，

@@ -288,4 +288,86 @@ object UpdateManager {
             false
         }
     }
+
+    // === v34：持久化"等待安装"标志 ===
+    // 解决场景：App 在后台或被杀进程时，Worker 完成下载并发出通知
+    // 用户点击通知或下次进入 App 时，需要触发 AlertDialog 询问是否安装
+    // 不持久化的话，进程重启后 UpdateProgressBus 状态丢失，弹窗永远不会出现
+
+    /** SharedPreferences 文件名 */
+    private const val PREFS_NAME = "smty_update_prefs"
+
+    /** "等待安装"版本号 Key（值 = 新版本 tagName，如 "v21"） */
+    private const val KEY_PENDING_INSTALL_VERSION = "pending_install_version"
+
+    /**
+     * 标记"已有下载好的更新待安装"。
+     *
+     * 调用时机：[UpdateCheckWorker] 下载完成后立即调用，写入待安装版本号。
+     * 后续 App 启动时通过 [consumeUpdateReady] 读取并触发 AlertDialog。
+     *
+     * @param context 上下文
+     * @param version 待安装版本号（如 "v21"）
+     */
+    fun markUpdateReady(context: Context, version: String) {
+        try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit().putString(KEY_PENDING_INSTALL_VERSION, version).apply()
+            Log.i(TAG, "已标记更新待安装：$version")
+        } catch (e: Exception) {
+            Log.e(TAG, "写入待安装标志失败：${e.message}", e)
+        }
+    }
+
+    /**
+     * 消费"等待安装"标志（读取后立即清除）。
+     *
+     * 调用时机：SportsApp 启动时检查，若返回非 null 则触发 AlertDialog。
+     * 读取后立即清除，避免每次进入 App 都弹窗。
+     *
+     * @return 待安装版本号（如 "v21"）；null 表示无待安装更新或 APK 已被清理
+     */
+    fun consumeUpdateReady(context: Context): String? {
+        return try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val version = prefs.getString(KEY_PENDING_INSTALL_VERSION, null)
+            if (version != null) {
+                // 二次确认：APK 文件是否还存在（用户可能手动清理了缓存）
+                val apkExists = UpdateInstaller.getApkFile(context).exists()
+                if (apkExists) {
+                    Log.i(TAG, "检测到待安装更新：$version，将触发确认弹窗")
+                    // 清除标志，避免下次进入 App 重复弹窗
+                    prefs.edit().remove(KEY_PENDING_INSTALL_VERSION).apply()
+                    version
+                } else {
+                    // APK 已被清理（如清理缓存）：清除标志，避免无效弹窗
+                    Log.w(TAG, "待安装版本 $version 的 APK 已被清理，清除标志")
+                    prefs.edit().remove(KEY_PENDING_INSTALL_VERSION).apply()
+                    null
+                }
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "读取待安装标志失败：${e.message}", e)
+            null
+        }
+    }
+
+    /**
+     * 清除"等待安装"标志。
+     *
+     * 调用时机：
+     * - 用户在 AlertDialog 中点击"稍后"后调用（避免下次进入 App 又弹）
+     * - 用户主动取消安装时调用
+     */
+    fun clearUpdateReady(context: Context) {
+        try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit().remove(KEY_PENDING_INSTALL_VERSION).apply()
+            Log.d(TAG, "已清除待安装标志")
+        } catch (e: Exception) {
+            Log.e(TAG, "清除待安装标志失败：${e.message}", e)
+        }
+    }
 }

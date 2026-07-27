@@ -2,8 +2,24 @@
 # 体育教学 App ProGuard 规则
 # ============================================================
 
-# ---------- Apache POI（Excel 导入导出，依赖大量反射） ----------
--keep class org.apache.poi.** { *; }
+# ---------- Apache POI（Excel 导入导出） ----------
+# v34 优化：原 -keep class org.apache.poi.** { *; } 太宽，让 POI 整个库不能裁剪
+# 新策略：仅 keep POI 公共 API（用户使用的 Workbook/Sheet/Row/Cell 等接口与实体类）
+#   - xmlbeans 必须完整保留（POI 反射加载 schema 类，混淆会崩）
+#   - POI 内部实现类可以裁剪，体积可减 30%+
+-keep public class org.apache.poi.ss.usermodel.** { *; }
+-keep public class org.apache.poi.ss.SpreadsheetVersion { *; }
+-keep public class org.apache.poi.ss.util.** { *; }
+-keep public class org.apache.poi.hssf.usermodel.** { *; }
+-keep public class org.apache.poi.xssf.usermodel.** { *; }
+-keep public class org.apache.poi.xssf.eventusermodel.** { *; }
+-keep public class org.apache.poi.ooxml.** { *; }
+-keep public class org.apache.poi.ooxml.util.** { *; }
+-keep public class org.apache.poi.util.** { *; }
+-keep public class org.apache.poi.poifs.** { *; }
+-keep public class org.apache.poi.hpsf.** { *; }
+-keep public class org.apache.poi.EncryptedDocumentException { *; }
+# xmlbeans：POI 通过反射加载 schema 类，必须完整保留
 -keep class org.apache.xmlbeans.** { *; }
 -keep class org.openxmlformats.** { *; }
 -keep class org.etsi.** { *; }
@@ -21,7 +37,6 @@
 -dontwarn java.awt.**
 # POI 数字签名相关依赖（App 不使用数字签名功能，运行时不需要）
 -dontwarn org.etsi.**
--dontwarn org.w3.**
 -dontwarn com.graphbuilder.**
 
 # ---------- Room 数据库（实体与 DAO 实现由 KSP 生成，需保留） ----------

@@ -80,6 +80,7 @@ import com.shangmentiyu.sportscoach.ui.training.TrainingPlanScreen
 import com.shangmentiyu.sportscoach.ui.operation.OperationScreen
 import com.shangmentiyu.sportscoach.ui.schedule.ScheduleScreen
 import com.shangmentiyu.sportscoach.update.UpdateInstaller
+import com.shangmentiyu.sportscoach.update.UpdateManager
 import com.shangmentiyu.sportscoach.update.UpdateProgressBus
 import kotlinx.coroutines.delay
 
@@ -185,6 +186,18 @@ fun SportsApp() {
         while (true) {
             settingsVm.refreshDesktopConnection()
             delay(5000L)
+        }
+    }
+
+    // === v34：App 启动时检查"待安装更新"持久化标志 ===
+    // 场景：App 在后台或被杀进程时，Worker 完成下载并发出通知
+    // 用户点击通知（现在只打开 App）或下次进入 App 时，必须触发 AlertDialog 询问
+    // 不持久化的话，进程重启后 UpdateProgressBus 状态丢失，弹窗永远不会出现
+    LaunchedEffect(Unit) {
+        val pendingVersion = UpdateManager.consumeUpdateReady(context)
+        if (pendingVersion != null) {
+            pendingInstallVersion = pendingVersion
+            showInstallDialog = true
         }
     }
 
@@ -618,8 +631,9 @@ fun SportsApp() {
                 confirmButton = {
                     TextButton(
                         onClick = {
-                            // 立即安装：触发系统安装界面
+                            // 立即安装：触发系统安装界面，清除待安装标志
                             showInstallDialog = false
+                            UpdateManager.clearUpdateReady(context)
                             runCatching { UpdateInstaller.installApk(context) }
                         }
                     ) {
@@ -629,8 +643,9 @@ fun SportsApp() {
                 dismissButton = {
                     TextButton(
                         onClick = {
-                            // 稍后：关闭弹窗，下次进入 App 再检测
+                            // 稍后：关闭弹窗，清除待安装标志（避免下次进入 App 又弹）
                             showInstallDialog = false
+                            UpdateManager.clearUpdateReady(context)
                         }
                     ) {
                         Text("稍后")
