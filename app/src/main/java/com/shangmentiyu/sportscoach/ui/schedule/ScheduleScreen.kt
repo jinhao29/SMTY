@@ -52,7 +52,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -62,13 +64,11 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shangmentiyu.sportscoach.data.model.Schedule
 import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
+import com.shangmentiyu.sportscoach.ui.components.BaseDarkCard
+import com.shangmentiyu.sportscoach.ui.components.DarkChip_LessonType
 import com.shangmentiyu.sportscoach.ui.operation.OperationViewModel
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconBlue
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconGreen
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconOrange
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconPink
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconPurple
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconTeal
+import com.shangmentiyu.sportscoach.ui.theme.CardOnDark
+import com.shangmentiyu.sportscoach.ui.theme.CardSubOnDark
 import com.shangmentiyu.sportscoach.ui.theme.IOSCard
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
@@ -624,17 +624,14 @@ private fun NoBalanceWarningBanner(
 }
 
 /**
- * Keep 风格日期选择条（v34 布局优化3 瘦身版）。
+ * v35 视觉重构：紫色胶囊日期选择条。
  *
- * === v34 布局优化3 ===
- * - 取消白色背景，直接平铺在浅灰底色上
- * - 每项改为胶囊形状（RoundedCornerShape(50) 完全胶囊）
+ * 设计要点（参考图1 排课日历）：
+ * - 胶囊形状（RoundedCornerShape(50) 完全胶囊）
  * - 未选中：浅灰背景（#E8E8EB），次级灰色文字
- * - 选中：珊瑚橙边框（1dp）+ 浅珊瑚橙底色（alpha 0.10）+ 珊瑚橙文字
- *   不再用大块橙色实心背景，整体视觉更轻量
- * - 缩小垂直 padding（10→6），减小顶部整体高度
- *
- * 横向滚动，每项显示周几 + 日期（MM-dd）。
+ * - 选中：实心紫色 #6C5CE7 背景 + 白色文字（取消 border，改用纯色背景）
+ * - 极简风格，无 border，仅依赖背景色区隔选中态
+ * - 横向滚动，每项显示周几 + 日期（MM-dd）
  */
 @Composable
 private fun DaySelector(
@@ -664,14 +661,9 @@ private fun DaySelector(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
                     .clip(capsuleShape)
-                    .border(
-                        width = if (isSelected) 1.dp else 0.dp,
-                        color = if (isSelected) appPrimary() else Color.Transparent,
-                        shape = capsuleShape
-                    )
                     .clickable { onDaySelected(day.dayOfWeek) }
                     .background(
-                        if (isSelected) appPrimary().copy(alpha = 0.10f)
+                        if (isSelected) appPrimary()
                         else Color(0xFFE8E8EB),
                         capsuleShape
                     )
@@ -681,14 +673,14 @@ private fun DaySelector(
                     text = displayDayName,
                     fontSize = 12.sp,
                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                    color = if (isSelected) appPrimary() else appOnSurface().copy(alpha = 0.7f)
+                    color = if (isSelected) Color.White else appOnSurface().copy(alpha = 0.7f)
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = day.dateLabel,
                     fontSize = 12.sp,
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                    color = if (isSelected) appPrimary() else appOnSurface().copy(alpha = 0.9f)
+                    color = if (isSelected) Color.White else appOnSurface().copy(alpha = 0.9f)
                 )
             }
         }
@@ -696,16 +688,16 @@ private fun DaySelector(
 }
 
 /**
- * Keep 风格课程卡片（v34 布局优化版）。
+ * v36 视觉重构：课程卡片（深色卡 #1C1C1E + 20dp 圆角 + 浅紫胶囊标签）。
  *
- * === v34 布局优化 ===
- * - 删除左侧独立的"09:00"和"10:00 结束"列，将上课时间段（如 09:00-10:00）
- *   直接放入卡片内学员姓名上方，使用较小号的次级灰色文字（#6B6B6B）
- * - 删除卡片左侧的垂直橙色装饰竖线，让信息密度更紧凑
- * - 卡片内信息排布改为两行：
- *   第一行（粗体）：学员姓名 + 课时类型胶囊标签（最右侧）
- *   第二行（次级灰色，同一行内）：60分钟 · 地点 · 教练：李
- * - "训练课"标签改为浅色背景 + 珊瑚橙文字的胶囊形状
+ * 设计要点（基于学员列表最新截图确立的全局 UI 标准）：
+ * - 卡片背景：深色 #1C1C1E（[BaseDarkCard]）
+ * - 20dp 大圆角 + 极柔和阴影
+ * - 无 border，仅依赖阴影与深色背景区隔
+ * - 时间段（如 09:00-10:00）：浅灰 #A0A0A5（[CardSubOnDark]）
+ * - 学员姓名：纯白 #FFFFFF 粗体（[CardOnDark]）
+ * - 课时类型胶囊：深紫底 + 浅紫字（[DarkChip_LessonType]）
+ * - 元信息（60分钟 · 地点 · 教练）：浅灰 #A0A0A5
  *
  * 交互：
  * - 点击：进入编辑（过去日期禁用）
@@ -730,26 +722,21 @@ private fun KeepScheduleCard(
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
-    val accentColor = scheduleColor(schedule.color)
     // === Bug 修复3：过去日期叠加 0.4f 透明度，与 isActive=false 的 0.5f 叠加 ===
     val baseAlpha = if (schedule.isActive) 1f else 0.5f
     val pastAlpha = if (isPastDate) 0.4f else 1f
     val inactiveAlpha = baseAlpha * pastAlpha
 
-    // === v34：单卡片结构（无左侧时间列、无装饰竖线）===
-    // 上方一行时间段（如 09:00-10:00）+ 右侧"已过去"角标
-    // 下方白色圆角卡片：第一行学员名 + 课时类型胶囊；第二行 60分钟 · 地点 · 教练
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(appSurface())
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick
-            )
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+    // === v36：深色卡 + 20dp 圆角 + 无 border ===
+    // 卡片内信息排布：
+    // 第一行：时间段（浅灰 #A0A0A5）+ 右侧"已过去"角标
+    // 第二行：学员名（白色粗体）+ 课时类型胶囊（浅紫底紫字）
+    // 第三行：60分钟 · 地点 · 教练（浅灰 #A0A0A5）
+    BaseDarkCard(
+        modifier = Modifier.combinedClickable(
+            onClick = onClick,
+            onLongClick = onLongClick
+        ).graphicsLayer { alpha = inactiveAlpha }
     ) {
         // === 第一行：时间段 + 过去角标 ===
         Row(
@@ -757,12 +744,12 @@ private fun KeepScheduleCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // 时间段（09:00-10:00），较小号次级灰色（#6B6B6B）
+            // 时间段（09:00-10:00），浅灰 #A0A0A5
             Text(
                 text = "${schedule.startTime}-${schedule.endTime()}",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
-                color = Color(0xFF6B6B6B).copy(alpha = pastAlpha),
+                color = CardSubOnDark,
                 maxLines = 1
             )
             // === Bug 修复3：过去日期角标 ===
@@ -770,18 +757,20 @@ private fun KeepScheduleCard(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(4.dp))
-                        .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                        .background(CardSubOnDark.copy(alpha = 0.2f))
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Text(
                         text = "已过去",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.outline
+                        color = CardSubOnDark
                     )
                 }
             }
         }
+
+        Spacer(Modifier.height(6.dp))
 
         // === 第二行：学员名 + 课时类型胶囊（最右侧）===
         Row(
@@ -789,43 +778,31 @@ private fun KeepScheduleCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
+            // 学员姓名：纯白 #FFFFFF 粗体
             Text(
                 text = schedule.studentName,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
-                color = appOnSurface().copy(alpha = inactiveAlpha),
+                color = CardOnDark,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, fill = false)
             )
             if (schedule.lessonType.isNotBlank()) {
                 Spacer(Modifier.width(Spacing.sm))
-                // === v34：浅色背景 + 珊瑚橙文字胶囊 ===
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(accentColor.copy(alpha = 0.12f))
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
-                ) {
-                    Text(
-                        text = schedule.lessonType,
-                        fontSize = 11.sp,
-                        color = accentColor.copy(alpha = inactiveAlpha),
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1
-                    )
-                }
+                // === v36：浅紫底紫字胶囊 ===
+                DarkChip_LessonType(text = schedule.lessonType)
             }
         }
 
-        // === 第三行：60分钟 · 地点 · 教练：李 ===
-        // 同一行内用中点分隔，次级灰色
+        Spacer(Modifier.height(6.dp))
+
+        // === 第三行：60分钟 · 地点 · 教练（浅灰 #A0A0A5）===
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
         ) {
-            // 用 buildAnnotatedString 拼接，确保同一行
             val metaText = buildString {
                 append("${schedule.durationMinutes}分钟")
                 if (schedule.location.isNotBlank()) {
@@ -844,7 +821,7 @@ private fun KeepScheduleCard(
             Text(
                 text = metaText,
                 fontSize = 12.sp,
-                color = appOutline().copy(alpha = pastAlpha),
+                color = CardSubOnDark,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -862,19 +839,6 @@ private fun weekRangeText(weekStart: Date): String {
     val start = weekStart.toInstant().atZone(zone).toLocalDate()
     val end = start.plusDays(6)
     return "${start.format(fmt)} ~ ${end.format(fmt)}"
-}
-
-/**
- * 将 Schedule.color 字符串映射为 Color。
- */
-private fun scheduleColor(colorKey: String): Color = when (colorKey) {
-    "blue" -> FeatureIconBlue
-    "green" -> FeatureIconGreen
-    "orange" -> FeatureIconOrange
-    "purple" -> FeatureIconPurple
-    "pink" -> FeatureIconPink
-    "teal" -> FeatureIconTeal
-    else -> FeatureIconBlue
 }
 
 /**

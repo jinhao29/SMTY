@@ -72,9 +72,9 @@ import com.shangmentiyu.sportscoach.ui.score.ScoreScreen
 import com.shangmentiyu.sportscoach.ui.settings.SettingsScreen
 import com.shangmentiyu.sportscoach.ui.settings.SettingsViewModel
 import com.shangmentiyu.sportscoach.ui.summary.SummaryScreen
-import com.shangmentiyu.sportscoach.ui.theme.DarkOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.FeatureIconPurple
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
+import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appSurface
 import com.shangmentiyu.sportscoach.ui.training.TrainingPlanScreen
 import com.shangmentiyu.sportscoach.ui.operation.OperationScreen
@@ -240,6 +240,10 @@ fun SportsApp() {
         },
         bottomBar = {
             if (showBottomBar) {
+                // v35 视觉重构：底部导航栏（纯色 + 无分割线 + 无 border）
+                // - 选中：紫色 #6C5CE7
+                // - 未选中：浅灰（主题感知，亮色 #8E8E93 / 暗色 #9E9E9E）
+                // - 取消橙色分割线，仅依赖 tonalElevation=0 + 纯色背景
                 NavigationBar(
                     containerColor = appSurface(),
                     tonalElevation = 0.dp
@@ -258,16 +262,12 @@ fun SportsApp() {
                                 }
                             },
                             // === v28 优化6：主页 Tab 增加动态 Badge 角标 ===
-                            // - 未签到数 > 0：显示数字角标（强提示教练今日还有课未签到）
-                            // - 仅有今日排课但已全部签到：显示小圆点（提示今日有课已处理完）
-                            // - 无今日排课：不显示任何角标
                             icon = {
                                 if (item.route == Routes.HOME) {
                                     BadgedBox(
                                         badge = {
                                             when {
                                                 unsignedTodayCount > 0 -> {
-                                                    // 数字角标：未签到的课程数
                                                     Badge {
                                                         Text(
                                                             text = unsignedTodayCount.coerceAtMost(99).toString()
@@ -275,7 +275,6 @@ fun SportsApp() {
                                                     }
                                                 }
                                                 hasTodayScheduleBadge -> {
-                                                    // 小圆点：今日有排课但已全部签到
                                                     Badge()
                                                 }
                                             }
@@ -289,10 +288,13 @@ fun SportsApp() {
                             },
                             label = { Text(item.label) },
                             colors = NavigationBarItemDefaults.colors(
+                                // v35：选中紫色 #6C5CE7
                                 selectedIconColor = FeatureIconPurple,
                                 selectedTextColor = FeatureIconPurple,
-                                unselectedIconColor = DarkOnSurfaceVariant,
-                                unselectedTextColor = DarkOnSurfaceVariant,
+                                // v35：未选中浅灰（主题感知）
+                                unselectedIconColor = appOnSurfaceVariant(),
+                                unselectedTextColor = appOnSurfaceVariant(),
+                                // 取消选中指示器背景（纯色风格）
                                 indicatorColor = Color.Transparent
                             )
                         )

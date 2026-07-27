@@ -56,46 +56,46 @@ val Typography = Typography(
         fontSize = 22.sp,
         lineHeight = 28.sp
     ),
-    // headlineSmall → Headline（列表项主标题）
+    // headlineSmall → Headline（列表项主标题）—— v35 视觉重构：16sp 标题
     headlineSmall = TextStyle(
         fontWeight = FontWeight.SemiBold,
-        fontSize = 17.sp,
+        fontSize = 16.sp,
         lineHeight = 22.sp
     ),
-    // titleLarge → Navigation Bar Title
+    // titleLarge → Navigation Bar Title —— v35：16sp
     titleLarge = TextStyle(
         fontWeight = FontWeight.SemiBold,
-        fontSize = 17.sp,
+        fontSize = 16.sp,
         lineHeight = 22.sp
     ),
-    // titleMedium → Headline 备用
+    // titleMedium → Headline 备用 —— v35：16sp 标题统一
     titleMedium = TextStyle(
         fontWeight = FontWeight.SemiBold,
-        fontSize = 17.sp,
+        fontSize = 16.sp,
         lineHeight = 22.sp
     ),
-    // titleSmall → Subheadline Bold
+    // titleSmall → Subheadline Bold —— v35：14sp 副标题
     titleSmall = TextStyle(
         fontWeight = FontWeight.Medium,
-        fontSize = 15.sp,
+        fontSize = 14.sp,
         lineHeight = 20.sp
     ),
-    // bodyLarge → Body
+    // bodyLarge → Body —— v35：16sp
     bodyLarge = TextStyle(
         fontWeight = FontWeight.Normal,
-        fontSize = 17.sp,
+        fontSize = 16.sp,
         lineHeight = 22.sp
     ),
-    // bodyMedium → Callout
+    // bodyMedium → Callout —— v35：16sp
     bodyMedium = TextStyle(
         fontWeight = FontWeight.Normal,
         fontSize = 16.sp,
         lineHeight = 21.sp
     ),
-    // bodySmall → Subheadline（列表项副文字）
+    // bodySmall → Subheadline（列表项副文字）—— v35：14sp 副标题统一
     bodySmall = TextStyle(
         fontWeight = FontWeight.Normal,
-        fontSize = 15.sp,
+        fontSize = 14.sp,
         lineHeight = 20.sp
     ),
     // labelLarge → Button Text
