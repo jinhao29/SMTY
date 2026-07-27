@@ -272,10 +272,41 @@ class SettingsViewModel(
     }
 
     /**
+     * === v24 优化3：统一进度状态（与 ProgressDialog 配合）===
+     *
+     * 桥接 [ExportProgress] 与 [BackupProgress]：在两者变化时同步更新此 StateFlow，
+     * 使 UI 层只需订阅一个 [progressState] 即可展示统一的 [com.shangmentiyu.sportscoach.ui.theme.ProgressDialog]。
+     *
+     * - 进行中：弹出 ProgressDialog，禁用返回，显示进度文案/百分比
+     * - 完成：显示"完成"文案 1.5s 后自动消失（UI 层用 LaunchedEffect 控制）
+     * - 失败：以完成态展示错误文案（文案本身已含错误信息）
+     *
+     * === v34 修复 NPE ===
+     * 之前问题：`_progressState` 声明在 `init` 块之后，但 `init` 块内启动的协程
+     *   会在 `_progressState` 初始化前被调度执行 → `_progressState.value = ...` 抛 NPE：
+     *   "Attempt to invoke interface method 'void kotlinx.coroutines.flow.MutableStateFlow.setValue'"
+     * 修复：将 `_progressState` 与 `progressState` 的声明移到 `init` 块之前，
+     *   保证 `init` 块执行时 `_progressState` 已完成初始化。
+     * 参考 Kotlin 属性初始化顺序：主构造函数 → 属性初始化（按声明顺序）→ init 块
+     */
+    private val _progressState = MutableStateFlow(ProgressState.Idle)
+    val progressState: StateFlow<ProgressState> = _progressState.asStateFlow()
+
+    /** UI 消费了进度事件后调用，重置为 Idle（关闭 ProgressDialog） */
+    fun consumeProgressState() {
+        _progressState.value = ProgressState.Idle
+    }
+
+    /**
      * === v24 优化3：自动收集 ExportProgress / BackupProgress 变化并桥接到 progressState ===
      *
      * 通过 init block 在 viewModelScope 中订阅两个内部 StateFlow，
      * 任一变化时同步映射到统一 [progressState]，UI 层只需订阅一个 StateFlow 即可。
+     *
+     * === v34 修复 NPE：必须放在 _progressState 声明之后 ===
+     * Kotlin 的 init 块在主构造函数后、按声明顺序执行的属性初始化之后执行。
+     * 但 init 块内启动的协程是异步的，可能被立即调度执行。
+     * 如果 _progressState 还没初始化（声明在 init 之后），协程就会读到 null。
      */
     init {
         safeLaunch {
@@ -288,24 +319,6 @@ class SettingsViewModel(
                 syncProgressFromBackup(p)
             }
         }
-    }
-
-    /**
-     * === v24 优化3：统一进度状态（与 ProgressDialog 配合）===
-     *
-     * 桥接 [ExportProgress] 与 [BackupProgress]：在两者变化时同步更新此 StateFlow，
-     * 使 UI 层只需订阅一个 [progressState] 即可展示统一的 [com.shangmentiyu.sportscoach.ui.theme.ProgressDialog]。
-     *
-     * - 进行中：弹出 ProgressDialog，禁用返回，显示进度文案/百分比
-     * - 完成：显示"完成"文案 1.5s 后自动消失（UI 层用 LaunchedEffect 控制）
-     * - 失败：以完成态展示错误文案（文案本身已含错误信息）
-     */
-    private val _progressState = MutableStateFlow(ProgressState.Idle)
-    val progressState: StateFlow<ProgressState> = _progressState.asStateFlow()
-
-    /** UI 消费了进度事件后调用，重置为 Idle（关闭 ProgressDialog） */
-    fun consumeProgressState() {
-        _progressState.value = ProgressState.Idle
     }
 
     /** 内部工具：将 ExportProgress 同步映射到统一 ProgressState */

@@ -86,6 +86,7 @@ import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
 import com.shangmentiyu.sportscoach.update.UpdateManager
 import com.shangmentiyu.sportscoach.update.UpdateResult
 import com.shangmentiyu.sportscoach.BuildConfig
+import com.shangmentiyu.sportscoach.util.CrashDumper
 import kotlinx.coroutines.launch
 import com.shangmentiyu.sportscoach.ui.theme.FeatureIconBlue
 import com.shangmentiyu.sportscoach.ui.theme.FeatureIconGreen
@@ -133,7 +134,14 @@ fun SettingsScreen() {
     val pendingLanPlan by vm.pendingLanPlan.collectAsState()
     val lanPlanSyncing by vm.lanPlanSyncing.collectAsState()
     // 进入设置页时主动刷新一次，确保从通知点击进入时立即显示待同步信息
-    LaunchedEffect(Unit) { vm.refreshPendingLanPlan() }
+    // === v34：包裹 try-catch，避免初始化阶段抛 NPE ===
+    LaunchedEffect(Unit) {
+        try {
+            vm.refreshPendingLanPlan()
+        } catch (e: Exception) {
+            CrashDumper.dumpBoth(context, "SettingsScreen.LaunchedEffect.refreshPendingLanPlan", e)
+        }
+    }
 
     // === v24 优化3：统一进度对话框（导出/备份/恢复全程显示）===
     val progressState by vm.progressState.collectAsState()
@@ -152,7 +160,14 @@ fun SettingsScreen() {
     val signPhotosSize by vm.signPhotosSize.collectAsState()
     val signPhotosCount by vm.signPhotosCount.collectAsState()
     val cleanableCount by vm.cleanableCount.collectAsState()
-    LaunchedEffect(Unit) { vm.scanSignPhotos() }
+    // === v34：包裹 try-catch，扫描失败也不弹 NPE 黑色提示 ===
+    LaunchedEffect(Unit) {
+        try {
+            vm.scanSignPhotos()
+        } catch (e: Exception) {
+            CrashDumper.dumpBoth(context, "SettingsScreen.LaunchedEffect.scanSignPhotos", e)
+        }
+    }
 
     // === v29 优化3：缓存管理（孤立照片 + 临时缓存） ===
     // 进入设置页时自动扫描一次孤立照片与缓存目录占用，让用户直观感知可清理空间
@@ -160,9 +175,14 @@ fun SettingsScreen() {
     val orphanPhotoSize by vm.orphanPhotoSize.collectAsState()
     val cacheSize by vm.cacheSize.collectAsState()
     val cacheFileCount by vm.cacheFileCount.collectAsState()
+    // === v34：包裹 try-catch，扫描失败也不弹 NPE 黑色提示 ===
     LaunchedEffect(Unit) {
-        vm.scanOrphanPhotos()
-        vm.scanCacheSize()
+        try {
+            vm.scanOrphanPhotos()
+            vm.scanCacheSize()
+        } catch (e: Exception) {
+            CrashDumper.dumpBoth(context, "SettingsScreen.LaunchedEffect.scanOrphanCache", e)
+        }
     }
 
     // 检查更新协程作用域：用于同步检查更新的协程启动
@@ -190,47 +210,82 @@ fun SettingsScreen() {
     var pendingImportStrategy by remember { mutableStateOf<ImportStrategy?>(null) }
 
     // 文件选择器（SAF 目录选择，直接传递 Uri 给 ViewModel）
+    // === v34：所有 launcher 回调加 try-catch 兜底，防止 NPE 直接弹"操作遇到异常" ===
+    // 真实堆栈通过 CrashDumper 输出到 Logcat + crash_logs 文件夹
     val exportDirLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
-        uri?.let {
+        try {
+            if (uri == null) {
+                // 用户取消选择，静默处理
+                return@rememberLauncherForActivityResult
+            }
             // 持久化读写权限，避免下次选择目录后丢失访问权
-            context.contentResolver.takePersistableUriPermission(
-                it,
-                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                    android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-            )
-            vm.exportTodayRecords(it)
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                        android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            }
+            vm.exportTodayRecords(uri)
+        } catch (e: Exception) {
+            CrashDumper.dumpBoth(context, "SettingsScreen.exportDirLauncher", e)
+            Toast.makeText(
+                context,
+                "导出路径异常，请检查存储空间权限",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
     val exportArchiveLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
-        uri?.let {
-            context.contentResolver.takePersistableUriPermission(
-                it,
-                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                    android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-            )
-            vm.exportScoresArchive(it)
+        try {
+            if (uri == null) return@rememberLauncherForActivityResult
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                        android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            }
+            vm.exportScoresArchive(uri)
+        } catch (e: Exception) {
+            CrashDumper.dumpBoth(context, "SettingsScreen.exportArchiveLauncher", e)
+            Toast.makeText(
+                context,
+                "导出档案异常，请检查存储权限",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
     val importDirLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
-        uri?.let {
-            context.contentResolver.takePersistableUriPermission(
-                it,
-                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                    android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-            )
+        try {
+            if (uri == null) return@rememberLauncherForActivityResult
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                        android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            }
             // v25 优化4：按用户已选择的策略导入，未选则默认 APPEND（向后兼容）
             val strategy = pendingImportStrategy ?: ImportStrategy.APPEND
-            vm.importStudentsWithStrategy(it, strategy)
+            vm.importStudentsWithStrategy(uri, strategy)
             // 用完即清，避免下次误用旧选择
             pendingImportStrategy = null
+        } catch (e: Exception) {
+            CrashDumper.dumpBoth(context, "SettingsScreen.importDirLauncher", e)
+            Toast.makeText(
+                context,
+                "导入学员异常，请检查档案文件是否可读",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
@@ -239,7 +294,17 @@ fun SettingsScreen() {
     val backupFileLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/zip")
     ) { uri: Uri? ->
-        uri?.let { vm.backupData(it) }
+        try {
+            if (uri == null) return@rememberLauncherForActivityResult
+            vm.backupData(uri)
+        } catch (e: Exception) {
+            CrashDumper.dumpBoth(context, "SettingsScreen.backupFileLauncher", e)
+            Toast.makeText(
+                context,
+                "备份失败，请检查存储空间是否充足",
+                Toast.LENGTH_LONG
+            ).show()
+        }
     }
 
     // 恢复文件选择器：使用 SAF OpenDocument 让用户选择 .smty_backup 备份文件
@@ -247,15 +312,23 @@ fun SettingsScreen() {
     val restoreFileLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
-        uri?.let {
+        try {
+            if (uri == null) return@rememberLauncherForActivityResult
             // 持久化读权限，避免下次选择时丢失访问权
             runCatching {
                 context.contentResolver.takePersistableUriPermission(
-                    it,
+                    uri,
                     android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
                 )
             }
-            vm.restoreData(it)
+            vm.restoreData(uri)
+        } catch (e: Exception) {
+            CrashDumper.dumpBoth(context, "SettingsScreen.restoreFileLauncher", e)
+            Toast.makeText(
+                context,
+                "恢复文件异常，请检查备份文件是否损坏",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
@@ -471,12 +544,22 @@ fun SettingsScreen() {
                             },
                             showTopDivider = false,
                             onClick = {
-                                if (!lanPlanSyncing) {
-                                    if (pendingLanPlan != null) {
-                                        vm.syncLanPlanImage()
-                                    } else {
-                                        vm.updateStatus("暂无待同步的电脑端截图，请先在电脑端点击\"截图发送到手机\"")
+                                // === v34：包裹 try-catch，避免同步过程中 NPE 弹黑色提示 ===
+                                try {
+                                    if (!lanPlanSyncing) {
+                                        if (pendingLanPlan != null) {
+                                            vm.syncLanPlanImage()
+                                        } else {
+                                            vm.updateStatus("暂无待同步的电脑端截图，请先在电脑端点击\"截图发送到手机\"")
+                                        }
                                     }
+                                } catch (e: Exception) {
+                                    CrashDumper.dumpBoth(context, "SettingsScreen.syncLanPlan", e)
+                                    Toast.makeText(
+                                        context,
+                                        "同步电脑端截图失败，请检查网络与电脑端服务",
+                                        Toast.LENGTH_LONG
+                                    ).show()
                                 }
                             }
                         )
@@ -511,7 +594,14 @@ fun SettingsScreen() {
                 IosSectionWrapper(text = "训练动作积木库") {
                     IosGroupedListCard {
                         val exerciseBlocks by vm.exerciseBlocks.collectAsState()
-                        LaunchedEffect(Unit) { vm.loadExerciseBlocks() }
+                    // === v34：包裹 try-catch，加载积木库失败也不弹 NPE 黑色提示 ===
+                    LaunchedEffect(Unit) {
+                        try {
+                            vm.loadExerciseBlocks()
+                        } catch (e: Exception) {
+                            CrashDumper.dumpBoth(context, "SettingsScreen.LaunchedEffect.loadExerciseBlocks", e)
+                        }
+                    }
 
                         // 信息展示行：积木库说明与当前数量
                         Row(
@@ -1227,20 +1317,32 @@ fun SettingsScreen() {
                                 // 失败时携带 HTTP 状态码等错误信息，便于诊断
                                 // （如私有仓库 404、网络异常等）
                                 vm.updateStatus("正在检查更新…")
+                                // === v34：包裹 try-catch，避免 checkScope.launch 内异常
+                                // 被 appExceptionHandler 捕获后弹"操作遇到异常 (NullPointerException)" ===
                                 checkScope.launch {
-                                    val result = UpdateManager.checkNowSync()
-                                    val msg = when (result) {
-                                        is UpdateResult.UpToDate ->
-                                            "已是最新版本 (v${BuildConfig.VERSION_NAME})"
-                                        is UpdateResult.NewVersionAvailable ->
-                                            "发现新版本 ${result.tagName}，正在后台下载，下载完成后会弹出通知"
-                                        is UpdateResult.Error ->
-                                            "检查失败：${result.message}"
-                                    }
-                                    vm.updateStatus(msg)
-                                    // 若有新版本，触发后台下载（沿用原 WorkManager 流程）
-                                    if (result is UpdateResult.NewVersionAvailable) {
-                                        UpdateManager.checkNow(context)
+                                    try {
+                                        val result = UpdateManager.checkNowSync()
+                                        val msg = when (result) {
+                                            is UpdateResult.UpToDate ->
+                                                "已是最新版本 (v${BuildConfig.VERSION_NAME})"
+                                            is UpdateResult.NewVersionAvailable ->
+                                                "发现新版本 ${result.tagName}，正在后台下载，下载完成后会弹出通知"
+                                            is UpdateResult.Error ->
+                                                "检查失败：${result.message}"
+                                        }
+                                        vm.updateStatus(msg)
+                                        // 若有新版本，触发后台下载（沿用原 WorkManager 流程）
+                                        if (result is UpdateResult.NewVersionAvailable) {
+                                            UpdateManager.checkNow(context)
+                                        }
+                                    } catch (e: Exception) {
+                                        CrashDumper.dumpBoth(
+                                            context,
+                                            "SettingsScreen.checkUpdate",
+                                            e,
+                                            extraContext = "versionName=${BuildConfig.VERSION_NAME}"
+                                        )
+                                        vm.updateStatus("检查更新失败：${e.message ?: e.javaClass.simpleName}")
                                     }
                                 }
                             }
@@ -1253,10 +1355,20 @@ fun SettingsScreen() {
                             subtitle = "若已下载新版本 APK，点击此处直接安装",
                             showTopDivider = true,
                             onClick = {
-                                if (UpdateManager.hasDownloadedApk(context)) {
-                                    UpdateManager.installUpdate(context)
-                                } else {
-                                    vm.updateStatus("暂无已下载的更新文件，请先检查更新")
+                                // === v34：包裹 try-catch，避免 installApk 异常导致弹 NPE 黑色提示 ===
+                                try {
+                                    if (UpdateManager.hasDownloadedApk(context)) {
+                                        UpdateManager.installUpdate(context)
+                                    } else {
+                                        vm.updateStatus("暂无已下载的更新文件，请先检查更新")
+                                    }
+                                } catch (e: Exception) {
+                                    CrashDumper.dumpBoth(context, "SettingsScreen.installUpdate", e)
+                                    Toast.makeText(
+                                        context,
+                                        "安装失败：APK 文件可能已损坏，请重新下载",
+                                        Toast.LENGTH_LONG
+                                    ).show()
                                 }
                             }
                         )
