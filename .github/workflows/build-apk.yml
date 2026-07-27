@@ -23,11 +23,35 @@ jobs:
         uses: actions/checkout@v5
 
       - name: 配置 JDK 17
+        # 关闭内置 cache: gradle，改用下方显式 actions/cache@v4 做更细粒度的缓存
+        # 内置缓存只缓存 ~/.gradle/caches，无法缓存 wrapper/dists 解压目录
         uses: actions/setup-java@v5
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: gradle
+
+      - name: 缓存 Gradle 依赖与 Wrapper 发行版
+        # 使用 actions/cache@v4 显式缓存 Gradle 关键目录，加速构建
+        # 目标：从 8 分钟压缩到 3 分钟以内
+        #
+        # 缓存路径说明：
+        # 1. ~/.gradle/caches/modules-2 —— 依赖包（Maven/Google 仓库下载的 AAR/JAR）
+        # 2. ~/.gradle/wrapper/dists —— Gradle wrapper 解压后的发行版（避免每次重新解压 zip）
+        # 3. ~/.gradle/caches/transforms-3 —— AGP 转换缓存（编译时生成的变换产物）
+        # 4. ~/.gradle/caches/jars-9 —— Gradle 插件 jar 缓存
+        #
+        # 缓存命中策略：
+        # - key：依赖配置 + Gradle 版本 + Gradle 文件指纹（build.gradle.kts / libs.versions.toml 等）
+        #   依赖变化时自动新建缓存分支
+        # - restore-keys：宽松 fallback，允许部分命中（仅依赖变化但 Gradle 版本未变时复用大部分缓存）
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', '**/gradle.properties', '**/libs.versions.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
 
       - name: 授予 gradlew 执行权限
         run: chmod +x ./gradlew
@@ -101,7 +125,19 @@ jobs:
         # 通过 GITHUB_ENV 注入的 VERSION_CODE / VERSION_NAME 会被 build.gradle.kts 自动读取
         # 无需通过 -P 参数或 sed 替换，环境变量自动生效
         # --no-configuration-cache：避免 Version Catalog + KSP 在配置缓存下的兼容性问题
-        run: ./gradlew assembleRelease --no-daemon --stacktrace --no-configuration-cache
+        # --build-cache：启用 Gradle Build Cache，配合 actions/cache@v4 实现跨 run 复用编译产物
+        run: ./gradlew assembleRelease --no-daemon --stacktrace --no-configuration-cache --build-cache
+
+      - name: 清理 Gradle 缓存中的临时文件
+        # 避免缓存膨胀：移除构建过程中产生的临时/锁文件，仅保留可复用部分
+        # 这些文件如果被缓存，下次命中时反而会引发"缓存损坏"错误
+        if: always()
+        run: |
+          rm -f ~/.gradle/caches/modules-2/*.lock
+          rm -f ~/.gradle/caches/modules-2/gc.properties
+          rm -rf ~/.gradle/caches/transforms-3/*/locks
+          rm -rf ~/.gradle/caches/journal-1
+          echo "已清理 Gradle 缓存锁文件"
 
       - name: 上传 APK 构建产物
         # 保留 build artifact 便于调试和检查（与 Release 中的 APK 路径一致，无冲突）
