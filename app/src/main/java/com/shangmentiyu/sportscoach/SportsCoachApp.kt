@@ -7,6 +7,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import com.shangmentiyu.sportscoach.core.AutoBackupScheduler
 import com.shangmentiyu.sportscoach.core.CrashHandler
+import com.shangmentiyu.sportscoach.core.PreUpdateBackupManager
 import com.shangmentiyu.sportscoach.core.ScheduleReminderManager
 import com.shangmentiyu.sportscoach.core.UdpDesktopDiscoveryService
 import com.shangmentiyu.sportscoach.core.UdpPlanListenerService
@@ -39,6 +40,18 @@ import kotlinx.coroutines.withContext
 class SportsCoachApp : Application() {
     override fun onCreate() {
         super.onCreate()
+
+        // === 终极防丢机制：启动前避风港备份 ===
+        // 必须在所有其他初始化之前执行（包括 CrashHandler）。
+        // 即使后续 CrashHandler install 失败、Room 打开数据库失败、App 闪退，
+        // 也已有一份"启动前"的完整数据库文件可从 filesDir/PreUpdateBackup/ 恢复。
+        //
+        // 特点：
+        // - 同步执行，确保备份完成后再进入其他初始化
+        // - 失败仅记录日志，不抛异常，不阻塞 App 启动
+        // - 保留最近 3 份，超出自动清理最旧文件夹
+        runCatching { PreUpdateBackupManager.backupIfDbExists(this) }
+
         // 1. 全局崩溃捕获：最早安装，覆盖后续所有线程
         //    - 同步落盘崩溃堆栈到 filesDir/crash_logs/
         //    - 透传给系统默认 Handler，不改变原有崩溃流程

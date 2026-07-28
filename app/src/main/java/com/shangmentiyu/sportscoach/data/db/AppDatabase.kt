@@ -807,16 +807,31 @@ abstract class AppDatabase : RoomDatabase() {
 
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
+                // === 终极防丢机制：打开数据库前先做启动前避风港备份 + 版本检查 ===
+                // 必须在 Room.databaseBuilder().build() 之前执行：
+                // 1. backupIfDbExists：复制当前 db 文件到 filesDir/PreUpdateBackup/，保留最近 3 份
+                // 2. checkVersionAndEmergencyBackup：若 db 文件版本 > 代码版本（降级场景），
+                //    生成急救备份并抛 RuntimeException 让 App 闪退，避免 Room 清库
+                // 这两步确保即使后续 Room 打开失败，也有一份"启动前"的完整数据库可恢复
+                com.shangmentiyu.sportscoach.core.PreUpdateBackupManager
+                    .backupIfDbExists(context.applicationContext)
+                com.shangmentiyu.sportscoach.core.PreUpdateBackupManager
+                    .checkVersionAndEmergencyBackup(context.applicationContext, DATABASE_VERSION)
+
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "sports_coach_db"
+                    DATABASE_NAME
                 )
                     .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25, MIGRATION_25_26, MIGRATION_26_27)
                     .addCallback(DB_CALLBACK)
-                    // 仅在降级（用户从高版本回滚到低版本）时清库重建；
-                    // 升级路径必须通过显式 Migration 完成，避免迁移失败时误删学员数据。
-                    .fallbackToDestructiveMigrationOnDowngrade()
+                    // === 终极防丢机制：严禁任何破坏性清库 fallback ===
+                    // 历史教训：fallbackToDestructiveMigrationOnDowngrade() 在数据库文件版本
+                    // 大于代码版本时，会直接删除整个数据库重建，导致学员数据全部丢失。
+                    // 现在移除所有 destructive fallback：
+                    // - 升级无 migration → Room 抛 IllegalStateException（App 闪退，数据不丢）
+                    // - 降级 → Room 抛 IllegalStateException（App 闪退，数据不丢）
+                    // 启动前的避风港备份已确保即使闪退，数据也可从 filesDir/PreUpdateBackup/ 恢复
                     .build()
                 INSTANCE = instance
                 instance
@@ -861,5 +876,15 @@ abstract class AppDatabase : RoomDatabase() {
          * Room 默认会在 databasePath 下生成 <dbName>、<dbName>-wal、<dbName>-shm 三个文件。
          */
         const val DATABASE_NAME = "sports_coach_db"
+
+        /**
+         * 当前代码声明的数据库版本（与 @Database version 保持一致）。
+         *
+         * 用于在 [com.shangmentiyu.sportscoach.core.PreUpdateBackupManager.checkVersionAndEmergencyBackup]
+         * 中与数据库文件实际版本对比，检测降级场景。
+         *
+         * 修改 @Database version 时必须同步修改此常量，否则版本检查会失效。
+         */
+        private const val DATABASE_VERSION = 27
     }
 }
