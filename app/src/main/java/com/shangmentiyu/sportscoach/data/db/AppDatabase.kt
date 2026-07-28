@@ -25,7 +25,7 @@ import com.shangmentiyu.sportscoach.data.model.TrainingCycle
 
 @Database(
     entities = [Student::class, Lesson::class, LessonPackage::class, Coach::class, Schedule::class, ParentReport::class, TrainingCycle::class, BodyMetricHistory::class, ScheduleMemory::class, DietTemplateEntity::class, StudentDietRecord::class, StudentFts::class, ArchivedLesson::class, AuditLogEntity::class, PlanImage::class],
-    version = 26,
+    version = 27,
     exportSchema = false
 )
 @TypeConverters(com.shangmentiyu.sportscoach.data.model.Converters::class)
@@ -766,6 +766,34 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
+         * v26 → v27：为 lessons 和 schedules 表添加查询索引（任务2 性能调优）。
+         *
+         * 新增索引：
+         * - lessons.studentId（单列）→ idx_lessons_student_id
+         * - lessons.studentId + date（复合）→ idx_lessons_student_id_date
+         * - schedules.studentId → idx_schedules_student_id
+         * - schedules.studentName → idx_schedules_student_name
+         * - schedules.startDate → idx_schedules_start_date
+         * - schedules.dayOfWeek → idx_schedules_day_of_week
+         * - schedules.studentId + dayOfWeek → idx_schedules_student_day
+         *
+         * 注意：CREATE INDEX IF NOT EXISTS 保证幂等，重复执行不报错。
+         */
+        private val MIGRATION_26_27 = object : Migration(26, 27) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // lessons 表新增索引
+                db.execSQL("CREATE INDEX IF NOT EXISTS idx_lessons_student_id ON lessons(studentId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS idx_lessons_student_id_date ON lessons(studentId, date)")
+                // schedules 表新增索引
+                db.execSQL("CREATE INDEX IF NOT EXISTS idx_schedules_student_id ON schedules(studentId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS idx_schedules_student_name ON schedules(studentName)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS idx_schedules_start_date ON schedules(startDate)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS idx_schedules_day_of_week ON schedules(dayOfWeek)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS idx_schedules_student_day ON schedules(studentId, dayOfWeek)")
+            }
+        }
+
+        /**
          * 数据库首次创建时的回调：插入预置饮食模板数据。
          *
          * 仅在数据库文件首次创建时触发（新装用户），老用户升级走 [MIGRATION_17_18]。
@@ -784,7 +812,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "sports_coach_db"
                 )
-                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25, MIGRATION_25_26)
+                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25, MIGRATION_25_26, MIGRATION_26_27)
                     .addCallback(DB_CALLBACK)
                     // 仅在降级（用户从高版本回滚到低版本）时清库重建；
                     // 升级路径必须通过显式 Migration 完成，避免迁移失败时误删学员数据。

@@ -62,7 +62,10 @@ data class Student(
         Index(value = ["date"], name = "idx_lessons_date"),
         Index(value = ["date", "time"], name = "idx_lessons_date_time_asc"),
         Index(value = ["studentName", "date", "time"], name = "idx_lessons_student_date_time_unique", unique = true),
-        Index(value = ["studentName", "date", "packageId"], name = "idx_lessons_student_date_pkg")
+        Index(value = ["studentName", "date", "packageId"], name = "idx_lessons_student_date_pkg"),
+        // v37 任务2：为 studentId 字段添加索引，加速按学员ID查询课时
+        Index(value = ["studentId"], name = "idx_lessons_student_id"),
+        Index(value = ["studentId", "date"], name = "idx_lessons_student_id_date")
     ]
 )
 // v26 优化2：@Stable 让 LazyColumn 课时列表按字段对比，避免无效重组

@@ -408,7 +408,14 @@ class OperationViewModel(
                         "课程已添加$countText"
                     }
                 } else {
+                    // === v33 数据流加固：优先使用 form.id 作为更新主键 ===
+                    // 双重保险：editing.id 来自 startEdit 异步加载，理论上不丢失；
+                    // 但 form.id 来自 ScheduleEditDialog 的 buildForm，是 UI 层显式传入的，
+                    // 即使 editing 因协程时序问题为 null 也可走更新路径（外层 else 分支保证 editing 非 null，
+                    // 这里 form.id 主要用于"显式优于隐式"的可观测性，便于 Logcat 追踪）
+                    val effectiveId = form.id.ifBlank { editing.id }
                     val updated = editing.copy(
+                        id = effectiveId,
                         studentName = form.studentName,
                         coachName = form.coachName,
                         dayOfWeek = form.dayOfWeek,
@@ -428,7 +435,30 @@ class OperationViewModel(
                         scheduleRepo.updateScheduleForce(updated)
                         _toast.value = "已强制替换冲突排课并更新"
                     } else {
-                        scheduleRepo.updateSchedule(updated)
+                        // === v33 数据流加固：调用 OperationRepository.saveSchedule 走智能判断 ===
+                        // 原直接调用 scheduleRepo.updateSchedule，若 updated.id 在数据库中不存在
+                        // 会返回 0（affected rows = 0），但用户无感知
+                        // 改用 opRepo.saveSchedule 内部判断：存在则 update，不存在则 insert
+                        // 并通过 Log.e("DataFlow") 输出异常堆栈，避免静默失败
+                        try {
+                            val ok = opRepo.saveSchedule(updated)
+                            if (!ok) {
+                                _toast.value = "保存失败：数据库写入异常，请查看 Logcat (tag=DataFlow)"
+                                android.util.Log.e("DataFlow",
+                                    "saveSchedule 返回 false：id=${updated.id}, " +
+                                        "student=${updated.studentName}, " +
+                                        "contentLen=${updated.content.length}")
+                                return@safeLaunch
+                            }
+                        } catch (e: Exception) {
+                            // 二次防护：opRepo.saveSchedule 内部已 try-catch 返回 false，
+                            // 但仍兜底捕获以防 NPE / IllegalState 等 RuntimeException 逃逸
+                            android.util.Log.e("DataFlow",
+                                "saveSchedule 抛出异常：id=${updated.id}, " +
+                                    "student=${updated.studentName}", e)
+                            _toast.value = "保存失败：${e.message ?: e.javaClass.simpleName}"
+                            return@safeLaunch
+                        }
                         _toast.value = "课程已更新"
                     }
                 }
@@ -445,6 +475,15 @@ class OperationViewModel(
                     // 不关闭编辑弹窗，保留用户已填表单
                     _coachConflictEvent.tryEmit(e)
                 }
+            } catch (e: Exception) {
+                // === Bug 修复：不再黑盒吞掉异常，向用户显示具体失败原因 ===
+                // 原代码只 catch CoachConflictException，其他异常（主键冲突 / 约束违反 /
+                // JSON 序列化异常 / SQLite 异常等）会逃逸到 appExceptionHandler，
+                // 用户只看到"操作异常已记录到日志（XXX）"，完全不知失败原因。
+                // 现在此处显式 catch 并通过 toast 显示 e.message，便于用户排查。
+                android.util.Log.e("OperationVM",
+                    "saveSchedule 失败：${e.message}", e)
+                _toast.value = "保存失败：${e.message ?: e.javaClass.simpleName}"
             }
         }
     }
@@ -678,10 +717,20 @@ class OperationViewModel(
     /**
      * 清空所有排课记录（课表管理"清空全部"功能）。
      * 删除 schedules 表全部数据，不影响已签到的课时记录（lessons 表）。
+     *
+     * === Bug 修复：删除后同步重置 weekStart 到本周 ===
+     * 原代码只清 schedules 表，未重置 [_weekStart]。若用户在历史周触发"清空全部"，
+     * weekStart 仍指向过去日期，之后点 FAB 新建会被 saveSchedule 中的
+     * "排课生效日期不能早于今天" 拦截，用户看到 toast 后不知所以。
+     * 现同步重置到本周，并清理 editingSchedule（避免走 update 分支命中已删除记录）。
      */
     fun deleteAllSchedules() {
         safeLaunch {
             opRepo.deleteAllSchedules()
+            // 重置到本周，避免历史周卡住新建
+            _weekStart.value = getWeekStart()
+            // 清理编辑态：editingSchedule 指向的记录已被删除，走 update 会命中 0 行
+            _editingSchedule.value = null
             _toast.value = "已清空全部课表"
         }
     }

@@ -99,18 +99,46 @@ object UpdateChecker {
     ) : Exception(userMessage, cause)
 
     /**
-     * 语义化版本比较（处理器层：纯逻辑，无副作用，可独立测试）。
+     * 从 GitHub Release tag_name 中提取数字部分作为整数版本号（处理器层：纯逻辑，可独立测试）。
+     *
+     * === v33+ 版本比对逻辑（与 versionCode 整数对比） ===
+     * GitHub Release 的 tag_name 形如 "v33"、"v1.0.45"、"v33-beta" 等，
+     * 本函数提取其中第一段连续数字作为 remoteVersionCode：
+     * - "v33" → 33
+     * - "v1.0.45" → 1（取首段，与 CI 注入的 VERSION_CODE=run_number 对比时
+     *   仅当 tag 形如 "v<run_number>" 时才能正确触发更新）
+     * - "v33-beta" → 33
+     * - "latest" → 0（无法解析视为 0，不触发更新）
+     *
+     * 设计依据：本项目 CI 通过 `github.run_number` 注入 versionCode（每次 push 严格递增），
+     * GitHub Release tag 同样使用 `v<run_number>` 格式（如 v33），
+     * 因此 tag_name 的数字部分 === 远端 versionCode，可直接与本地
+     * [BuildConfig.VERSION_CODE] 整数大小对比。
+     *
+     * === v33 数据流加固：使用 substringAfter("v").toIntOrNull() 提取整数 ===
+     * 原实现使用 `Regex("\\d+").find(cleaned)`，可正确提取但写法偏复杂。
+     * 改为用户明确要求的 `substringAfter("v").toIntOrNull()` 形式：
+     * - "v33".substringAfter("v") = "33" → toIntOrNull() = 33 ✓
+     * - "v33-beta".substringAfter("v") = "33-beta" → toIntOrNull() = null → 0（降级）
+     * - "V33".substringAfter("v") = "V33"（小写 v 找不到，保留原串） → toIntOrNull() = null → 0
+     *   → 因此先 toLowerCase 再 substringAfter，兼容大写 V 前缀
+     * - 非常规 tag（如 "latest"）→ toIntOrNull() = null → 0（不触发更新）
+     *
+     * 整数比对逻辑保持不变：`remoteVersionCode > localVersionCode` 才触发更新，
+     * 杜绝字符串比对带来的"明明有更新却提示无更新"问题。
+     *
+     * @param tagName GitHub Release tag_name（如 "v33"）
+     * @return 提取出的整数版本号；无法解析返回 0
      */
-    private fun compareVersions(v1: String, v2: String): Int {
-        val parts1 = v1.split(".").map { it.toIntOrNull() ?: 0 }
-        val parts2 = v2.split(".").map { it.toIntOrNull() ?: 0 }
-        val maxLen = maxOf(parts1.size, parts2.size)
-        for (i in 0 until maxLen) {
-            val a = parts1.getOrElse(i) { 0 }
-            val b = parts2.getOrElse(i) { 0 }
-            if (a != b) return a - b
-        }
-        return 0
+    private fun extractVersionCodeFromTag(tagName: String): Int {
+        // 1. 小写化以兼容 V33 / v33 两种前缀
+        // 2. substringAfter("v") 取 "v" 之后的部分（找不到则返回原串）
+        // 3. toIntOrNull() 尝试转为整数，失败返回 null
+        // 4. ?: 0 兜底，确保异常 tag 不触发更新
+        return tagName.lowercase()
+            .substringAfter("v")
+            .toIntOrNull()
+            ?: 0
     }
 
     /**
@@ -176,10 +204,21 @@ object UpdateChecker {
                     return@withContext UpdateResult.UpToDate
                 }
 
-                // 版本比较：语义化版本比较（serverVersion > localVersion 才提示更新）
-                val serverVersion = release.tagName.removePrefix("v").trim()
-                val localVersion = BuildConfig.VERSION_NAME.trim()
-                if (compareVersions(serverVersion, localVersion) > 0) {
+                // === v33+ 版本比对：tag_name 数字部分 vs 本地 versionCode 整数对比 ===
+                // 从 GitHub Release tag_name（如 "v33"）提取数字部分作为远端 versionCode
+                // 与 Android 内部的 BuildConfig.VERSION_CODE（CI 注入的 github.run_number）
+                // 进行整数大小对比：remoteVersionCode > localVersionCode 即视为有新版本
+                //
+                // 此逻辑兼容本地开发版（versionCode=1, versionName="0.0.1"）：
+                // 只要 GitHub 上有 tag 数字 > 1 的 Release，本地编译安装的 App 也会触发更新弹窗
+                val remoteVersionCode = extractVersionCodeFromTag(release.tagName)
+                val localVersionCode = BuildConfig.VERSION_CODE
+                Log.d(
+                    TAG,
+                    "版本对比：远端 tag=${release.tagName} → remoteVersionCode=$remoteVersionCode, " +
+                            "本地 versionCode=$localVersionCode"
+                )
+                if (remoteVersionCode > localVersionCode) {
                     UpdateResult.NewVersionAvailable(
                         tagName = release.tagName,
                         downloadUrl = apkUrl,

@@ -11,9 +11,9 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -74,20 +74,17 @@ fun BaseDarkCard(
     contentPadding: Dp = 16.dp,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    // v37 性能优化：移除额外的 .shadow() modifier，改用 Card 原生 elevation
+    // 原实现同时使用 Card + .shadow() 导致双重 shadow 绘制，滑动时每帧都创建 RenderNode
     Card(
         modifier = modifier
-            .fillMaxWidth()
-            .shadow(
-                elevation = 4.dp,
-                shape = RoundedCornerShape(cornerRadius),
-                ambientColor = Color(0x1A000000),
-                spotColor = Color(0x1A000000)
-            ),
+            .fillMaxWidth(),
         shape = RoundedCornerShape(cornerRadius),
         colors = CardDefaults.cardColors(
             containerColor = CardBackground   // #1C1C1E
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        // 使用 Card 原生 elevation，走 Material3 优化路径（native RenderNode 缓存）
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column(
             modifier = Modifier.padding(contentPadding),
@@ -231,6 +228,10 @@ fun DarkButton_Sign(
     text: String,
     onClick: () -> Unit
 ) {
+    // v37 性能优化：缓存渐变 Brush，避免每次重组都创建
+    val signBrush = remember(SignButtonStart, SignButtonEnd) {
+        Brush.linearGradient(colors = listOf(SignButtonStart, SignButtonEnd))
+    }
     Text(
         text = text,
         fontSize = 12.sp,
@@ -238,11 +239,7 @@ fun DarkButton_Sign(
         fontWeight = FontWeight.SemiBold,
         modifier = Modifier
             .clip(RoundedCornerShape(10.dp))
-            .background(
-                brush = Brush.linearGradient(
-                    colors = listOf(SignButtonStart, SignButtonEnd)
-                )
-            )
+            .background(brush = signBrush)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 6.dp)
     )

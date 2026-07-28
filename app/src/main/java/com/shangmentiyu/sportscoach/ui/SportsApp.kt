@@ -73,7 +73,9 @@ import com.shangmentiyu.sportscoach.ui.settings.SettingsScreen
 import com.shangmentiyu.sportscoach.ui.settings.SettingsViewModel
 import com.shangmentiyu.sportscoach.ui.summary.SummaryScreen
 import com.shangmentiyu.sportscoach.ui.theme.FeatureIconPurple
+import com.shangmentiyu.sportscoach.ui.theme.BottomNavBg
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
+import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appSurface
 import com.shangmentiyu.sportscoach.ui.training.TrainingPlanScreen
@@ -233,19 +235,20 @@ fun SportsApp() {
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
-        containerColor = appGroupedBackground(),
+        containerColor = Color(0xFF121212),  // v38：全局深色背景
         topBar = {
             // v32 优化3：桌面端连接状态栏（仅在线时显示绿色指示灯）
             DesktopConnectionBanner(desktopConnection)
         },
         bottomBar = {
             if (showBottomBar) {
-                // v35 视觉重构：底部导航栏（纯色 + 无分割线 + 无 border）
-                // - 选中：紫色 #6C5CE7
-                // - 未选中：浅灰（主题感知，亮色 #8E8E93 / 暗色 #9E9E9E）
+                // v38 深色主题：底部导航栏（深黑背景 #121212 + 无分割线 + 无 border）
+                // - 选中：紫色 #6C5CE7 图标与文字
+                // - 未选中：浅灰 #A6A8AB 图标与文字
+                // - 禁止使用药丸/胶囊背景高亮
                 // - 取消橙色分割线，仅依赖 tonalElevation=0 + 纯色背景
                 NavigationBar(
-                    containerColor = appSurface(),
+                    containerColor = BottomNavBg,  // #121212 深黑背景
                     tonalElevation = 0.dp
                 ) {
                     bottomItems.forEach { item ->
@@ -602,7 +605,7 @@ fun SportsApp() {
                             Text(
                                 text = p.message,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                color = appOnSurface().copy(alpha = 0.7f)
                             )
                         }
                     }

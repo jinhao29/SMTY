@@ -77,9 +77,9 @@ fun IosDatePickerRow(
                 if (dateStr.isBlank()) placeholder else dateStr,
                 style = MaterialTheme.typography.bodyLarge,
                 color = if (dateStr.isBlank())
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                    appOnSurface().copy(alpha = 0.3f)
                 else
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    appOnSurface().copy(alpha = 0.6f),
                 modifier = Modifier.weight(1f)
             )
             Icon(

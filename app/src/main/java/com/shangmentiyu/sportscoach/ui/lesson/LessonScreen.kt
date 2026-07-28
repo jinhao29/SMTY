@@ -1,5 +1,6 @@
 package com.shangmentiyu.sportscoach.ui.lesson
 
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -59,7 +60,7 @@ fun LessonScreen(
     }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color(0xFF121212),  // v38：全局深色背景
         topBar = {
             TopAppBar(
                 title = { Text(lesson?.let { "${it.studentName} · ${it.date}" } ?: "课堂记录") },

@@ -37,10 +37,16 @@ import androidx.compose.ui.unit.dp
  */
 
 /**
- * 活力卡片：iOS 风格白底卡片 + 可选顶部渐变装饰条。
+ * v38 深色卡片：深灰底 + 20dp 圆角 + 可选顶部渐变装饰条。
+ *
+ * 设计要点：
+ * - 卡片背景：#1C1C1E（CardBackground）
+ * - 圆角：20dp（统一规格）
+ * - 无 border，仅依赖圆角 + 极弱阴影区隔层级
+ * - 顶部 4dp 渐变装饰条作为可选活力注入
  *
  * @param accentGradient 是否显示顶部 4dp 渐变装饰条（默认 true）
- * @param glow 是否显示极淡蓝色边框（强调态）
+ * @param glow 是否显示极淡蓝色边框（强调态，v38 起忽略，统一无边框）
  * @param contentPadding 内边距，默认 16dp
  */
 @Composable
@@ -51,12 +57,12 @@ fun GlassCard(
     contentPadding: androidx.compose.ui.unit.Dp = Spacing.cardPadding,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    // 通过 MaterialTheme.colorScheme 自动跟随系统 Dark Mode
-    val containerColor = MaterialTheme.colorScheme.surface
+    // v38：统一深色卡背景 #1C1C1E
+    val containerColor = CardBackground
 
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = containerColor),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
@@ -106,7 +112,7 @@ fun GlassSectionSubtitle(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text,
         style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+        color = appOnSurface().copy(alpha = 0.5f),
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 4.dp)
@@ -114,21 +120,21 @@ fun GlassSectionSubtitle(text: String, modifier: Modifier = Modifier) {
 }
 
 /**
- * 活力风格 TopAppBar 配色：浅蓝紫渐变背景 + 深色文字 + 活力蓝返回按钮。
+ * v38 深色 TopAppBar 配色：深色背景 + 白色文字 + 紫色返回按钮。
  *
- * 11 个页面通过此函数自动获得统一的活力渐变顶栏风格 + Dark Mode。
- * 浅色渐变保持深色状态栏图标与文字可读性；暗色切换为 iOS Dark 表面色。
+ * 11 个页面通过此函数自动获得统一的深色顶栏风格。
+ * 取消浅色渐变路径，统一使用 #1C1C1E 深色表面色。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun glassTopAppBarColors(): TopAppBarColors {
-    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
-    val containerStart = if (isDark) NightSurface else VitalAppBarBgStart
-    val scrolledColor = if (isDark) NightSurface else Color.White
+    // v38：统一深色顶栏背景 #1C1C1E
+    val containerStart = CardBackground
+    val scrolledColor = CardBackground
     return TopAppBarDefaults.topAppBarColors(
         containerColor = containerStart,
         scrolledContainerColor = scrolledColor,
-        titleContentColor = MaterialTheme.colorScheme.onBackground,
+        titleContentColor = Color.White,
         navigationIconContentColor = MaterialTheme.colorScheme.primary,
         actionIconContentColor = MaterialTheme.colorScheme.primary
     )
@@ -141,11 +147,15 @@ fun glassTopAppBarColors(): TopAppBarColors {
 val VitalButtonGradient = listOf(VitalBlueStart, VitalPurpleEnd)
 
 /**
- * 活力 AppBar 浅色渐变起点色（用作 TopAppBar 单色背景）。
- * 实际为非常浅的蓝紫色，与白底卡片形成层次。
+ * 活力 AppBar 背景渐变颜色。
+ *
+ * === v38 数据流加固：移除本地重复声明 ===
+ * 原此处声明了浅色值 (0xFFF5F7FF / 0xFFF8F4FF)，与 [com.shangmentiyu.sportscoach.ui.theme.Color.kt]
+ * 中的 v38 深色值 (0xFF1C1C1E) 形成 Kotlin "Conflicting declarations" 编译错误。
+ *
+ * 全局已统一迁移到深色主题，本文件不再保留本地副本，
+ * 统一使用 Color.kt 中的深色令牌 [VitalAppBarBgStart] / [VitalAppBarBgEnd]。
  */
-val VitalAppBarBgStart = Color(0xFFF5F7FF)
-val VitalAppBarBgEnd = Color(0xFFF8F4FF)
 
 /**
  * 活力大标题：可选全宽蓝紫渐变背景头部，或仅活力蓝紫文字。
@@ -199,16 +209,16 @@ fun VitalLargeTitle(
             Text(
                 subtitle,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                color = appOnSurface().copy(alpha = 0.6f)
             )
         }
     }
 }
 
 /**
- * 活力列表卡片：白底 + 10pt 圆角 + 顶部 4dp 渐变装饰条。
+ * v38 深色列表卡片：深色底 + 20dp 圆角 + 顶部 4dp 渐变装饰条。
  *
- * 用于替代各页面本地 IosGroupedListCard，统一注入活力色装饰条 + Dark Mode。
+ * 用于替代各页面本地 IosGroupedListCard，统一深色风格。
  *
  * @param accentGradient 是否显示顶部 4dp 渐变装饰条（默认 true）
  */
@@ -218,11 +228,12 @@ fun VitalListCard(
     accentGradient: Boolean = true,
     content: @Composable () -> Unit
 ) {
-    val surfaceColor = MaterialTheme.colorScheme.surface
+    // v38：统一深色卡背景
+    val surfaceColor = CardBackground
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(surfaceColor, RoundedCornerShape(10.dp))
+            .background(surfaceColor, RoundedCornerShape(20.dp))
     ) {
         if (accentGradient) {
             Box(

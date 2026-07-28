@@ -1,5 +1,6 @@
 package com.shangmentiyu.sportscoach.ui.operation
 
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -105,7 +106,7 @@ fun OperationScreen(
     }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color(0xFF121212),  // v38：全局深色背景
         snackbarHost = { SnackbarHost(snackbarHost) },
         topBar = {
             TopAppBar(

@@ -57,6 +57,7 @@ import com.shangmentiyu.sportscoach.data.model.Student
 import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
 import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
+import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.IosDatePickerRow
 import com.shangmentiyu.sportscoach.ui.theme.appOnPrimary
@@ -126,7 +127,7 @@ fun AddStudentScreen(
     } else BmiProcessor.BmiResult.INVALID
 
     Scaffold(
-        containerColor = appGroupedBackground(),
+        containerColor = Color(0xFF121212),  // v38：全局深色背景
         topBar = {
             TopAppBar(
                 title = {
@@ -567,14 +568,14 @@ private fun IosFormRow(
                     value = value,
                     onValueChange = onValueChange,
                     placeholder = {
-                        Text(placeholder, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
+                        Text(placeholder, color = appOnSurface().copy(alpha = 0.3f))
                     },
                     modifier = Modifier.weight(1f),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
                     trailingIcon = if (unit.isNotEmpty()) {
                         { Text(unit, style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)) }
+                            color = appOnSurface().copy(alpha = 0.5f)) }
                     } else null,
                     colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
                         unfocusedBorderColor = Color.Transparent,
@@ -769,7 +770,7 @@ private fun IosBmiDisplayRow(
                 Text(
                     "自动计算结果",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                    color = appOnSurface().copy(alpha = 0.4f)
                 )
             }
         }
@@ -780,7 +781,7 @@ private fun IosBmiDisplayRow(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f),
+                        appOnSurface().copy(alpha = 0.05f),
                         RoundedCornerShape(8.dp)
                     )
                     .padding(horizontal = Spacing.md, vertical = Spacing.sm),
@@ -820,7 +821,7 @@ private fun IosBmiDisplayRow(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f),
+                        appOnSurface().copy(alpha = 0.05f),
                         RoundedCornerShape(8.dp)
                     )
                     .padding(horizontal = Spacing.md, vertical = Spacing.sm),
@@ -829,7 +830,7 @@ private fun IosBmiDisplayRow(
                 Text(
                     "填写身高体重后自动计算",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                    color = appOnSurface().copy(alpha = 0.4f)
                 )
             }
         }

@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -270,6 +271,26 @@ class SettingsViewModel(
     fun consumeExportProgress() {
         _exportProgress.value = ExportProgress.Idle
     }
+
+    /**
+     * v37 任务5：统一的 IO 操作加载状态（防抖蒙层专用）。
+     *
+     * 组合 backupInProgress 与 exportProgress.isWorking()：
+     * - 任一为 true → isLoading = true，蒙层显示，禁用所有导出/备份按钮
+     * - 全部为 false → isLoading = false，蒙层隐藏
+     *
+     * UI 通过 collectAsState() 订阅，在 isLoading=true 时弹出占满半屏的加载蒙层。
+     *
+     * 注意：声明位置必须在 [_exportProgress] 之后，否则 Kotlin 属性初始化顺序
+     * 会导致 combine() 收到 null → 运行时 NPE。
+     */
+    val isLoading: StateFlow<Boolean> = combine(_backupInProgress, _exportProgress) { backup, export ->
+        backup || (export is ExportProgress.Working)
+    }.stateIn(
+        scope = viewModelScope,
+        started = kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000),
+        initialValue = false
+    )
 
     /**
      * === v24 优化3：统一进度状态（与 ProgressDialog 配合）===

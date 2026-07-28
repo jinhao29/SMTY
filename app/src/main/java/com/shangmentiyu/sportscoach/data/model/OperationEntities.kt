@@ -2,6 +2,7 @@ package com.shangmentiyu.sportscoach.data.model
 
 import androidx.compose.runtime.Stable
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
@@ -98,7 +99,17 @@ data class Coach(
  * 课表视图（参考 Wake Up 课表）使用 color 字段为卡片着色，
  * content 字段存储本节课的训练内容 JSON（ExerciseItem 列表）。
  */
-@Entity(tableName = "schedules")
+@Entity(
+    tableName = "schedules",
+    indices = [
+        // v37 任务2：为常用查询字段添加索引
+        Index(value = ["studentId"], name = "idx_schedules_student_id"),
+        Index(value = ["studentName"], name = "idx_schedules_student_name"),
+        Index(value = ["startDate"], name = "idx_schedules_start_date"),
+        Index(value = ["dayOfWeek"], name = "idx_schedules_day_of_week"),
+        Index(value = ["studentId", "dayOfWeek"], name = "idx_schedules_student_day")
+    ]
+)
 // v26 优化2：@Stable 让 LazyColumn 排课列表按字段对比，避免无效重组
 @Stable
 data class Schedule(

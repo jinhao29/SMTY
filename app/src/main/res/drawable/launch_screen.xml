@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 启动屏背景（明亮模式）：纯白底色，消除冷启动白屏。
-     与 appBackground() 的明亮模式色值 #FFFFFFFF 完全一致，视觉无缝衔接。 -->
+<!-- v38 全局深色主题：启动屏底色改为 #121212，与 appBackground() 完全一致。
+     消除冷启动白屏，与 Compose 内部深色 UI 无缝衔接。 -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@color/launch_background_light" />
+    <item android:drawable="@color/launch_background_dark" />
 </layer-list>

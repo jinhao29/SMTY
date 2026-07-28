@@ -68,6 +68,7 @@ import com.shangmentiyu.sportscoach.ui.dailyplan.DailyPlanViewModel
 import com.shangmentiyu.sportscoach.ui.operation.OperationViewModel
 import com.shangmentiyu.sportscoach.ui.schedule.ScheduleEditDialog
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
+import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 
 /**
  * 课前准备 Tab：展示选定日期的排课时间线。
@@ -178,12 +179,12 @@ fun PreClassTab(
                         selectedDate,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                        color = Color.White  // v38：深色背景白字
                     )
                     Text(
                         dayNames[dayOfWeek] ?: "",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline
+                        color = Color(0xFFA6A8AB)  // v38：浅灰副标题
                     )
                 }
                 IconButton(onClick = { dailyVm.nextDay() }) {
@@ -285,14 +286,14 @@ fun PreClassTab(
                             Icon(Icons.Outlined.Add, contentDescription = null,
                                 modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("添加排课")
+                            Text("添加排课", color = Color.White)  // v38：紫色按钮白字
                         }
                     }
                     // 当没有排课记忆时的友好提示
                     if (timeMemories.isEmpty() && locationMemories.isEmpty()) {
                         Text(
                             "「添加排课」需要先排过一次课，下次就能一键填充时间和地点了",
-                            color = MaterialTheme.colorScheme.outline,
+                            color = Color(0xFFA6A8AB),  // v38：浅灰提示
                             style = MaterialTheme.typography.labelSmall
                         )
                     }
@@ -341,12 +342,13 @@ fun PreClassTab(
                     Text(
                         "查看全部历史归档",
                         style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White  // v38：深色卡片白字
                     )
                     Text(
                         "一年以上的旧课时已自动归档，点击查看完整记录",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline
+                        color = Color(0xFFA6A8AB)  // v38：浅灰副标题
                     )
                 }
                 IconButton(onClick = { showArchivedList = true }) {
@@ -467,7 +469,8 @@ private fun RecentSchedulesDialog(
                 Text(
                     "未来一周排课概览",
                     style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White  // v38：深色背景白字
                 )
                 IconButton(onClick = onDismiss) {
                     Icon(Icons.Outlined.Close, contentDescription = "关闭")
@@ -486,14 +489,14 @@ private fun RecentSchedulesDialog(
                     modifier = Modifier.fillMaxSize().padding(horizontal = Spacing.md),
                     verticalArrangement = Arrangement.spacedBy(Spacing.sm)
                 ) {
-                    items(grouped.entries.toList()) { (dayOfWeek, daySchedules) ->
+                    items(grouped.entries.toList(), key = { it.key }) { (dayOfWeek, daySchedules) ->
                         IosCard {
                             Column(modifier = Modifier.padding(Spacing.md)) {
                                 Text(
                                     dayNames[dayOfWeek] ?: "周$dayOfWeek",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
+                                    color = Color.White  // v38：深色卡片白字
                                 )
                                 Spacer(Modifier.height(Spacing.xs))
                                 daySchedules.sortedBy { it.startTime }.forEach { s ->
@@ -506,12 +509,13 @@ private fun RecentSchedulesDialog(
                                             s.startTime,
                                             style = MaterialTheme.typography.bodyMedium,
                                             fontWeight = FontWeight.Medium,
-                                            color = MaterialTheme.colorScheme.primary,
+                                            color = Color.White,  // v38：深色卡片白字
                                             modifier = Modifier.width(60.dp)
                                         )
                                         Text(
                                             s.studentName,
                                             style = MaterialTheme.typography.bodyMedium,
+                                            color = Color.White,  // v38：深色卡片白字
                                             modifier = Modifier.weight(1f)
                                         )
                                         if (s.location.isNotBlank()) {
@@ -523,7 +527,7 @@ private fun RecentSchedulesDialog(
                                                 Text(
                                                     s.location,
                                                     style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.outline
+                                                    color = Color(0xFFA6A8AB)  // v38：浅灰地点
                                                 )
                                             }
                                         }
@@ -584,7 +588,7 @@ private fun PreClassScheduleCard(
                     "${schedule.startTime} - ${schedule.endTime()}",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    color = Color.White  // v38：深色卡片白字
                 )
                 Spacer(Modifier.weight(1f))
                 if (isSigned) {
@@ -611,7 +615,8 @@ private fun PreClassScheduleCard(
             Text(
                 schedule.studentName,
                 style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Medium,
+                color = Color.White  // v38：深色卡片白字
             )
 
             // 上课地点
@@ -683,13 +688,13 @@ private fun PreClassScheduleCard(
                         "来自电脑端的训练计划",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = Color.White,  // v38：深色卡片白字
                         modifier = Modifier.weight(1f)
                     )
                     Text(
                         "${planImages.size} 张",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline
+                        color = Color(0xFFA6A8AB)  // v38：浅灰副标题
                     )
                 }
                 Spacer(Modifier.height(4.dp))
@@ -697,7 +702,7 @@ private fun PreClassScheduleCard(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(planImages) { planImage ->
+                    items(planImages, key = { it.id }) { planImage ->
                         LanPlanImageCard(planImage = planImage)
                     }
                 }
@@ -767,7 +772,7 @@ private fun ScheduleImageThumb(path: String) {
         modifier = Modifier
             .size(72.dp)
             .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+            .background(appOnSurface().copy(alpha = 0.05f))
             .clickable { fullscreen = true }
     ) {
         if (bitmap != null) {
@@ -834,13 +839,13 @@ private fun LanPlanImageCard(planImage: PlanImage) {
         modifier = Modifier
             .width(96.dp)
             .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+            .background(appOnSurface().copy(alpha = 0.05f))
             .clickable { if (bitmap != null) fullscreen = true }
     ) {
         Box(
             modifier = Modifier
                 .size(96.dp)
-                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+                .background(appOnSurface().copy(alpha = 0.05f))
         ) {
             if (bitmap != null) {
                 Image(
@@ -866,14 +871,14 @@ private fun LanPlanImageCard(planImage: PlanImage) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    .background(appOnSurface().copy(alpha = 0.08f))
                     .padding(horizontal = 4.dp, vertical = 2.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     dateText,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    color = appOnSurface().copy(alpha = 0.7f)
                 )
             }
         }
@@ -1034,15 +1039,16 @@ private fun ArchivedLessonsDialog(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "全部历史归档",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        "共 ${lessons.size} 条已归档课时（一年前）",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
+                    "全部历史归档",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White  // v38：深色背景白字
+                )
+                Text(
+                    "共 ${lessons.size} 条已归档课时（一年前）",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFFA6A8AB)  // v38：浅灰副标题
+                )
                 }
                 IconButton(onClick = onDismiss) {
                     Icon(Icons.Outlined.Close, contentDescription = "关闭")
@@ -1075,11 +1081,11 @@ private fun ArchivedLessonsDialog(
                             modifier = Modifier.size(48.dp)
                         )
                         Spacer(Modifier.height(Spacing.sm))
-                        Text("暂无归档课时", color = MaterialTheme.colorScheme.outline)
+                        Text("暂无归档课时", color = Color(0xFFA6A8AB))  // v38：浅灰
                         Text(
                             "数据量超过 2000 条且存在一年以上旧记录时会自动归档",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline
+                            color = Color(0xFFA6A8AB)  // v38：浅灰
                         )
                     }
                 }
@@ -1090,7 +1096,7 @@ private fun ArchivedLessonsDialog(
                     modifier = Modifier.fillMaxSize().padding(horizontal = Spacing.md),
                     verticalArrangement = Arrangement.spacedBy(Spacing.sm)
                 ) {
-                    items(displayList) { lesson ->
+                    items(displayList, key = { it.id }) { lesson ->
                         ArchivedLessonCard(lesson = lesson)
                     }
                     if (lessons.size > 500) {
@@ -1103,7 +1109,7 @@ private fun ArchivedLessonsDialog(
                                     Text(
                                         "仅显示前 500 条，共 ${lessons.size} 条归档记录",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.outline
+                                        color = Color(0xFFA6A8AB)  // v38：浅灰
                                     )
                                 }
                             }
@@ -1136,14 +1142,14 @@ private fun ArchivedLessonCard(lesson: com.shangmentiyu.sportscoach.data.model.A
                     "${lesson.date} ${lesson.time}",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    color = Color.White  // v38：深色卡片白字
                 )
                 Spacer(Modifier.weight(1f))
                 // 归档时间标签
                 Text(
                     "已归档",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline,
+                    color = Color(0xFFA6A8AB),  // v38：浅灰
                     modifier = Modifier
                         .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
                         .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
@@ -1154,14 +1160,15 @@ private fun ArchivedLessonCard(lesson: com.shangmentiyu.sportscoach.data.model.A
             Text(
                 lesson.studentName,
                 style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Medium,
+                color = Color.White  // v38：深色卡片白字
             )
             if (lesson.content.isNotBlank()) {
                 Spacer(Modifier.height(4.dp))
                 Text(
                     "内容：${lesson.content.take(80)}${if (lesson.content.length > 80) "..." else ""}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outline
+                    color = Color(0xFFA6A8AB)  // v38：浅灰
                 )
             }
             if (lesson.coachComment.isNotBlank()) {
@@ -1169,7 +1176,7 @@ private fun ArchivedLessonCard(lesson: com.shangmentiyu.sportscoach.data.model.A
                 Text(
                     "寄语：${lesson.coachComment.take(80)}${if (lesson.coachComment.length > 80) "..." else ""}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outline
+                    color = Color(0xFFA6A8AB)  // v38：浅灰
                 )
             }
         }

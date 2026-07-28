@@ -1,5 +1,6 @@
 package com.shangmentiyu.sportscoach.ui.coachreport
 
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -73,7 +74,7 @@ fun CoachDailyReportScreen(
     var studentPickerExpanded by remember { mutableStateOf(false) }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color(0xFF121212),  // v38：全局深色背景
         topBar = {
             TopAppBar(
                 title = { Text("教练日报") },

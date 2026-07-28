@@ -121,7 +121,7 @@ fun HeightPredictionScreen(
     }
 
     Scaffold(
-        containerColor = appGroupedBackground(),
+        containerColor = Color(0xFF121212),  // v38：全局深色背景
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(

@@ -264,6 +264,186 @@ class StudentRepository(
     }
 
     /**
+     * === v33 数据流加固（模块 1 核心）：基于 studentId 的级联改名事务 ===
+     *
+     * 替代 [renameStudentCascade] 的推荐路径：通过 studentId 唯一键定位学员，
+     * 在单事务内原子级联更新所有子表的 studentName 字段。
+     *
+     * 与 [renameStudentCascade] 的区别：
+     * - 旧路径按 studentName（主键）定位，若存在重名历史数据会误改多条
+     * - 新路径按 studentId（唯一软关联键）定位，精准命中单条学员
+     * - 旧数据（studentId 为 NULL）不会被误改，由 [backfillStudentIds] 后续回填
+     *
+     * 事务边界：所有子表更新在同一 [db.withTransaction] 内原子完成，
+     * 任一子表更新失败则整体回滚，杜绝"主表改了子表没改"的脏数据。
+     *
+     * 覆盖范围（与 [renameStudentCascade] 一致）：
+     * - students                主表（按 studentId 改名）
+     * - lessons                 课堂记录
+     * - schedules               排课
+     * - lesson_packages         课时包
+     * - training_cycles         训练周期
+     * - body_metric_history     身体形态历史
+     * - parent_reports          家长报告
+     * - student_diet_records    学员饮食绑定
+     *
+     * 异常处理：
+     * - studentId 为空 / 学员不存在 → 抛 [IllegalArgumentException]
+     * - 目标姓名与现有活跃学员重名 → 抛 [IllegalArgumentException]
+     * - 事务内任一子表更新失败 → 整体回滚，抛原始异常给调用方
+     *
+     * @param studentId 学员唯一 ID（必须非空）
+     * @param newName 新姓名
+     * @throws IllegalArgumentException 学员不存在 / 重名 / studentId 为空
+     */
+    suspend fun renameStudentCascadeById(studentId: String, newName: String) {
+        require(studentId.isNotBlank()) { "学员 ID 不能为空" }
+        require(newName.isNotBlank()) { "新姓名不能为空" }
+
+        val database = db ?: run {
+            // 兼容旧调用方（未注入 AppDatabase）：仅更新 students 主表，子表由调用方自行处理
+            val affected = dao.renameStudentById(studentId, newName)
+            if (affected == 0) {
+                throw IllegalArgumentException("未找到 studentId=$studentId 的学员")
+            }
+            android.util.Log.w("StudentRepo",
+                "renameStudentCascadeById 降级执行（无 AppDatabase 注入）：仅更新主表，" +
+                    "子表（Lesson/Schedule/LessonPackage 等）需调用方自行处理")
+            return
+        }
+
+        // 1. 通过 studentId 定位学员（必须存在且活跃）
+        val target = dao.getByStudentId(studentId)
+            ?: throw IllegalArgumentException("未找到 studentId=$studentId 的活跃学员")
+        val oldName = target.name
+
+        // 2. 唯一性校验：目标姓名不能与现有活跃学员重名（除非就是自己）
+        if (oldName != newName) {
+            dao.getByName(newName)?.let { existing ->
+                if (existing.studentId != studentId) {
+                    throw IllegalArgumentException("学员姓名「$newName」已存在，请更换姓名")
+                }
+            }
+        }
+
+        // 3. 字段合法性校验（与 addStudent 保持一致）
+        validateStudentFields(
+            name = newName,
+            gender = target.gender,
+            age = target.age,
+            heightCm = target.heightCm,
+            weightKg = target.weightKg,
+            bmi = target.bmi
+        )
+
+        // 4. 在单事务内原子级联更新所有子表的 studentName
+        try {
+            database.withTransaction {
+                // 4.1 主表改名（按 studentId 精准定位）
+                val affected = dao.renameStudentById(studentId, newName)
+                if (affected == 0) {
+                    throw IllegalStateException("主表改名未生效：studentId=$studentId 可能已被删除")
+                }
+
+                // 4.2 子表按 studentId 级联更新 studentName（不受同名干扰）
+                database.lessonDao().updateStudentNameByStudentId(studentId, newName)
+                database.scheduleDao().updateStudentNameByStudentId(studentId, newName)
+                database.lessonPackageDao().updateStudentNameByStudentId(studentId, newName)
+                database.trainingCycleDao().renameStudent(oldName, newName)
+                database.bodyMetricHistoryDao().renameStudent(oldName, newName)
+                database.parentReportDao().renameStudent(oldName, newName)
+                database.dietDao().renameStudent(oldName, newName)
+
+                // 4.3 在事务内记录日志，保证数据与日志一致性
+                auditLog?.log(
+                    action = "学员改名（ID 级联）",
+                    targetStudent = newName,
+                    before = mapOf("oldName" to oldName, "studentId" to studentId),
+                    after = mapOf("newName" to newName, "cascadeUpdated" to true),
+                    summary = "学员改名「$oldName」→「$newName」(studentId=$studentId，事务级联)"
+                )
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("StudentRepo",
+                "renameStudentCascadeById 事务失败：studentId=$studentId, newName=$newName, ${e.message}", e)
+            throw e
+        }
+
+        // 5. 触发自动备份（事务已提交后才触发）
+        AutoBackupScheduler.notifyDataChange()
+    }
+
+    /**
+     * === v33 数据流加固（模块 1 核心）：基于 studentId 的软删除 ===
+     *
+     * 替代 [deleteStudent] 的推荐路径：通过 studentId 唯一键定位学员，
+     * 仅置 isActive=false，保留行用于历史报表关联。
+     *
+     * 与 [deleteStudent] 的区别：
+     * - 旧路径按 name（主键）定位，重名场景下可能误删
+     * - 新路径按 studentId 定位，精准命中单条学员
+     *
+     * 子表（Lesson / Schedule / LessonPackage 等）数据原样保留，
+     * 通过 studentName 仍能查到该学员的历史记录。
+     * 日常 UI 通过 [StudentDao.getAll] 自动过滤 isActive=0 的行。
+     *
+     * @param studentId 学员唯一 ID（必须非空）
+     * @throws IllegalArgumentException 学员不存在 / studentId 为空
+     */
+    suspend fun softDeleteStudentById(studentId: String) {
+        require(studentId.isNotBlank()) { "学员 ID 不能为空" }
+
+        val target = dao.getByStudentIdIncludeDeleted(studentId)
+            ?: throw IllegalArgumentException("未找到 studentId=$studentId 的学员")
+
+        val database = db
+        if (database != null) {
+            // 有事务支持：在事务内软删除 + 记日志
+            try {
+                database.withTransaction {
+                    val affected = dao.softDeleteByStudentId(studentId)
+                    if (affected == 0) {
+                        throw IllegalStateException("软删除未生效：studentId=$studentId 可能已被删除")
+                    }
+                    auditLog?.log(
+                        action = "删除学员（ID 软删）",
+                        targetStudent = target.name,
+                        before = mapOf(
+                            "age" to target.age, "heightCm" to target.heightCm,
+                            "weightKg" to target.weightKg, "isActive" to target.isActive
+                        ),
+                        summary = "软删除学员「${target.name}」(studentId=$studentId，数据保留可恢复)"
+                    )
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("StudentRepo",
+                    "softDeleteStudentById 事务失败：studentId=$studentId, ${e.message}", e)
+                throw e
+            }
+        } else {
+            // 兼容旧调用方：无事务支持，仅执行软删除
+            val affected = dao.softDeleteByStudentId(studentId)
+            if (affected == 0) {
+                throw IllegalArgumentException("未找到 studentId=$studentId 的学员或已被软删除")
+            }
+            auditLog?.log(
+                action = "删除学员（ID 软删）",
+                targetStudent = target.name,
+                summary = "软删除学员「${target.name}」(studentId=$studentId，无事务降级)"
+            )
+        }
+
+        AutoBackupScheduler.notifyDataChange()
+    }
+
+    /**
+     * === v33 数据流加固：按 studentId 查活跃学员 ===
+     *
+     * 供 ViewModel 通过 studentId 反查学员信息（如排课列表点击跳转学员详情）。
+     */
+    suspend fun getByStudentId(studentId: String): Student? = dao.getByStudentId(studentId)
+
+    /**
      * 为旧数据回填 studentId（NULL → UUID）。
      *
      * 触发时机：

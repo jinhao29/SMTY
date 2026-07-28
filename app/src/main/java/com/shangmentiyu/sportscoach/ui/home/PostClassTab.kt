@@ -78,6 +78,7 @@ import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
 import com.shangmentiyu.sportscoach.ui.theme.appOutline
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 import com.shangmentiyu.sportscoach.ui.theme.appSurface
+import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -450,7 +451,7 @@ private fun PostClassLessonCard(
                             modifier = Modifier
                                 .size(72.dp)
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)),
+                                .background(appOnSurface().copy(alpha = 0.05f)),
                             contentAlignment = Alignment.Center
                         ) {
                             Text("+${imageList.size - 2}",
@@ -886,7 +887,7 @@ private fun LessonImageThumb(
         modifier = Modifier
             .size(72.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+            .background(appOnSurface().copy(alpha = 0.05f))
             .clickable { fullscreen = true }
     ) {
         if (bitmap != null) {
@@ -1007,7 +1008,7 @@ private fun PhotoThumb(path: String, label: String) {
                     .fillMaxWidth()
                     .height(100.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)),
+                    .background(appOnSurface().copy(alpha = 0.05f)),
                 contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)

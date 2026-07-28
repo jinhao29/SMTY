@@ -45,6 +45,19 @@ interface LessonPackageDao {
     @Query("UPDATE lesson_packages SET studentName = :newName WHERE studentName = :oldName")
     suspend fun renameStudent(oldName: String, newName: String)
 
+    /**
+     * === v33 数据流加固：按 studentId 级联改名（推荐路径） ===
+     *
+     * 与 [renameStudent] 区别：基于 studentId 精准定位，不受同名干扰。
+     * 仅更新 studentId 匹配的行。
+     *
+     * @param studentId 学员唯一 ID
+     * @param newName 新姓名
+     * @return 受影响行数
+     */
+    @Query("UPDATE lesson_packages SET studentName = :newName WHERE studentId = :studentId")
+    suspend fun updateStudentNameByStudentId(studentId: String, newName: String): Int
+
     /** 删除学员的所有课时包（删除学员时级联调用） */
     @Query("DELETE FROM lesson_packages WHERE studentName = :name")
     suspend fun deleteByStudent(name: String)
@@ -100,8 +113,9 @@ interface ScheduleDao {
     @Insert
     suspend fun insert(schedule: Schedule)
 
+    /** 返回受影响行数，调用方据此判断更新是否真正生效（0=记录不存在/已删除） */
     @Update
-    suspend fun update(schedule: Schedule)
+    suspend fun update(schedule: Schedule): Int
 
     @Query("DELETE FROM schedules WHERE id = :id")
     suspend fun deleteById(id: String)
@@ -113,6 +127,19 @@ interface ScheduleDao {
     /** 学员改名：级联更新 schedules 表的 studentName 字段 */
     @Query("UPDATE schedules SET studentName = :newName WHERE studentName = :oldName")
     suspend fun renameStudent(oldName: String, newName: String)
+
+    /**
+     * === v33 数据流加固：按 studentId 级联改名（推荐路径） ===
+     *
+     * 与 [renameStudent] 区别：基于 studentId 精准定位，不受同名干扰。
+     * 仅更新 studentId 匹配的行，旧数据 studentId 为 NULL 不会被误改。
+     *
+     * @param studentId 学员唯一 ID
+     * @param newName 新姓名
+     * @return 受影响行数
+     */
+    @Query("UPDATE schedules SET studentName = :newName WHERE studentId = :studentId")
+    suspend fun updateStudentNameByStudentId(studentId: String, newName: String): Int
 
     /** 删除学员的所有排课（删除学员时级联调用） */
     @Query("DELETE FROM schedules WHERE studentName = :name")
