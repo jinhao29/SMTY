@@ -57,13 +57,18 @@ class Converters {
      * JSON 字符串 → [ExerciseItem] 列表。
      *
      * 兜底策略：
-     * - 空/blank JSON → 空列表
+     * - 空/blank/null JSON → 空列表
      * - [JsonSafe.parseArray] 解析失败 → 空列表
      * - 单条 item 解析失败 → 跳过该条，不影响其他有效项
+     *
+     * === v33 数据流加固：入参改为可空 [String]? ===
+     * 原 `json: String` 在 Room 边界场景下若收到 null（旧迁移残留 / 手动改库 / 字段未赋值），
+     * Kotlin 会抛 NPE 导致整个数据库读取崩溃，学员记录无法打开。
+     * 改为可空入参 + null 兜底返回空列表，保证脏数据不致全局崩溃。
      */
     @TypeConverter
-    fun jsonToExerciseList(json: String): List<ExerciseItem> {
-        if (json.isBlank()) return emptyList()
+    fun jsonToExerciseList(json: String?): List<ExerciseItem> {
+        if (json.isNullOrBlank()) return emptyList()
         val arr = JsonSafe.parseArray(json) ?: return emptyList()
         val result = mutableListOf<ExerciseItem>()
         for (i in 0 until arr.length()) {
@@ -105,14 +110,17 @@ class Converters {
      * JSON 字符串 → [String] 列表。
      *
      * 兜底策略与 [jsonToExerciseList] 一致：
-     * - 空/blank JSON → 空列表
+     * - 空/blank/null JSON → 空列表
      * - [JsonSafe.parseArray] 解析失败 → 空列表
      * - 单个元素解析失败 → 跳过，不影响其他有效项
      * - 空白字符串元素会被过滤（[isNotBlank]），避免图片路径列表中混入空串
+     *
+     * === v33 数据流加固：入参改为可空 [String]? ===
+     * 同 [jsonToExerciseList]，防止 Room 边界 null 导致 NPE 崩溃。
      */
     @TypeConverter
-    fun jsonToStringList(json: String): List<String> {
-        if (json.isBlank()) return emptyList()
+    fun jsonToStringList(json: String?): List<String> {
+        if (json.isNullOrBlank()) return emptyList()
         val arr = JsonSafe.parseArray(json) ?: return emptyList()
         val result = mutableListOf<String>()
         for (i in 0 until arr.length()) {
