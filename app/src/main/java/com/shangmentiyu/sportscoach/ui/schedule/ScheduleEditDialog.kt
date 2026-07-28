@@ -87,6 +87,7 @@ import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import com.shangmentiyu.sportscoach.ui.theme.IOSCard
 import com.shangmentiyu.sportscoach.ui.theme.IOSColorPillSelector
 import com.shangmentiyu.sportscoach.ui.theme.IOSSectionHeader
+import com.shangmentiyu.sportscoach.ui.theme.PrimaryButton
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
@@ -878,8 +879,8 @@ fun ScheduleEditDialog(
                 }
             }
 
-            // 底部固定按钮栏：主蓝色填充保存按钮（iOS 风格 Bottom Bar）
-            // 无背景色，与上方滚动区融为一体；仅按钮本身保留蓝色填充
+            // 底部固定按钮栏：主珊瑚橙填充保存按钮（iOS 风格 Bottom Bar）
+            // 使用 PrimaryButton 统一全局按钮系统（v39 设计令牌）
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -887,31 +888,20 @@ fun ScheduleEditDialog(
                     .padding(horizontal = Spacing.screenH)
                     .padding(top = Spacing.sm, bottom = 48.dp)
             ) {
-                Button(
+                PrimaryButton(
+                    text = "保存课程",
                     onClick = {
                         // 新建模式校验：至少选择一个周几
                         if (isCreate && selectedDays.isEmpty()) {
                             vm.showToast("请至少选择一个周几")
-                            return@Button
+                            return@PrimaryButton
                         }
                         // v25 优化5：不再立即 onSaved()
                         // 由 vm.saveSuccessEvent 触发关闭，由 vm.coachConflictEvent 触发冲突确认框
                         vm.saveSchedule(buildForm())
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(44.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = appPrimary()
-                    )
-                ) {
-                    Text(
-                        "保存课程",
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 16.sp
-                    )
-                }
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
 
             // === v25 优化5：教练时间冲突确认框（用户可选择"强制替换"）===

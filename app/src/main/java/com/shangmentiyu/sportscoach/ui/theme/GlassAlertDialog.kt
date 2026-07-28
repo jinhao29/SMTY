@@ -24,18 +24,17 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 
 /**
- * 蓝边包裹风格统一对话框组件。
+ * 珊瑚橙主题统一对话框组件。
  *
- * 设计要点（与主页 GlassCard 蓝边样式保持一致）：
- * - 蓝色描边（1dp，primary 色 15% 透明度）—— 与 GlassCard(glow=true) 一致
+ * 设计要点（与主页 GlassCard 视觉风格保持一致）：
  * - 16dp 圆角（比卡片 10dp 略大，对话框视觉更柔和）
- * - 顶部 4dp 蓝紫渐变装饰条 —— 与 GlassCard 一致
- * - 白底卡片 + 无阴影 —— 与 GlassCard 视觉风格一致
- * - 标题使用 primary 色加粗
+ * - 顶部 4dp 珊瑚橙渐变装饰条（BrandGradientStart→End）—— 与 GlassCard 一致
+ * - 白底卡片 + 4dp 柔和阴影
+ * - 标题使用 appOnSurface() 深灰色加粗（#1A1A1A，符合项目文字色规范）
  * - 底部按钮区右对齐，水平排列
  *
  * 替代 Material3 默认 AlertDialog，使所有对话框视觉风格统一为
- * 主页 GlassCard 的蓝边包裹样式。
+ * 主页 GlassCard 的珊瑚橙主题样式。
  *
  * @param onDismissRequest 点击对话框外部或返回键时的回调
  * @param title 标题文本（必填）
@@ -69,24 +68,24 @@ fun GlassAlertDialog(
             shadowElevation = 4.dp
         ) {
             Column {
-                // 顶部 4dp 蓝紫渐变装饰条（与 GlassCard 一致）
+                // 顶部 4dp 珊瑚橙渐变装饰条（与 GlassCard 一致）
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(4.dp)
                         .background(
                             brush = Brush.linearGradient(
-                                colors = listOf(VitalBlueStart, VitalPurpleEnd)
+                                colors = listOf(BrandGradientStart, BrandGradientEnd)
                             )
                         )
                 )
 
-                // 标题区
+                // 标题区（深灰色加粗，符合项目文字色规范 #1A1A1A）
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = appOnSurface(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp)

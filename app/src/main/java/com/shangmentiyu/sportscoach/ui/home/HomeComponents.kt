@@ -23,6 +23,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shangmentiyu.sportscoach.ui.theme.GradientStart
+import com.shangmentiyu.sportscoach.ui.theme.LightOnSurfaceVariant
+import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
+import com.shangmentiyu.sportscoach.ui.theme.LightSecondary
+import com.shangmentiyu.sportscoach.ui.theme.LightTertiary
 import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
 import com.shangmentiyu.sportscoach.ui.theme.ScoreFail
 import com.shangmentiyu.sportscoach.ui.theme.ScorePass
@@ -155,13 +159,13 @@ internal fun RemainingBadge(remaining: Int) {
     )
 }
 
-/** 根据姓名首字符 hash 分配紫/灰色系头像背景 */
+/** 根据姓名首字符 hash 分配珊瑚橙暖色系头像背景 */
 internal fun avatarColorFor(name: String): Color {
     val colors = listOf(
-        Color(0xFF6A5ACD), // 主紫
-        Color(0xFF8A79D9), // 浅紫
-        Color(0xFFB8AEE6), // 淡紫
-        Color(0xFF8E8E93)  // 灰
+        LightPrimary,            // 主珊瑚橙 #FF6B47
+        LightSecondary,           // 浅橙 #FF9E7A
+        LightTertiary,           // 暖金黄 #FFB74D
+        LightOnSurfaceVariant    // 中灰 #6B6B6B
     )
     val idx = name.firstOrNull()?.code?.rem(4) ?: 0
     return colors[(idx + 4).rem(4)]

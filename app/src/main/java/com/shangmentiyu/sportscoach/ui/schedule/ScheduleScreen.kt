@@ -52,6 +52,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -757,16 +758,23 @@ private fun KeepScheduleCard(
     // === v34：单卡片结构（无左侧时间列、无装饰竖线）===
     // 上方一行时间段（如 09:00-10:00）+ 右侧"已过去"角标
     // 下方白色圆角卡片：第一行学员名 + 课时类型胶囊；第二行 60分钟 · 地点 · 教练
+    // v39 视觉统一：圆角 12dp→10dp（与 IOSCard 一致），新增柔和阴影提升浮动感
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .shadow(
+                elevation = 4.dp,
+                shape = RoundedCornerShape(10.dp),
+                ambientColor = Color.Black.copy(alpha = 0.04f),
+                spotColor = Color.Black.copy(alpha = 0.08f)
+            )
+            .clip(RoundedCornerShape(10.dp))
             .background(appSurface())
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
             )
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(horizontal = Spacing.lg, vertical = Spacing.md),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         // === 第一行：时间段 + 过去角标 ===

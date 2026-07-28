@@ -24,16 +24,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 /**
- * 明亮活力渐变风格卡片组件库（Dark Mode 感知）。
+ * 活力珊瑚橙主题卡片组件库（Dark Mode 感知）。
  *
- * 设计原则（Dribbble-inspired Vital Style）：
+ * 设计原则（v39 令牌统一）：
  * - 亮色：纯白底 + 10pt 圆角（iOS Inset Grouped 结构）
  * - 暗色：自动切换至 iOS Dark 表面色 #2C2C2E
- * - 顶部可选 4dp 渐变装饰条，注入活力色不破坏整体克制
- * - 区块标题改为活力蓝紫色（暗色下自动切到 #0A84FF）
- * - TopAppBar 使用浅色蓝紫渐变背景，保持深色文字可读性
+ * - 顶部可选 4dp 珊瑚橙渐变装饰条（BrandGradientStart→End），注入活力色不破坏整体克制
+ * - 区块标题使用珊瑚橙强调色（暗色下自动切到 #FF8A65）
+ * - TopAppBar 使用暖白背景（与 #FAFAFA 主背景融合），保持深色文字可读性
  *
- * 所有页面通过 GlassCard / glassTopAppBarColors() 自动获得活力风格 + Dark Mode。
+ * 所有页面通过 GlassCard / glassTopAppBarColors() 自动获得统一主题 + Dark Mode。
  */
 
 /**
@@ -61,7 +61,7 @@ fun GlassCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column {
-            // 顶部 4dp 渐变装饰条（活力蓝紫渐变）
+            // 顶部 4dp 珊瑚橙渐变装饰条（BrandGradientStart→End）
             if (accentGradient) {
                 Box(
                     modifier = Modifier
@@ -69,7 +69,7 @@ fun GlassCard(
                         .height(4.dp)
                         .background(
                             brush = Brush.linearGradient(
-                                colors = listOf(VitalBlueStart, VitalPurpleEnd)
+                                colors = listOf(BrandGradientStart, BrandGradientEnd)
                             )
                         )
                 )
@@ -83,7 +83,7 @@ fun GlassCard(
 }
 
 /**
- * 区块标题：活力蓝紫色小节标题。
+ * 区块标题：珊瑚橙强调色小节标题。
  */
 @Composable
 fun GlassSectionTitle(text: String, modifier: Modifier = Modifier) {
@@ -114,17 +114,17 @@ fun GlassSectionSubtitle(text: String, modifier: Modifier = Modifier) {
 }
 
 /**
- * 活力风格 TopAppBar 配色：浅蓝紫渐变背景 + 深色文字 + 活力蓝返回按钮。
+ * 活力风格 TopAppBar 配色：暖白背景 + 深色文字 + 珊瑚橙返回按钮。
  *
- * 11 个页面通过此函数自动获得统一的活力渐变顶栏风格 + Dark Mode。
- * 浅色渐变保持深色状态栏图标与文字可读性；暗色切换为 iOS Dark 表面色。
+ * 11 个页面通过此函数自动获得统一的活力顶栏风格 + Dark Mode。
+ * 暖白背景与主背景 #FAFAFA 融合；暗色切换为 iOS Dark 表面色。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun glassTopAppBarColors(): TopAppBarColors {
     val isDark = androidx.compose.foundation.isSystemInDarkTheme()
-    val containerStart = if (isDark) NightSurface else VitalAppBarBgStart
-    val scrolledColor = if (isDark) NightSurface else Color.White
+    val containerStart = if (isDark) NightSurface else LightBackground
+    val scrolledColor = if (isDark) NightSurface else LightSurface
     return TopAppBarDefaults.topAppBarColors(
         containerColor = containerStart,
         scrolledContainerColor = scrolledColor,
@@ -135,25 +135,27 @@ fun glassTopAppBarColors(): TopAppBarColors {
 }
 
 /**
- * 活力主按钮渐变色对：蓝紫渐变。
+ * 活力主按钮渐变色对：珊瑚橙渐变（BrandGradientStart→End）。
  * 用于 Button 的 containerColor（通过 Brush.linearGradient 在 Box 中模拟）。
  */
-val VitalButtonGradient = listOf(VitalBlueStart, VitalPurpleEnd)
+val VitalButtonGradient = listOf(BrandGradientStart, BrandGradientEnd)
 
 /**
- * 活力 AppBar 浅色渐变起点色（用作 TopAppBar 单色背景）。
- * 实际为非常浅的蓝紫色，与白底卡片形成层次。
+ * 活力 AppBar 暖色背景（保留别名兼容历史引用）。
+ * 实际为暖白主背景 LightBackground，与 #FAFAFA 融合形成层次。
  */
-val VitalAppBarBgStart = Color(0xFFF5F7FF)
-val VitalAppBarBgEnd = Color(0xFFF8F4FF)
+@Deprecated("v39：使用 LightBackground", replaceWith = ReplaceWith("LightBackground"))
+val VitalAppBarBgStart get() = LightBackground
+@Deprecated("v39：使用 LightBackground", replaceWith = ReplaceWith("LightBackground"))
+val VitalAppBarBgEnd get() = LightBackground
 
 /**
- * 活力大标题：可选全宽蓝紫渐变背景头部，或仅活力蓝紫文字。
+ * 活力大标题：可选全宽珊瑚橙渐变背景头部，或仅珊瑚橙文字。
  *
  * 用于无 TopAppBar 的列表/设置页顶部，营造活力感。
  *
- * @param withGradientBg 是否使用全宽蓝紫渐变背景（默认 false，仅文字着色）
- *                       false 时标题用活力蓝紫；true 时背景蓝紫渐变 + 白色文字
+ * @param withGradientBg 是否使用全宽珊瑚橙渐变背景（默认 false，仅文字着色）
+ *                       false 时标题用珊瑚橙；true 时背景珊瑚橙渐变 + 白色文字
  */
 @Composable
 fun VitalLargeTitle(
@@ -208,7 +210,7 @@ fun VitalLargeTitle(
 /**
  * 活力列表卡片：白底 + 10pt 圆角 + 顶部 4dp 渐变装饰条。
  *
- * 用于替代各页面本地 IosGroupedListCard，统一注入活力色装饰条 + Dark Mode。
+ * 用于替代各页面本地 IosGroupedListCard，统一注入珊瑚橙装饰条 + Dark Mode。
  *
  * @param accentGradient 是否显示顶部 4dp 渐变装饰条（默认 true）
  */
@@ -231,7 +233,7 @@ fun VitalListCard(
                     .height(4.dp)
                     .background(
                         brush = Brush.linearGradient(
-                            colors = listOf(VitalBlueStart, VitalPurpleEnd)
+                            colors = listOf(BrandGradientStart, BrandGradientEnd)
                         )
                     )
             )
@@ -241,9 +243,9 @@ fun VitalListCard(
 }
 
 /**
- * 活力 Section Header：活力蓝紫色小节标题（大写）。
+ * 活力 Section Header：珊瑚橙小节标题（大写）。
  *
- * 替代各页面本地 IosSectionHeader，统一活力蓝紫色 + Dark Mode。
+ * 替代各页面本地 IosSectionHeader，统一珊瑚橙 + Dark Mode。
  */
 @Composable
 fun VitalSectionHeader(
