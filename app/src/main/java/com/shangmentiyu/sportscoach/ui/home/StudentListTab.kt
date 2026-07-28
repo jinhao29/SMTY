@@ -53,7 +53,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -61,16 +60,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.shangmentiyu.sportscoach.data.model.Lesson
 import com.shangmentiyu.sportscoach.data.model.Student
-import com.shangmentiyu.sportscoach.ui.components.BaseDarkCard
 import com.shangmentiyu.sportscoach.ui.home.HomeViewModel.GradeFilter
 import com.shangmentiyu.sportscoach.ui.home.HomeViewModel.StudentSortBy
-import com.shangmentiyu.sportscoach.ui.theme.GradientEnd
-import com.shangmentiyu.sportscoach.ui.theme.GradientStart
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
-import com.shangmentiyu.sportscoach.ui.theme.StudentCardButtonBg
-import com.shangmentiyu.sportscoach.ui.theme.StudentCardButtonIcon
-import com.shangmentiyu.sportscoach.ui.theme.StudentCardOnDark
-import com.shangmentiyu.sportscoach.ui.theme.StudentCardSubOnDark
 
 /**
  * 学员列表 Tab：展示所有学员，每项显示课时余额、下一节课信息、身高体重BMI。
@@ -296,28 +288,33 @@ private fun StudentListItem(
     onHeightPrediction: () -> Unit = {},
     onDietManage: () -> Unit = {}
 ) {
-    // v35 视觉重构：深色卡 #1C1C1E + 渐变头像 + 青色按钮，移除橙色分割线
-    BaseDarkCard {
+    IosGroupedListCard {
+        if (showTopDivider) {
+            Box(
+                modifier = Modifier
+                    .padding(start = 76.dp)
+                    .fillMaxWidth()
+                    .height(0.5.dp)
+                    .background(com.shangmentiyu.sportscoach.ui.theme.appDividerColor())
+            )
+        }
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(onClick = onGrowth)
+                .padding(Spacing.md)
         ) {
-            // 第一行：渐变头像 + 姓名 + 课时余额
+            // 第一行：头像 + 姓名 + 课时余额 + 操作按钮组
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // v35：头像背景改为青色渐变 #00D2FF → #3A7BD5
+                // 头像
                 Box(
                     modifier = Modifier
-                        .size(48.dp)
+                        .size(44.dp)
                         .clip(CircleShape)
-                        .background(
-                            brush = Brush.linearGradient(
-                                colors = listOf(GradientStart, GradientEnd)
-                            )
-                        ),
+                        .background(avatarColorFor(student.name)),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -330,15 +327,16 @@ private fun StudentListItem(
 
                 Spacer(Modifier.size(12.dp))
 
-                // v35：主标题白色 #FFFFFF
+                // 姓名行
                 Text(student.name, style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = StudentCardOnDark)
+                    color = com.shangmentiyu.sportscoach.ui.theme.appOnSurface())
                 Spacer(Modifier.weight(1f))
                 RemainingBadge(remaining)
             }
 
-            // 第二行：基本信息（年龄、性别、年级）—— v35：副标题灰 #8E8E93
+            // 第二行：基本信息（年龄、性别、年级、学校）分行显示避免拥挤
+            // 年级显示规则：学龄前不显示年级；其他显示中文（一年级/初一/高一）
             val gradeLabel = com.shangmentiyu.sportscoach.core.Standards.gradeLabel(student.grade)
             val basicInfo = buildString {
                 if (student.age > 0) append("${student.age}岁")
@@ -355,99 +353,106 @@ private fun StudentListItem(
                 Spacer(Modifier.height(6.dp))
                 Text(basicInfo,
                     style = MaterialTheme.typography.bodySmall,
-                    color = StudentCardSubOnDark)
+                    color = com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant())
             }
-            // 学校单独一行
+            // 学校单独一行（如已填写），避免与基本信息挤在一行
             if (student.school.isNotBlank()) {
                 Spacer(Modifier.height(2.dp))
                 Text(student.school,
                     style = MaterialTheme.typography.bodySmall,
-                    color = StudentCardSubOnDark,
+                    color = com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant(),
                     maxLines = 1,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
 
-            // 第三行：下一节课信息 —— v35：青色 #00D2FF 强调
+            // 第三行：下一节课信息（日期时间 + 地点 + 修改入口）单独成行
             if (nextLesson != null) {
                 Spacer(Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Outlined.Schedule, contentDescription = null,
-                        tint = StudentCardButtonIcon,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(14.dp))
                     Spacer(Modifier.size(4.dp))
                     Text("下一节：${nextLesson.date} ${nextLesson.time}",
                         style = MaterialTheme.typography.labelMedium,
-                        color = StudentCardButtonIcon)
+                        color = MaterialTheme.colorScheme.primary)
                     if (!nextLesson.location.isNullOrBlank()) {
                         Spacer(Modifier.size(8.dp))
                         Icon(Icons.Outlined.LocationOn, contentDescription = null,
-                            tint = StudentCardButtonIcon,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(14.dp))
                         Spacer(Modifier.size(2.dp))
                         Text(nextLesson.location,
                             style = MaterialTheme.typography.labelMedium,
-                            color = StudentCardButtonIcon,
+                            color = MaterialTheme.colorScheme.primary,
                             maxLines = 1,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f, fill = false))
                     }
                     Spacer(Modifier.weight(1f))
-                    // v35：修改下一节课入口（暗色背景 + 青色图标）
+                    // 修改下一节课时间入口（加大点击区到 28dp）
                     Box(
                         modifier = Modifier
                             .size(28.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(StudentCardButtonBg)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
                             .clickable(onClick = onEditNextLesson),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(Icons.Outlined.Edit, contentDescription = "修改下一节课",
-                            tint = StudentCardButtonIcon,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(16.dp))
                     }
                 }
             }
 
-            // 第四行：身高体重BMI chips —— v35：青色文字
+            // 第四行：身高体重BMI chips
             if (student.heightCm > 0 || student.weightKg > 0f || student.bmi > 0f) {
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (student.heightCm > 0) {
-                        MetricChip("${student.heightCm}cm", StudentCardButtonIcon)
+                        MetricChip("${student.heightCm}cm",
+                            com.shangmentiyu.sportscoach.ui.theme.FeatureIconPurple)
                     }
                     if (student.weightKg > 0f) {
-                        MetricChip("${student.weightKg}kg", StudentCardButtonIcon)
+                        MetricChip("${student.weightKg}kg",
+                            com.shangmentiyu.sportscoach.ui.theme.FeatureIconPurple)
                     }
                     val bmi = if (student.bmi > 0f) student.bmi
                               else if (student.heightCm > 0 && student.weightKg > 0f)
                                   student.weightKg / ((student.heightCm / 100f) * (student.heightCm / 100f))
                               else 0f
                     if (bmi > 0f) {
-                        MetricChip("BMI ${"%.1f".format(bmi)}", StudentCardButtonIcon)
+                        MetricChip("BMI ${"%.1f".format(bmi)}",
+                            com.shangmentiyu.sportscoach.ui.theme.FeatureIconPurple)
                     }
                 }
             }
 
-            // 第五行：操作按钮组 —— v35：暗色背景 + 青色文字
+            // 第五行：操作按钮组（v32 优化4：精简为 签到 / 编辑 / 删除 三个核心按钮）
+            // - 身高预测、饮食等信息类操作请点击卡片进入"成长档案"详情页查看
+            // - 按钮间距收紧至 4dp，让卡片底部留出更多呼吸感
             Spacer(Modifier.height(10.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // 编辑
                 TextActionButton(
                     text = "编辑",
                     onClick = onEdit,
                     type = TextActionType.NEUTRAL
                 )
                 Spacer(Modifier.size(4.dp))
+                // 删除
                 TextActionButton(
                     text = "删除",
                     onClick = onDelete,
                     type = TextActionType.DANGER
                 )
                 Spacer(Modifier.size(4.dp))
-                // 签到按钮：青色渐变背景 + 白色文字
+                // 签到按钮（突出主操作）
                 TextActionButton(
                     text = "签到",
                     onClick = onSign,
@@ -468,14 +473,13 @@ private fun StudentListItem(
 enum class TextActionType { PRIMARY, NEUTRAL, DANGER, SOLID }
 
 /**
- * v35 视觉重构：文字按键（深色卡专用）。
+ * 文字按键：使用文字标签代替纯图标，提升可读性。
  *
- * 设计要点（参考图2 学员卡片）：
+ * 设计要点：
  * - 圆角胶囊形背景，文字居中
- * - 暗色背景 #2C2C2E + 青色文字 #00D2FF（中性操作）
- * - SOLID 类型使用青色渐变 #00D2FF → #3A7BD5 + 白色文字（主操作：签到）
- * - DANGER 类型保留语义红色文字
- * - 无 border，仅依赖背景色区隔
+ * - 通过 [type] 区分视觉层级，保持操作意图清晰
+ * - 充足的水平 padding 保证点击区可点击
+ * - 文字尺寸 12sp，保证在学员卡片底部多按钮不拥挤
  *
  * @param text 按钮文字
  * @param onClick 点击回调
@@ -487,34 +491,23 @@ private fun TextActionButton(
     onClick: () -> Unit,
     type: TextActionType
 ) {
-    // v35：深色卡按钮配色
     val backgroundColor = when (type) {
-        TextActionType.PRIMARY -> StudentCardButtonBg
-        TextActionType.NEUTRAL -> StudentCardButtonBg
-        TextActionType.DANGER -> StudentCardButtonBg
-        TextActionType.SOLID -> Color.Transparent  // SOLID 使用渐变背景
+        TextActionType.PRIMARY -> MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+        TextActionType.NEUTRAL -> com.shangmentiyu.sportscoach.ui.theme.appSurfaceVariant()
+        TextActionType.DANGER -> MaterialTheme.colorScheme.error.copy(alpha = 0.10f)
+        TextActionType.SOLID -> MaterialTheme.colorScheme.primary
     }
     val textColor = when (type) {
-        TextActionType.PRIMARY -> StudentCardButtonIcon
-        TextActionType.NEUTRAL -> StudentCardButtonIcon
-        TextActionType.DANGER -> Color(0xFFFF453A)  // 保留语义红色
+        TextActionType.PRIMARY -> MaterialTheme.colorScheme.primary
+        TextActionType.NEUTRAL -> com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant()
+        TextActionType.DANGER -> MaterialTheme.colorScheme.error
         TextActionType.SOLID -> Color.White
     }
 
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(10.dp))
-            .then(
-                if (type == TextActionType.SOLID) {
-                    Modifier.background(
-                        brush = Brush.linearGradient(
-                            colors = listOf(GradientStart, GradientEnd)
-                        )
-                    )
-                } else {
-                    Modifier.background(backgroundColor)
-                }
-            )
+            .clip(RoundedCornerShape(8.dp))
+            .background(backgroundColor)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center
