@@ -761,22 +761,22 @@ internal fun StudentFilterBar(
                 ),
                 modifier = Modifier.weight(1f)
             )
-            // 极简细线框圆形 + 按钮：主题色 #FF6B47，与搜索框等高
-            // - 圆形 36dp，1dp 细线框，无填充背景，避免突兀
-            // - 图标 18dp，与搜索框 leadingIcon 视觉重量一致
+            // 醒目实心圆形 + 按钮：主题色 #FF6B47 填充背景 + 白色图标
+            // - 圆形 40dp，与搜索框等高，实心背景确保在浅色主题下清晰可见
+            // - 图标 22dp，白色，视觉重量足够，用户一眼就能找到添加入口
             Box(
                 modifier = Modifier
-                    .size(36.dp)
+                    .size(40.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f))
+                    .background(MaterialTheme.colorScheme.primary)
                     .clickable(onClick = onAddStudent),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     Icons.Outlined.Add,
                     contentDescription = "添加学员",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp)
+                    tint = Color.White,
+                    modifier = Modifier.size(22.dp)
                 )
             }
         }
