@@ -144,6 +144,21 @@ fun ScheduleScreen(
     val dateFmt = remember { java.time.format.DateTimeFormatter.ofPattern("MM-dd", Locale.getDefault()) }
     val dayNames = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
 
+    // === 修复：收集 vm.toast 并通过 SnackbarHost 显示 ===
+    // 历史问题：ScheduleScreen 没有 snackbarHost，导致 saveSchedule 内部的校验 toast
+    //（如"无法排课：尚未拥有有效课时包"、"排课生效日期不能早于今天"等）
+    // 无法显示给用户，用户点击保存按钮后看不到任何反馈，误以为"点击无反应"。
+    // 修复：在 Scaffold 添加 snackbarHost，监听 vm.toast 变化并显示 Snackbar。
+    val snackbarHost = remember { androidx.compose.material3.SnackbarHostState() }
+    val toast by vm.toast.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(toast) {
+        val msg = toast
+        if (!msg.isNullOrBlank()) {
+            snackbarHost.showSnackbar(msg)
+            vm.clearToast()
+        }
+    }
+
     // === Bug 修复2：进入排课页时自动清理历史废弃占位排课 ===
     // 静默模式：仅在确有清理时通过 toast 反馈，避免每次进入页面都弹"无清理"提示
     LaunchedEffect(Unit) { vm.cleanupOnEnter() }
@@ -205,6 +220,7 @@ fun ScheduleScreen(
 
     Scaffold(
         containerColor = appGroupedBackground(),
+        snackbarHost = { androidx.compose.material3.SnackbarHost(snackbarHost) },
         topBar = {
             TopAppBar(
                 title = { Text("课表", fontWeight = FontWeight.Bold) },
@@ -335,14 +351,15 @@ fun ScheduleScreen(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 "今日无排课",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = appOutline()
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF1A1A1A)
                             )
                             Spacer(Modifier.height(Spacing.sm))
                             Text(
                                 "点击右下角 + 添加课程",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = appOutline()
+                                color = Color(0xFF6B6B6B)
                             )
                         }
                     }
@@ -660,19 +677,20 @@ private fun DaySelector(
             }
             val displayDayName = if (isToday) "今天" else day.dayName
 
+            // 修复：选中态统一为紫色背景 + 白色文字，与全局主色调 #6C5CE7 一致。
+            // 未选中态保持灰色背景 + 深灰文字。
+            val selectedBg = Color(0xFF6C5CE7)
+            val unselectedBg = Color(0xFFE8E8EB)
+            val selectedText = Color.White
+            val unselectedText = appOnSurface().copy(alpha = 0.7f)
+
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
                     .clip(capsuleShape)
-                    .border(
-                        width = if (isSelected) 1.dp else 0.dp,
-                        color = if (isSelected) appPrimary() else Color.Transparent,
-                        shape = capsuleShape
-                    )
                     .clickable { onDaySelected(day.dayOfWeek) }
                     .background(
-                        if (isSelected) appPrimary().copy(alpha = 0.10f)
-                        else Color(0xFFE8E8EB),
+                        if (isSelected) selectedBg else unselectedBg,
                         capsuleShape
                     )
                     .padding(horizontal = 14.dp, vertical = 6.dp)
@@ -681,14 +699,14 @@ private fun DaySelector(
                     text = displayDayName,
                     fontSize = 12.sp,
                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                    color = if (isSelected) appPrimary() else appOnSurface().copy(alpha = 0.7f)
+                    color = if (isSelected) selectedText else unselectedText
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = day.dateLabel,
                     fontSize = 12.sp,
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                    color = if (isSelected) appPrimary() else appOnSurface().copy(alpha = 0.9f)
+                    color = if (isSelected) selectedText else appOnSurface().copy(alpha = 0.9f)
                 )
             }
         }
@@ -857,11 +875,13 @@ private fun KeepScheduleCard(
  * 线程安全：基于 [java.time.LocalDate] + [DateTimeFormatter]，替代 [SimpleDateFormat]。
  */
 private fun weekRangeText(weekStart: Date): String {
-    val fmt = java.time.format.DateTimeFormatter.ofPattern("yyyy年MM月dd日", Locale.getDefault())
+    // 修复：原格式"yyyy年MM月dd日 ~ yyyy年MM月dd日"过长导致"2026年0..."被截断。
+    // 改为简洁的"MM.dd - MM.dd"格式，年份信息不在此处显示，避免溢出。
+    val fmt = java.time.format.DateTimeFormatter.ofPattern("MM.dd", Locale.getDefault())
     val zone = java.time.ZoneId.systemDefault()
     val start = weekStart.toInstant().atZone(zone).toLocalDate()
     val end = start.plusDays(6)
-    return "${start.format(fmt)} ~ ${end.format(fmt)}"
+    return "${start.format(fmt)} - ${end.format(fmt)}"
 }
 
 /**
