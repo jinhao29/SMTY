@@ -65,8 +65,8 @@ import com.shangmentiyu.sportscoach.ui.theme.AttendanceLate
 import com.shangmentiyu.sportscoach.ui.theme.AttendanceLeave
 import com.shangmentiyu.sportscoach.ui.theme.AttendanceOnTime
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
-import com.shangmentiyu.sportscoach.ui.theme.HeroGradientEnd
-import com.shangmentiyu.sportscoach.ui.theme.HeroGradientStart
+import com.shangmentiyu.sportscoach.ui.theme.BrandGradientEnd
+import com.shangmentiyu.sportscoach.ui.theme.BrandGradientStart
 import com.shangmentiyu.sportscoach.ui.theme.MedalBronzeEnd
 import com.shangmentiyu.sportscoach.ui.theme.MedalBronzeStart
 import com.shangmentiyu.sportscoach.ui.theme.MedalGoldEnd
@@ -78,17 +78,17 @@ import com.shangmentiyu.sportscoach.ui.theme.ScoreFail
 import com.shangmentiyu.sportscoach.ui.theme.ScoreGood
 import com.shangmentiyu.sportscoach.ui.theme.ScorePass
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
-import com.shangmentiyu.sportscoach.ui.theme.StatDurationColor
-import com.shangmentiyu.sportscoach.ui.theme.StatLessonColor
-import com.shangmentiyu.sportscoach.ui.theme.StatOnTimeColor
-import com.shangmentiyu.sportscoach.ui.theme.VitalBlueEnd
-import com.shangmentiyu.sportscoach.ui.theme.VitalBlueStart
-import com.shangmentiyu.sportscoach.ui.theme.VitalGreenEnd
-import com.shangmentiyu.sportscoach.ui.theme.VitalGreenStart
-import com.shangmentiyu.sportscoach.ui.theme.VitalOrangeEnd
-import com.shangmentiyu.sportscoach.ui.theme.VitalOrangeStart
-import com.shangmentiyu.sportscoach.ui.theme.VitalPurpleEnd
-import com.shangmentiyu.sportscoach.ui.theme.VitalPurpleStart
+import com.shangmentiyu.sportscoach.ui.theme.LightSecondary
+import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
+import com.shangmentiyu.sportscoach.ui.theme.LightTertiary
+import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
+import com.shangmentiyu.sportscoach.ui.theme.LightSecondary
+import com.shangmentiyu.sportscoach.ui.theme.LightPrimaryContainer
+import com.shangmentiyu.sportscoach.ui.theme.LightTertiary
+import com.shangmentiyu.sportscoach.ui.theme.BrandGradientEnd
+import com.shangmentiyu.sportscoach.ui.theme.BrandGradientStart
+import com.shangmentiyu.sportscoach.ui.theme.BrandGradientEnd
+import com.shangmentiyu.sportscoach.ui.theme.BrandGradientStart
 import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
@@ -597,7 +597,7 @@ private fun PasswordShareDialog(
  * 头部学员卡片：蓝紫渐变背景 + 大头像 + 装饰圆圈。
  *
  * 视觉亮点：
- * - 蓝紫渐变（HeroGradientStart → HeroGradientEnd）作为整卡片背景
+ * - 蓝紫渐变（BrandGradientStart → BrandGradientEnd）作为整卡片背景
  * - 右上角两个半透明装饰大圆圈，营造层次感
  * - 64dp 圆形头像（白色描边）+ 白色文字
  * - 副信息使用半透明白色
@@ -612,7 +612,7 @@ private fun HeroStudentCard(
             .fillMaxWidth()
             .background(
                 brush = Brush.linearGradient(
-                    colors = listOf(HeroGradientStart, HeroGradientEnd)
+                    colors = listOf(BrandGradientStart, BrandGradientEnd)
                 ),
                 shape = RoundedCornerShape(0.dp)
             )
@@ -706,8 +706,8 @@ private fun VitalMetricsGrid(student: com.shangmentiyu.sportscoach.data.model.St
                 value = if (student.age > 0) "${student.age}" else "—",
                 unit = if (student.age > 0) "岁" else "",
                 icon = Icons.Outlined.Cake,
-                gradientStart = VitalOrangeStart,
-                gradientEnd = VitalOrangeEnd,
+                BrandGradientStart = BrandGradientStart,
+                BrandGradientEnd = BrandGradientEnd,
                 modifier = Modifier.weight(1f)
             )
             VitalCard(
@@ -715,8 +715,8 @@ private fun VitalMetricsGrid(student: com.shangmentiyu.sportscoach.data.model.St
                 value = if (student.heightCm > 0) "${student.heightCm}" else "—",
                 unit = if (student.heightCm > 0) "cm" else "",
                 icon = Icons.Outlined.Height,
-                gradientStart = VitalBlueStart,
-                gradientEnd = VitalBlueEnd,
+                BrandGradientStart = LightSecondary,
+                BrandGradientEnd = LightPrimary,
                 modifier = Modifier.weight(1f)
             )
         }
@@ -730,8 +730,8 @@ private fun VitalMetricsGrid(student: com.shangmentiyu.sportscoach.data.model.St
                 value = if (student.weightKg > 0f) String.format("%.1f", student.weightKg) else "—",
                 unit = if (student.weightKg > 0f) "kg" else "",
                 icon = Icons.Outlined.MonitorWeight,
-                gradientStart = VitalPurpleStart,
-                gradientEnd = VitalPurpleEnd,
+                BrandGradientStart = BrandGradientStart,
+                BrandGradientEnd = BrandGradientEnd,
                 modifier = Modifier.weight(1f)
             )
             VitalCard(
@@ -739,8 +739,8 @@ private fun VitalMetricsGrid(student: com.shangmentiyu.sportscoach.data.model.St
                 value = if (displayBmi > 0f) String.format("%.1f", displayBmi) else "—",
                 unit = if (displayBmi > 0f) BmiProcessor.classify(displayBmi).label else "",
                 icon = Icons.Outlined.Analytics,
-                gradientStart = VitalGreenStart,
-                gradientEnd = VitalGreenEnd,
+                BrandGradientStart = LightTertiary,
+                BrandGradientEnd = LightPrimaryContainer,
                 modifier = Modifier.weight(1f)
             )
         }
@@ -756,8 +756,8 @@ private fun VitalCard(
     value: String,
     unit: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    gradientStart: Color,
-    gradientEnd: Color,
+    BrandGradientStart: Color,
+    BrandGradientEnd: Color,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -765,7 +765,7 @@ private fun VitalCard(
             .aspectRatio(1.1f)
             .background(
                 brush = Brush.linearGradient(
-                    colors = listOf(gradientStart, gradientEnd)
+                    colors = listOf(BrandGradientStart, BrandGradientEnd)
                 ),
                 shape = RoundedCornerShape(16.dp)
             )
@@ -835,21 +835,21 @@ private fun StatsCard(stats: GrowthStats) {
             StatItem(
                 label = "累计课时",
                 value = stats.totalLessons.toString(),
-                valueColor = StatLessonColor,
+                valueColor = LightPrimary,
                 modifier = Modifier.weight(1f)
             )
             StatDivider()
             StatItem(
                 label = "训练时长",
                 value = "${String.format("%.1f", stats.totalHours)}h",
-                valueColor = StatDurationColor,
+                valueColor = LightSecondary,
                 modifier = Modifier.weight(1f)
             )
             StatDivider()
             StatItem(
                 label = "准时率",
                 value = "${(stats.onTimeRate * 100).toInt()}%",
-                valueColor = StatOnTimeColor,
+                valueColor = LightTertiary,
                 modifier = Modifier.weight(1f)
             )
         }
@@ -1012,7 +1012,7 @@ private fun PersonalBestRow(
         1 -> MedalGoldStart to MedalGoldEnd
         2 -> MedalSilverStart to MedalSilverEnd
         3 -> MedalBronzeStart to MedalBronzeEnd
-        else -> VitalBlueStart to VitalBlueEnd
+        else -> LightSecondary to LightPrimary
     }
     Column {
         if (showTopDivider) {

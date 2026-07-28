@@ -75,11 +75,11 @@ import com.shangmentiyu.sportscoach.domain.ActivityLevel
 import com.shangmentiyu.sportscoach.domain.TdeeResult
 import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
 import com.shangmentiyu.sportscoach.ui.theme.IOSCard
+import com.shangmentiyu.sportscoach.ui.theme.PrimaryButton
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
-import com.shangmentiyu.sportscoach.ui.theme.appTextPlaceholder
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 import com.shangmentiyu.sportscoach.ui.theme.appSurface
 import androidx.compose.material3.AlertDialog
@@ -262,24 +262,15 @@ fun DietManageScreen(
                 )
 
                 // 5. 应用方案按钮
-                Button(
+                PrimaryButton(
+                    text = "应用该饮食方案给此学员",
                     onClick = {
                         keyboard?.hide()
                         vm.applyTemplate {}
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = appPrimary(),
-                        contentColor = Color.White
-                    )
-                ) {
-                    Icon(Icons.Outlined.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("应用该饮食方案给此学员", fontWeight = FontWeight.SemiBold)
-                }
+                    modifier = Modifier.fillMaxWidth(),
+                    icon = Icons.Outlined.CheckCircle
+                )
             }
 
             // 6. 折叠的"热量评估"面板（TDEE 计算器）
@@ -959,7 +950,7 @@ private fun TdeeInputField(
                 Text(
                     placeholder,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = appTextPlaceholder()
+                    color = appOnSurfaceVariant()
                 )
             },
             singleLine = true,

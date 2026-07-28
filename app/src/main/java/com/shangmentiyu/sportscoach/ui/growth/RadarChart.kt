@@ -20,8 +20,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
-import com.shangmentiyu.sportscoach.ui.theme.GlowCyan
-import com.shangmentiyu.sportscoach.ui.theme.GlowPurple
+import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
+import com.shangmentiyu.sportscoach.ui.theme.LightSecondary
 
 /**
  * 银河星空风格五维雷达图。
@@ -105,7 +105,7 @@ fun RadarChart(
             drawPath(
                 path = dataPath,
                 brush = Brush.radialGradient(
-                    colors = listOf(GlowCyan.copy(alpha = 0.45f), GlowPurple.copy(alpha = 0.25f)),
+                    colors = listOf(LightPrimary.copy(alpha = 0.45f), LightSecondary.copy(alpha = 0.25f)),
                     center = center,
                     radius = radius
                 )
@@ -113,14 +113,14 @@ fun RadarChart(
             // 边线
             drawPath(
                 path = dataPath,
-                color = GlowCyan,
+                color = LightPrimary,
                 style = Stroke(width = 2f)
             )
 
             // === 5. 顶点圆点 ===
             for (point in vertexPoints) {
                 drawCircle(
-                    color = GlowCyan,
+                    color = LightPrimary,
                     radius = 4f,
                     center = point
                 )
@@ -147,7 +147,7 @@ fun RadarChart(
                 )
                 // 标签下方显示数值
                 val valueText = "${values[i].toInt()}"
-                val valueStyle = TextStyle(color = GlowCyan, fontSize = 10.sp)
+                val valueStyle = TextStyle(color = LightPrimary, fontSize = 10.sp)
                 val valueMeasured = textMeasurer.measure(AnnotatedString(valueText), valueStyle)
                 drawText(
                     textLayoutResult = valueMeasured,

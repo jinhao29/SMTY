@@ -93,113 +93,9 @@ val MedalSilverEnd = Color(0xFFB0B0B0)
 val MedalBronzeStart = Color(0xFFCD7F32)
 val MedalBronzeEnd = Color(0xFF8B4513)
 
-// === 4. 废弃别名兼容区（v39 过渡期保留，新代码禁止使用）===
-// 这些别名指向新令牌，仅为避免大量历史引用一次性破坏编译。
-// 后续清理 PR 应全局替换后删除此区块。
-@Deprecated("v39：使用 LightBackground", replaceWith = ReplaceWith("LightBackground"))
-val GalaxyBackground get() = LightBackground
-@Deprecated("v39：使用 LightBackground", replaceWith = ReplaceWith("LightBackground"))
-val GalaxyBackgroundEnd get() = LightBackground
-@Deprecated("v39：使用 LightBackground", replaceWith = ReplaceWith("LightBackground"))
-val DarkBackground get() = LightBackground
-@Deprecated("v39：使用 LightGroupedBackground", replaceWith = ReplaceWith("LightGroupedBackground"))
-val IOSGroupedBackground get() = LightGroupedBackground
-@Deprecated("v39：使用 LightSurface", replaceWith = ReplaceWith("LightSurface"))
-val DarkSurface get() = LightSurface
-@Deprecated("v39：使用 LightSurface", replaceWith = ReplaceWith("LightSurface"))
-val GlassSurface get() = LightSurface
-@Deprecated("v39：使用 LightSurface", replaceWith = ReplaceWith("LightSurface"))
-val GlassSurfaceStrong get() = LightSurface
-@Deprecated("v39：使用 LightSurfaceVariant", replaceWith = ReplaceWith("LightSurfaceVariant"))
-val DarkSurfaceVariant get() = LightSurfaceVariant
-@Deprecated("v39：使用 LightPrimary", replaceWith = ReplaceWith("LightPrimary"))
-val DarkPrimary get() = LightPrimary
-@Deprecated("v39：使用 LightOnPrimary", replaceWith = ReplaceWith("LightOnPrimary"))
-val DarkOnPrimary get() = LightOnPrimary
-@Deprecated("v39：使用 LightSecondary", replaceWith = ReplaceWith("LightSecondary"))
-val DarkSecondary get() = LightSecondary
-@Deprecated("v39：使用 LightOnPrimary", replaceWith = ReplaceWith("LightOnPrimary"))
-val DarkOnSecondary get() = LightOnPrimary
-@Deprecated("v39：使用 LightOnBackground", replaceWith = ReplaceWith("LightOnBackground"))
-val DarkOnBackground get() = LightOnBackground
-@Deprecated("v39：使用 LightOnSurface", replaceWith = ReplaceWith("LightOnSurface"))
-val DarkOnSurface get() = LightOnSurface
-@Deprecated("v39：使用 LightOnSurfaceVariant", replaceWith = ReplaceWith("LightOnSurfaceVariant"))
-val DarkOnSurfaceVariant get() = LightOnSurfaceVariant
-@Deprecated("v39：使用 LightOnSurfaceVariant", replaceWith = ReplaceWith("LightOnSurfaceVariant"))
-val DarkTextPlaceholder get() = LightOnSurfaceVariant
-@Deprecated("v39：使用 LightOutline", replaceWith = ReplaceWith("LightOutline"))
-val DarkOutline get() = LightOutline
-@Deprecated("v39：使用 LightDivider", replaceWith = ReplaceWith("LightDivider"))
-val DarkDividerColor get() = LightDivider
-@Deprecated("v39：使用 LightPrimary", replaceWith = ReplaceWith("LightPrimary"))
-val GlowCyan get() = LightPrimary
-@Deprecated("v39：使用 LightSecondary", replaceWith = ReplaceWith("LightSecondary"))
-val GlowPurple get() = LightSecondary
-@Deprecated("v39：使用 LightPrimary", replaceWith = ReplaceWith("LightPrimary"))
-val GlowBlue get() = LightPrimary
-@Deprecated("v39：使用 BrandGradientStart", replaceWith = ReplaceWith("BrandGradientStart"))
-val GradientStart get() = BrandGradientStart
-@Deprecated("v39：使用 BrandGradientEnd", replaceWith = ReplaceWith("BrandGradientEnd"))
-val GradientEnd get() = BrandGradientEnd
-@Deprecated("v39：使用 LightPrimaryContainer", replaceWith = ReplaceWith("LightPrimaryContainer"))
-val Indigo80 get() = LightPrimaryContainer
-@Deprecated("v39：使用 LightOutline", replaceWith = ReplaceWith("LightOutline"))
-val IndigoGrey80 get() = LightOutline
-@Deprecated("v39：使用 LightSecondary", replaceWith = ReplaceWith("LightSecondary"))
-val Pink80 get() = LightSecondary
-@Deprecated("v39：使用 LightOnPrimaryContainer", replaceWith = ReplaceWith("LightOnPrimaryContainer"))
-val Indigo40 get() = LightOnPrimaryContainer
-@Deprecated("v39：使用 LightOnSurfaceVariant", replaceWith = ReplaceWith("LightOnSurfaceVariant"))
-val IndigoGrey40 get() = LightOnSurfaceVariant
-@Deprecated("v39：使用 LightOnPrimaryContainer", replaceWith = ReplaceWith("LightOnPrimaryContainer"))
-val Pink40 get() = LightOnPrimaryContainer
-// 功能入口图标背景色（统一为珊瑚橙色系，保留语义命名）
-@Deprecated("v39：使用 LightSecondary", replaceWith = ReplaceWith("LightSecondary"))
-val FeatureIconBlue get() = LightSecondary
-@Deprecated("v39：使用 LightPrimary", replaceWith = ReplaceWith("LightPrimary"))
-val FeatureIconOrange get() = LightPrimary
-@Deprecated("v39：使用 LightTertiary", replaceWith = ReplaceWith("LightTertiary"))
-val FeatureIconGreen get() = LightTertiary
-@Deprecated("v39：使用 LightPrimary", replaceWith = ReplaceWith("LightPrimary"))
-val FeatureIconPurple get() = LightPrimary
-@Deprecated("v39：使用 LightPrimaryContainer", replaceWith = ReplaceWith("LightPrimaryContainer"))
-val FeatureIconPink get() = LightPrimaryContainer
-@Deprecated("v39：使用 LightOnSurfaceVariant", replaceWith = ReplaceWith("LightOnSurfaceVariant"))
-val FeatureIconTeal get() = LightOnSurfaceVariant
-// 渐变别名
-@Deprecated("v39：使用 BrandGradientStart", replaceWith = ReplaceWith("BrandGradientStart"))
-val HeroGradientStart get() = BrandGradientStart
-@Deprecated("v39：使用 BrandGradientEnd", replaceWith = ReplaceWith("BrandGradientEnd"))
-val HeroGradientEnd get() = BrandGradientEnd
-@Deprecated("v39：使用 BrandGradientStart", replaceWith = ReplaceWith("BrandGradientStart"))
-val VitalOrangeStart get() = BrandGradientStart
-@Deprecated("v39：使用 BrandGradientEnd", replaceWith = ReplaceWith("BrandGradientEnd"))
-val VitalOrangeEnd get() = BrandGradientEnd
-@Deprecated("v39：使用 LightSecondary", replaceWith = ReplaceWith("LightSecondary"))
-val VitalBlueStart get() = LightSecondary
-@Deprecated("v39：使用 LightPrimary", replaceWith = ReplaceWith("LightPrimary"))
-val VitalBlueEnd get() = LightPrimary
-@Deprecated("v39：使用 BrandGradientStart", replaceWith = ReplaceWith("BrandGradientStart"))
-val VitalPurpleStart get() = BrandGradientStart
-@Deprecated("v39：使用 BrandGradientEnd", replaceWith = ReplaceWith("BrandGradientEnd"))
-val VitalPurpleEnd get() = BrandGradientEnd
-@Deprecated("v39：使用 LightTertiary", replaceWith = ReplaceWith("LightTertiary"))
-val VitalGreenStart get() = LightTertiary
-@Deprecated("v39：使用 LightPrimaryContainer", replaceWith = ReplaceWith("LightPrimaryContainer"))
-val VitalGreenEnd get() = LightPrimaryContainer
-// 统计数字颜色
-@Deprecated("v39：使用 LightPrimary", replaceWith = ReplaceWith("LightPrimary"))
-val StatLessonColor get() = LightPrimary
-@Deprecated("v39：使用 LightSecondary", replaceWith = ReplaceWith("LightSecondary"))
-val StatDurationColor get() = LightSecondary
-@Deprecated("v39：使用 LightTertiary", replaceWith = ReplaceWith("LightTertiary"))
-val StatOnTimeColor get() = LightTertiary
-// 暗色占位文字别名
-@Deprecated("v39：使用 NightOnSurfaceVariant", replaceWith = ReplaceWith("NightOnSurfaceVariant"))
-val NightTextPlaceholder get() = NightOnSurfaceVariant
-@Deprecated("v39：使用 NightDivider", replaceWith = ReplaceWith("NightDivider"))
-val NightDividerColor get() = NightDivider
+// === 4. 废弃别名兼容区 ===
+// v39 已全局替换所有历史引用，废弃别名已全部删除。
+// 新代码请直接使用 Light*/Night*/BrandGradient* 语义令牌。
 
 // === 5. 主题感知 @Composable 颜色访问器 ===
 // 在 Compose 中调用：appBackground() / appSurface() / appPrimary() 等，
@@ -250,14 +146,6 @@ fun appOnSurface(): Color = if (isSystemInDarkTheme()) NightOnSurface else Light
  */
 @Composable
 fun appOnSurfaceVariant(): Color = if (isSystemInDarkTheme()) NightOnSurfaceVariant else LightOnSurfaceVariant
-
-/**
- * 占位文字色（已统一为次级文字色）。
- * @deprecated v39：使用 [appOnSurfaceVariant]
- */
-@Deprecated("v39：使用 appOnSurfaceVariant", ReplaceWith("appOnSurfaceVariant()"))
-@Composable
-fun appTextPlaceholder(): Color = appOnSurfaceVariant()
 
 /**
  * 极浅分割线色（替代彩色粗线，符合"无感分割"高级感设计）。

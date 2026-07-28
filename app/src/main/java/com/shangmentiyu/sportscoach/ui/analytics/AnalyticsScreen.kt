@@ -44,12 +44,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconBlue
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconGreen
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconOrange
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconPurple
-import com.shangmentiyu.sportscoach.ui.theme.GradientEnd
-import com.shangmentiyu.sportscoach.ui.theme.GradientStart
+import com.shangmentiyu.sportscoach.ui.theme.LightSecondary
+import com.shangmentiyu.sportscoach.ui.theme.LightTertiary
+import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
+import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
+import com.shangmentiyu.sportscoach.ui.theme.BrandGradientEnd
+import com.shangmentiyu.sportscoach.ui.theme.BrandGradientStart
 import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
 import com.shangmentiyu.sportscoach.ui.theme.ScoreFail
 import com.shangmentiyu.sportscoach.ui.theme.ScoreGood
@@ -221,7 +221,7 @@ private fun StudentPickerCard(
                 .height(4.dp)
                 .background(
                     brush = Brush.linearGradient(
-                        colors = listOf(GradientStart, GradientEnd)
+                        colors = listOf(BrandGradientStart, BrandGradientEnd)
                     )
                 )
         )
@@ -330,7 +330,7 @@ private fun OverviewStatsCard(overview: AnalyticsViewModel.OverviewStats) {
                 .height(4.dp)
                 .background(
                     brush = Brush.linearGradient(
-                        colors = listOf(GradientStart, GradientEnd)
+                        colors = listOf(BrandGradientStart, BrandGradientEnd)
                     )
                 )
         )
@@ -343,19 +343,19 @@ private fun OverviewStatsCard(overview: AnalyticsViewModel.OverviewStats) {
             StatCell(
                 label = "总成绩",
                 value = overview.totalCount.toString(),
-                iconBgColor = FeatureIconPurple
+                iconBgColor = LightPrimary
             )
             StatDivider()
             StatCell(
                 label = "参与项目",
                 value = overview.projectCount.toString(),
-                iconBgColor = FeatureIconBlue
+                iconBgColor = LightSecondary
             )
             StatDivider()
             StatCell(
                 label = "最近测试",
                 value = overview.latestDate.takeLast(5),  // MM-DD
-                iconBgColor = FeatureIconOrange,
+                iconBgColor = LightPrimary,
                 small = true
             )
         }
@@ -458,7 +458,7 @@ private fun ProjectSection(
                     .height(4.dp)
                     .background(
                         brush = Brush.linearGradient(
-                            colors = listOf(GradientStart, GradientEnd)
+                            colors = listOf(BrandGradientStart, BrandGradientEnd)
                         )
                     )
             )
@@ -625,13 +625,13 @@ private fun EmptyHint(
         Box(
             modifier = Modifier
                 .size(56.dp)
-                .background(FeatureIconPurple.copy(alpha = 0.12f), RoundedCornerShape(14.dp)),
+                .background(LightPrimary.copy(alpha = 0.12f), RoundedCornerShape(14.dp)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 icon,
                 contentDescription = null,
-                tint = FeatureIconPurple,
+                tint = LightPrimary,
                 modifier = Modifier.size(28.dp)
             )
         }

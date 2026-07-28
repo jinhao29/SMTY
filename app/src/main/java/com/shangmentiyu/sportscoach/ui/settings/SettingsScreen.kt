@@ -88,12 +88,12 @@ import com.shangmentiyu.sportscoach.update.UpdateResult
 import com.shangmentiyu.sportscoach.BuildConfig
 import com.shangmentiyu.sportscoach.util.CrashDumper
 import kotlinx.coroutines.launch
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconBlue
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconGreen
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconOrange
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconPurple
-import com.shangmentiyu.sportscoach.ui.theme.GradientEnd
-import com.shangmentiyu.sportscoach.ui.theme.GradientStart
+import com.shangmentiyu.sportscoach.ui.theme.LightSecondary
+import com.shangmentiyu.sportscoach.ui.theme.LightTertiary
+import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
+import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
+import com.shangmentiyu.sportscoach.ui.theme.BrandGradientEnd
+import com.shangmentiyu.sportscoach.ui.theme.BrandGradientStart
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
@@ -379,7 +379,7 @@ fun SettingsScreen() {
                         ) {
                             IosIconBadge(
                                 icon = Icons.Outlined.Person,
-                                iconBgColor = FeatureIconPurple,
+                                iconBgColor = LightPrimary,
                                 contentDescription = "教练"
                             )
                             Column(modifier = Modifier.weight(1f)) {
@@ -432,7 +432,7 @@ fun SettingsScreen() {
                     IosGroupedListCard {
                         SettingsActionRow(
                             icon = Icons.Outlined.Download,
-                            iconBgColor = FeatureIconPurple,
+                            iconBgColor = LightPrimary,
                             iconContentDescription = "导出今日记录",
                             title = "导出今日课堂记录",
                             subtitle = "将今日签到记录导出到指定目录",
@@ -441,7 +441,7 @@ fun SettingsScreen() {
                         )
                         SettingsActionRow(
                             icon = Icons.Outlined.CloudUpload,
-                            iconBgColor = FeatureIconPurple,
+                            iconBgColor = LightPrimary,
                             iconContentDescription = "导出成绩档案",
                             title = "导出成绩到档案",
                             subtitle = "同步成绩到桌面端 Excel 档案",
@@ -450,7 +450,7 @@ fun SettingsScreen() {
                         )
                         SettingsActionRow(
                             icon = Icons.Outlined.FolderOpen,
-                            iconBgColor = FeatureIconPurple,
+                            iconBgColor = LightPrimary,
                             iconContentDescription = "导入学员",
                             title = "从档案导入学员",
                             subtitle = "从桌面端 Excel 档案批量导入学员",
@@ -476,7 +476,7 @@ fun SettingsScreen() {
                         ) {
                             IosIconBadge(
                                 icon = Icons.Outlined.PhoneAndroid,
-                                iconBgColor = FeatureIconOrange,
+                                iconBgColor = LightPrimary,
                                 contentDescription = "电脑端截图同步"
                             )
                             Column(modifier = Modifier.weight(1f)) {
@@ -499,7 +499,7 @@ fun SettingsScreen() {
                                     style = MaterialTheme.typography.labelSmall,
                                     color = when {
                                         lanPlanSyncing || pendingLanPlan != null ->
-                                            FeatureIconOrange
+                                            LightPrimary
                                         else -> appOnSurfaceVariant()
                                     }
                                 )
@@ -509,7 +509,7 @@ fun SettingsScreen() {
                                 Box(
                                     modifier = Modifier
                                         .background(
-                                            color = FeatureIconOrange.copy(alpha = 0.15f),
+                                            color = LightPrimary.copy(alpha = 0.15f),
                                             shape = RoundedCornerShape(10.dp)
                                         )
                                         .padding(horizontal = 8.dp, vertical = 4.dp)
@@ -517,7 +517,7 @@ fun SettingsScreen() {
                                     Text(
                                         "待同步",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = FeatureIconOrange,
+                                        color = LightPrimary,
                                         fontWeight = FontWeight.SemiBold
                                     )
                                 }
@@ -534,7 +534,7 @@ fun SettingsScreen() {
                         // 操作行：同步电脑端截图
                         SettingsActionRow(
                             icon = Icons.Outlined.SyncAlt,
-                            iconBgColor = FeatureIconOrange,
+                            iconBgColor = LightPrimary,
                             iconContentDescription = "同步电脑端截图",
                             title = "同步电脑端截图",
                             subtitle = when {
@@ -575,7 +575,7 @@ fun SettingsScreen() {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(18.dp),
                                     strokeWidth = 2.dp,
-                                    color = FeatureIconOrange
+                                    color = LightPrimary
                                 )
                                 Text(
                                     "正在从局域网下载训练计划截图…",
@@ -613,7 +613,7 @@ fun SettingsScreen() {
                         ) {
                             IosIconBadge(
                                 icon = Icons.Outlined.FitnessCenter,
-                                iconBgColor = FeatureIconOrange,
+                                iconBgColor = LightPrimary,
                                 contentDescription = "训练动作积木库"
                             )
                             Column(modifier = Modifier.weight(1f)) {
@@ -654,7 +654,7 @@ fun SettingsScreen() {
                                     Row(
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(12.dp))
-                                            .background(FeatureIconOrange.copy(alpha = 0.08f))
+                                            .background(LightPrimary.copy(alpha = 0.08f))
                                             .padding(horizontal = Spacing.sm, vertical = 6.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -662,13 +662,13 @@ fun SettingsScreen() {
                                         Text(
                                             block,
                                             style = MaterialTheme.typography.labelMedium,
-                                            color = FeatureIconOrange,
+                                            color = LightPrimary,
                                             fontWeight = FontWeight.Medium
                                         )
                                         Icon(
                                             Icons.Outlined.Close,
                                             contentDescription = "删除 $block",
-                                            tint = FeatureIconOrange.copy(alpha = 0.6f),
+                                            tint = LightPrimary.copy(alpha = 0.6f),
                                             modifier = Modifier
                                                 .size(14.dp)
                                                 .clickable { vm.removeExerciseBlock(block) }
@@ -731,7 +731,7 @@ fun SettingsScreen() {
                     IosGroupedListCard {
                         SettingsActionRow(
                             icon = Icons.Outlined.SaveAlt,
-                            iconBgColor = FeatureIconPurple,
+                            iconBgColor = LightPrimary,
                             iconContentDescription = "备份数据",
                             title = "一键备份所有数据",
                             subtitle = "将学员/课时/签到/照片打包备份到手机或网盘",
@@ -745,7 +745,7 @@ fun SettingsScreen() {
                         )
                         SettingsActionRow(
                             icon = Icons.Outlined.Restore,
-                            iconBgColor = FeatureIconPurple,
+                            iconBgColor = LightPrimary,
                             iconContentDescription = "恢复数据",
                             title = "从备份文件恢复",
                             subtitle = "覆盖当前所有数据，恢复前请先备份",
@@ -806,7 +806,7 @@ fun SettingsScreen() {
                         ) {
                             IosIconBadge(
                                 icon = Icons.Outlined.Storage,
-                                iconBgColor = FeatureIconBlue,
+                                iconBgColor = LightSecondary,
                                 contentDescription = "自动备份"
                             )
                             Column(modifier = Modifier.weight(1f)) {
@@ -824,7 +824,7 @@ fun SettingsScreen() {
                                         "已关闭，仅手动备份生效",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = if (autoBackupEnabled)
-                                        FeatureIconGreen
+                                        LightTertiary
                                     else
                                         appOnSurfaceVariant()
                                 )
@@ -856,7 +856,7 @@ fun SettingsScreen() {
                         ) {
                             IosIconBadge(
                                 icon = Icons.Outlined.Cloud,
-                                iconBgColor = FeatureIconBlue,
+                                iconBgColor = LightSecondary,
                                 contentDescription = "WebDAV 云盘备份"
                             )
                             Column(modifier = Modifier.weight(1f)) {
@@ -874,7 +874,7 @@ fun SettingsScreen() {
                                         "关闭：仅本地备份，不推送云端",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = if (webDavConfig.enabled)
-                                        FeatureIconGreen
+                                        LightTertiary
                                     else
                                         appOnSurfaceVariant()
                                 )
@@ -1065,7 +1065,7 @@ fun SettingsScreen() {
                         ) {
                             IosIconBadge(
                                 icon = Icons.Outlined.Storage,
-                                iconBgColor = FeatureIconBlue,
+                                iconBgColor = LightSecondary,
                                 contentDescription = "签到照片存储"
                             )
                             Column(modifier = Modifier.weight(1f)) {
@@ -1087,7 +1087,7 @@ fun SettingsScreen() {
                                 Box(
                                     modifier = Modifier
                                         .background(
-                                            color = FeatureIconOrange.copy(alpha = 0.15f),
+                                            color = LightPrimary.copy(alpha = 0.15f),
                                             shape = RoundedCornerShape(10.dp)
                                         )
                                         .padding(horizontal = 8.dp, vertical = 4.dp)
@@ -1095,7 +1095,7 @@ fun SettingsScreen() {
                                     Text(
                                         "${cleanableCount} 张可清理",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = FeatureIconOrange,
+                                        color = LightPrimary,
                                         fontWeight = FontWeight.SemiBold
                                     )
                                 }
@@ -1112,7 +1112,7 @@ fun SettingsScreen() {
                         // 操作行：清理一年前签到照片（带二次确认）
                         SettingsActionRow(
                             icon = Icons.Outlined.DeleteSweep,
-                            iconBgColor = FeatureIconOrange,
+                            iconBgColor = LightPrimary,
                             iconContentDescription = "清理照片",
                             title = "清理一年前签到照片",
                             subtitle = if (cleanableCount > 0)
@@ -1147,7 +1147,7 @@ fun SettingsScreen() {
                         ) {
                             IosIconBadge(
                                 icon = Icons.Outlined.ImageNotSupported,
-                                iconBgColor = FeatureIconOrange,
+                                iconBgColor = LightPrimary,
                                 contentDescription = "孤立照片"
                             )
                             Column(modifier = Modifier.weight(1f)) {
@@ -1171,7 +1171,7 @@ fun SettingsScreen() {
                                 Box(
                                     modifier = Modifier
                                         .background(
-                                            color = FeatureIconOrange.copy(alpha = 0.15f),
+                                            color = LightPrimary.copy(alpha = 0.15f),
                                             shape = RoundedCornerShape(10.dp)
                                         )
                                         .padding(horizontal = 8.dp, vertical = 4.dp)
@@ -1179,7 +1179,7 @@ fun SettingsScreen() {
                                     Text(
                                         "可清理",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = FeatureIconOrange,
+                                        color = LightPrimary,
                                         fontWeight = FontWeight.SemiBold
                                     )
                                 }
@@ -1196,7 +1196,7 @@ fun SettingsScreen() {
                         // 操作行：清理孤立照片（带二次确认）
                         SettingsActionRow(
                             icon = Icons.Outlined.DeleteSweep,
-                            iconBgColor = FeatureIconOrange,
+                            iconBgColor = LightPrimary,
                             iconContentDescription = "清理孤立照片",
                             title = "清理孤立照片",
                             subtitle = if (orphanPhotoCount > 0)
@@ -1231,7 +1231,7 @@ fun SettingsScreen() {
                         ) {
                             IosIconBadge(
                                 icon = Icons.Outlined.Storage,
-                                iconBgColor = FeatureIconBlue,
+                                iconBgColor = LightSecondary,
                                 contentDescription = "应用缓存"
                             )
                             Column(modifier = Modifier.weight(1f)) {
@@ -1255,7 +1255,7 @@ fun SettingsScreen() {
                                 Box(
                                     modifier = Modifier
                                         .background(
-                                            color = FeatureIconBlue.copy(alpha = 0.15f),
+                                            color = LightSecondary.copy(alpha = 0.15f),
                                             shape = RoundedCornerShape(10.dp)
                                         )
                                         .padding(horizontal = 8.dp, vertical = 4.dp)
@@ -1263,7 +1263,7 @@ fun SettingsScreen() {
                                     Text(
                                         "可清理",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = FeatureIconBlue,
+                                        color = LightSecondary,
                                         fontWeight = FontWeight.SemiBold
                                     )
                                 }
@@ -1280,7 +1280,7 @@ fun SettingsScreen() {
                         // 操作行：清理应用缓存（带二次确认）
                         SettingsActionRow(
                             icon = Icons.Outlined.CleaningServices,
-                            iconBgColor = FeatureIconBlue,
+                            iconBgColor = LightSecondary,
                             iconContentDescription = "清理缓存",
                             title = "清理应用缓存",
                             subtitle = if (cacheFileCount > 0)
@@ -1304,7 +1304,7 @@ fun SettingsScreen() {
                     IosGroupedListCard {
                         SettingsActionRow(
                             icon = Icons.Outlined.Refresh,
-                            iconBgColor = FeatureIconPurple,
+                            iconBgColor = LightPrimary,
                             iconContentDescription = "检查更新",
                             title = "检查更新",
                             subtitle = "当前版本 v${BuildConfig.VERSION_NAME} · 点击立即检查",
@@ -1349,7 +1349,7 @@ fun SettingsScreen() {
                         )
                         SettingsActionRow(
                             icon = Icons.Outlined.Download,
-                            iconBgColor = FeatureIconPurple,
+                            iconBgColor = LightPrimary,
                             iconContentDescription = "安装已下载的更新",
                             title = "安装已下载的更新",
                             subtitle = "若已下载新版本 APK，点击此处直接安装",
@@ -1387,7 +1387,7 @@ fun SettingsScreen() {
                         ) {
                             IosIconBadge(
                                 icon = Icons.Outlined.Apps,
-                                iconBgColor = FeatureIconPurple,
+                                iconBgColor = LightPrimary,
                                 contentDescription = "应用信息"
                             )
                             Column(modifier = Modifier.weight(1f)) {
@@ -1422,7 +1422,7 @@ fun SettingsScreen() {
                         ) {
                             IosIconBadge(
                                 icon = Icons.Outlined.Info,
-                                iconBgColor = FeatureIconPurple,
+                                iconBgColor = LightPrimary,
                                 contentDescription = "功能简介"
                             )
                             Column(modifier = Modifier.weight(1f)) {
@@ -1727,7 +1727,7 @@ private fun IosGroupedListCard(content: @Composable () -> Unit) {
                 .height(4.dp)
                 .background(
                     brush = Brush.linearGradient(
-                        colors = listOf(GradientStart, GradientEnd)
+                        colors = listOf(BrandGradientStart, BrandGradientEnd)
                     )
                 )
         )

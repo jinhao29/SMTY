@@ -56,8 +56,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shangmentiyu.sportscoach.data.model.Student
 import com.shangmentiyu.sportscoach.domain.HeightPredictionResult
 import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
-import com.shangmentiyu.sportscoach.ui.theme.GradientStart
+import com.shangmentiyu.sportscoach.ui.theme.BrandGradientStart
 import com.shangmentiyu.sportscoach.ui.theme.IOSCard
+import com.shangmentiyu.sportscoach.ui.theme.PrimaryButton
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
@@ -189,22 +190,14 @@ fun HeightPredictionScreen(
                 )
             }
 
-            Button(
+            PrimaryButton(
+                text = "保存身体数据",
                 onClick = {
                     keyboard?.hide()
                     vm.save {}
                 },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = appPrimary(),
-                    contentColor = Color.White
-                )
-            ) {
-                Text("保存身体数据", fontWeight = FontWeight.SemiBold)
-            }
+                modifier = Modifier.fillMaxWidth()
+            )
 
             result?.let { r ->
                 PredictionResultCard(r)
@@ -230,7 +223,7 @@ private fun StudentInfoCard(student: Student?) {
                     modifier = Modifier
                         .size(44.dp)
                         .clip(CircleShape)
-                        .background(GradientStart),
+                        .background(BrandGradientStart),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(

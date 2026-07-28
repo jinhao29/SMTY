@@ -22,7 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.shangmentiyu.sportscoach.ui.theme.GradientStart
+import com.shangmentiyu.sportscoach.ui.theme.BrandGradientStart
 import com.shangmentiyu.sportscoach.ui.theme.LightOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
 import com.shangmentiyu.sportscoach.ui.theme.LightSecondary
@@ -93,7 +93,7 @@ internal fun IosSectionHeader(text: String) {
         text = text.uppercase(),
         style = MaterialTheme.typography.labelLarge,
         fontWeight = FontWeight.SemiBold,
-        color = GradientStart,
+        color = BrandGradientStart,
         modifier = Modifier.padding(
             start = Spacing.screenH,
             end = Spacing.screenH,
@@ -113,7 +113,7 @@ internal fun StatItem(label: String, value: String) {
             text = value,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
-            color = GradientStart
+            color = BrandGradientStart
         )
         Spacer(modifier = Modifier.height(2.dp))
         Text(

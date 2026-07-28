@@ -15,6 +15,7 @@ import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.AlertDialog
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
+import com.shangmentiyu.sportscoach.ui.theme.PrimaryButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -28,7 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.shangmentiyu.sportscoach.core.JsonSafe
 import com.shangmentiyu.sportscoach.data.model.ParentReport
-import com.shangmentiyu.sportscoach.ui.theme.GlowCyan
+import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
 
 /**
  * 报告详情对话框：展示完整报告内容并提供分享按钮。
@@ -99,7 +100,7 @@ fun ReportDetailDialog(
                                 Icon(
                                     Icons.Outlined.Flag,
                                     contentDescription = null,
-                                    tint = GlowCyan,
+                                    tint = LightPrimary,
                                     modifier = Modifier.width(18.dp)
                                 )
                                 Spacer(Modifier.width(8.dp))
@@ -157,7 +158,8 @@ fun ReportDetailDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Button(
+                    PrimaryButton(
+                        text = "分享给家长",
                         onClick = {
                             val text = ReportShareHelper.toTextSummary(report)
                             ReportShareHelper.shareText(
@@ -167,12 +169,9 @@ fun ReportDetailDialog(
                             )
                             onMarkShared()
                         },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(Icons.Outlined.Share, contentDescription = null, modifier = Modifier.width(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("分享给家长")
-                    }
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Outlined.Share
+                    )
                     if (!report.shared) {
                         TextButton(
                             onClick = onMarkShared,

@@ -20,6 +20,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -28,7 +29,10 @@ import com.shangmentiyu.sportscoach.core.TemplateData
 import com.shangmentiyu.sportscoach.data.model.ExerciseItem
 import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
 import com.shangmentiyu.sportscoach.ui.theme.GlassCard
+import com.shangmentiyu.sportscoach.ui.theme.PrimaryButton
+import com.shangmentiyu.sportscoach.ui.theme.SecondaryButton
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
+import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
 import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
@@ -97,22 +101,18 @@ fun LessonScreen(
 
             // === 底部双按钮 ===
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
+                PrimaryButton(
+                    text = "去打分",
                     onClick = onScoring,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(Icons.Outlined.SportsScore, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("去打分")
-                }
-                Button(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Outlined.SportsScore
+                )
+                SecondaryButton(
+                    text = "生成小结",
                     onClick = onSummary,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(Icons.Outlined.Summarize, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("生成小结")
-                }
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Outlined.Summarize
+                )
             }
         }
     }
@@ -525,7 +525,8 @@ private fun SignOutCard(lesson: com.shangmentiyu.sportscoach.data.model.Lesson, 
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.buttonColors(
                 containerColor = if (signedOut) MaterialTheme.colorScheme.surfaceVariant
-                    else MaterialTheme.colorScheme.primary
+                    else appPrimary(),
+                contentColor = Color.White
             )
         ) {
             if (signingOut) {

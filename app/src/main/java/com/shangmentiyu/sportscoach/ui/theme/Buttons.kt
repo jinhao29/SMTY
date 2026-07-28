@@ -116,6 +116,7 @@ fun PrimaryButton(
  * @param text 按钮文字
  * @param onClick 点击回调
  * @param modifier 修饰符
+ * @param icon 可选前缀图标
  * @param enabled 是否启用
  */
 @Composable
@@ -123,6 +124,7 @@ fun SecondaryButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
     enabled: Boolean = true
 ) {
     OutlinedButton(
@@ -139,6 +141,14 @@ fun SecondaryButton(
         ),
         enabled = enabled
     ) {
+        if (icon != null) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(Modifier.width(Spacing.sm))
+        }
         Text(
             text = text,
             fontWeight = FontWeight.Medium,

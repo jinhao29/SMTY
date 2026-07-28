@@ -19,6 +19,7 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.AlertDialog
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
+import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -91,7 +92,7 @@ fun BodyMetricChartScreen(onBack: () -> Unit) {
             if (selectedStudent.isNotBlank()) {
                 FloatingActionButton(
                     onClick = { showAddDialog = true },
-                    containerColor = MaterialTheme.colorScheme.primary,
+                    containerColor = appPrimary(),
                     contentColor = Color.White,
                     shape = RoundedCornerShape(16.dp)
                 ) {

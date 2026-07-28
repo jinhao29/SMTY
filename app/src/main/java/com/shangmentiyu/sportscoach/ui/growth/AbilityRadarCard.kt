@@ -29,9 +29,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.shangmentiyu.sportscoach.core.AbilityAnalyzer
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconOrange
-import com.shangmentiyu.sportscoach.ui.theme.HeroGradientEnd
-import com.shangmentiyu.sportscoach.ui.theme.HeroGradientStart
+import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
+import com.shangmentiyu.sportscoach.ui.theme.BrandGradientEnd
+import com.shangmentiyu.sportscoach.ui.theme.BrandGradientStart
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import androidx.compose.foundation.Canvas
@@ -45,7 +45,7 @@ import kotlin.math.sin
  * 设计原则：
  * - 纯白卡片 + 10dp 圆角 + 柔和阴影（与 IosGroupedListCard 风格一致）
  * - 5 维雷达：速度 / 力量 / 耐力 / 柔韧 / 灵敏
- * - 珊瑚橙渐变填充（HeroGradientStart → HeroGradientEnd），与头部卡片视觉呼应
+ * - 珊瑚橙渐变填充（BrandGradientStart → BrandGradientEnd），与头部卡片视觉呼应
  * - 5 个同心五边形作为标尺（20/40/60/80/100）
  * - 数据空状态：显示"暂无足够成绩数据"，避免 0 分雷达误导
  *
@@ -143,9 +143,9 @@ private fun RadarCanvasWithLabels(values: List<Float>) {
     val dimensions = AbilityAnalyzer.DIMENSIONS
     val gridColor = Color(0xFFE8E8EA)
     val axisColor = Color(0xFFD8D8DC)
-    val polygonStroke = FeatureIconOrange
+    val polygonStroke = LightPrimary
     val labelColor = Color(0xFF4A4A4A)
-    val scoreColor = FeatureIconOrange
+    val scoreColor = LightPrimary
 
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val maxW = maxWidth
@@ -197,7 +197,7 @@ private fun RadarCanvasWithLabels(values: List<Float>) {
             drawPath(
                 path = dataPath,
                 brush = Brush.radialGradient(
-                    colors = listOf(HeroGradientStart, HeroGradientEnd),
+                    colors = listOf(BrandGradientStart, BrandGradientEnd),
                     center = Offset(cx, cy),
                     radius = radius
                 ),
@@ -325,9 +325,9 @@ private fun DimensionChipsRow(values: List<Float>) {
 private fun DimChip(name: String, score: Float, modifier: Modifier = Modifier) {
     val scoreInt = score.toInt()
     val progressColor = when {
-        score >= 85 -> HeroGradientStart
-        score >= 70 -> FeatureIconOrange
-        score >= 60 -> HeroGradientEnd
+        score >= 85 -> BrandGradientStart
+        score >= 70 -> LightPrimary
+        score >= 60 -> BrandGradientEnd
         score > 0 -> Color(0xFFFFD4C2)
         else -> Color(0xFFE8E8EA)
     }

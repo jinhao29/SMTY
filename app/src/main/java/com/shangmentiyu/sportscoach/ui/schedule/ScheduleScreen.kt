@@ -64,12 +64,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shangmentiyu.sportscoach.data.model.Schedule
 import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
 import com.shangmentiyu.sportscoach.ui.operation.OperationViewModel
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconBlue
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconGreen
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconOrange
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconPink
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconPurple
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconTeal
+import com.shangmentiyu.sportscoach.ui.theme.LightSecondary
+import com.shangmentiyu.sportscoach.ui.theme.LightTertiary
+import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
+import com.shangmentiyu.sportscoach.ui.theme.LightPrimaryContainer
+import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
+import com.shangmentiyu.sportscoach.ui.theme.LightOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.IOSCard
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
@@ -896,13 +896,13 @@ private fun weekRangeText(weekStart: Date): String {
  * 将 Schedule.color 字符串映射为 Color。
  */
 private fun scheduleColor(colorKey: String): Color = when (colorKey) {
-    "blue" -> FeatureIconBlue
-    "green" -> FeatureIconGreen
-    "orange" -> FeatureIconOrange
-    "purple" -> FeatureIconPurple
-    "pink" -> FeatureIconPink
-    "teal" -> FeatureIconTeal
-    else -> FeatureIconBlue
+    "blue" -> LightSecondary
+    "green" -> LightTertiary
+    "orange" -> LightPrimary
+    "purple" -> LightPrimary
+    "pink" -> LightPrimaryContainer
+    "teal" -> LightOnSurfaceVariant
+    else -> LightSecondary
 }
 
 /**

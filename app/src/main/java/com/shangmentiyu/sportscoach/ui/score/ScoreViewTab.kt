@@ -49,13 +49,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
 import com.shangmentiyu.sportscoach.ui.analytics.AnalyticsViewModel
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconBlue
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconGreen
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconOrange
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconPurple
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconTeal
-import com.shangmentiyu.sportscoach.ui.theme.GradientEnd
-import com.shangmentiyu.sportscoach.ui.theme.GradientStart
+import com.shangmentiyu.sportscoach.ui.theme.LightSecondary
+import com.shangmentiyu.sportscoach.ui.theme.LightTertiary
+import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
+import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
+import com.shangmentiyu.sportscoach.ui.theme.LightOnSurfaceVariant
+import com.shangmentiyu.sportscoach.ui.theme.BrandGradientEnd
+import com.shangmentiyu.sportscoach.ui.theme.BrandGradientStart
 import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
 import com.shangmentiyu.sportscoach.ui.theme.ScoreFail
 import com.shangmentiyu.sportscoach.ui.theme.ScoreGood
@@ -187,7 +187,7 @@ private fun StudentPicker(
     ) {
         Box(
             modifier = Modifier.fillMaxWidth().height(4.dp).background(
-                Brush.linearGradient(colors = listOf(GradientStart, GradientEnd))
+                Brush.linearGradient(colors = listOf(BrandGradientStart, BrandGradientEnd))
             )
         )
         Row(
@@ -266,18 +266,18 @@ private fun OverviewStats(overview: AnalyticsViewModel.OverviewStats) {
     ) {
         Box(
             modifier = Modifier.fillMaxWidth().height(4.dp).background(
-                Brush.linearGradient(colors = listOf(GradientStart, GradientEnd))
+                Brush.linearGradient(colors = listOf(BrandGradientStart, BrandGradientEnd))
             )
         )
         Row(
             modifier = Modifier.fillMaxWidth().padding(vertical = Spacing.md),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            StatCell(label = "总成绩", value = overview.totalCount.toString(), bgColor = FeatureIconPurple)
+            StatCell(label = "总成绩", value = overview.totalCount.toString(), bgColor = LightPrimary)
             StatDivider()
-            StatCell(label = "参与项目", value = overview.projectCount.toString(), bgColor = FeatureIconBlue)
+            StatCell(label = "参与项目", value = overview.projectCount.toString(), bgColor = LightSecondary)
             StatDivider()
-            StatCell(label = "最近测试", value = overview.latestDate.takeLast(5), bgColor = FeatureIconOrange, small = true)
+            StatCell(label = "最近测试", value = overview.latestDate.takeLast(5), bgColor = LightPrimary, small = true)
         }
     }
 }
@@ -355,7 +355,7 @@ private fun ProjectSection(
         ) {
             Box(
                 modifier = Modifier.fillMaxWidth().height(4.dp).background(
-                    Brush.linearGradient(colors = listOf(GradientStart, GradientEnd))
+                    Brush.linearGradient(colors = listOf(BrandGradientStart, BrandGradientEnd))
                 )
             )
             records.forEachIndexed { index, record ->
@@ -390,8 +390,8 @@ private fun ScoreCompareCard(records: List<AnalyticsViewModel.ScoreRecord>) {
     val last = records.first()   // 最近一次
     val delta = last.score - first.score
     val (trendIcon, trendColor, trendText) = when {
-        delta > 0.5 -> Triple(Icons.Outlined.TrendingUp, FeatureIconPurple, "进步")
-        delta < -0.5 -> Triple(Icons.Outlined.TrendingDown, FeatureIconTeal, "退步")
+        delta > 0.5 -> Triple(Icons.Outlined.TrendingUp, LightPrimary, "进步")
+        delta < -0.5 -> Triple(Icons.Outlined.TrendingDown, LightOnSurfaceVariant, "退步")
         else -> Triple(Icons.Outlined.TrendingFlat, MaterialTheme.colorScheme.outline, "持平")
     }
 
@@ -478,9 +478,9 @@ private fun ScoreRecordRow(
             if (prevRecord != null) {
                 val delta = record.score - prevRecord.score
                 val (trendIcon, trendColor, trendText) = when {
-                    delta > 0.5 -> Triple(Icons.Outlined.TrendingUp, FeatureIconPurple,
+                    delta > 0.5 -> Triple(Icons.Outlined.TrendingUp, LightPrimary,
                         "↑ ${"%.1f".format(delta)} 较上次")
-                    delta < -0.5 -> Triple(Icons.Outlined.TrendingDown, FeatureIconTeal,
+                    delta < -0.5 -> Triple(Icons.Outlined.TrendingDown, LightOnSurfaceVariant,
                         "↓ ${"%.1f".format(kotlin.math.abs(delta))} 较上次")
                     else -> Triple(Icons.Outlined.TrendingFlat, MaterialTheme.colorScheme.outline,
                         "→ 持平")
@@ -550,12 +550,12 @@ private fun EmptyHint(title: String, subtitle: String) {
     ) {
         Box(
             modifier = Modifier.size(56.dp).background(
-                FeatureIconPurple.copy(alpha = 0.12f), RoundedCornerShape(14.dp)
+                LightPrimary.copy(alpha = 0.12f), RoundedCornerShape(14.dp)
             ),
             contentAlignment = Alignment.Center
         ) {
             Icon(Icons.Outlined.Assessment, contentDescription = null,
-                tint = FeatureIconPurple, modifier = Modifier.size(28.dp))
+                tint = LightPrimary, modifier = Modifier.size(28.dp))
         }
         Spacer(Modifier.height(Spacing.md))
         Text(title, style = MaterialTheme.typography.titleMedium)

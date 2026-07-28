@@ -72,8 +72,8 @@ import com.shangmentiyu.sportscoach.ui.score.ScoreScreen
 import com.shangmentiyu.sportscoach.ui.settings.SettingsScreen
 import com.shangmentiyu.sportscoach.ui.settings.SettingsViewModel
 import com.shangmentiyu.sportscoach.ui.summary.SummaryScreen
-import com.shangmentiyu.sportscoach.ui.theme.DarkOnSurfaceVariant
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconPurple
+import com.shangmentiyu.sportscoach.ui.theme.LightOnSurfaceVariant
+import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
 import com.shangmentiyu.sportscoach.ui.theme.appSurface
 import com.shangmentiyu.sportscoach.ui.training.TrainingPlanScreen
@@ -289,10 +289,10 @@ fun SportsApp() {
                             },
                             label = { Text(item.label) },
                             colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = FeatureIconPurple,
-                                selectedTextColor = FeatureIconPurple,
-                                unselectedIconColor = DarkOnSurfaceVariant,
-                                unselectedTextColor = DarkOnSurfaceVariant,
+                                selectedIconColor = LightPrimary,
+                                selectedTextColor = LightPrimary,
+                                unselectedIconColor = LightOnSurfaceVariant,
+                                unselectedTextColor = LightOnSurfaceVariant,
                                 indicatorColor = Color.Transparent
                             )
                         )
@@ -594,7 +594,7 @@ fun SportsApp() {
                                 text = "更新下载失败",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold,
-                                color = FeatureIconPurple
+                                color = LightPrimary
                             )
                             Spacer(Modifier.height(8.dp))
                             Text(

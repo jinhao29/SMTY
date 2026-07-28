@@ -141,15 +141,6 @@ fun glassTopAppBarColors(): TopAppBarColors {
 val VitalButtonGradient = listOf(BrandGradientStart, BrandGradientEnd)
 
 /**
- * 活力 AppBar 暖色背景（保留别名兼容历史引用）。
- * 实际为暖白主背景 LightBackground，与 #FAFAFA 融合形成层次。
- */
-@Deprecated("v39：使用 LightBackground", replaceWith = ReplaceWith("LightBackground"))
-val VitalAppBarBgStart get() = LightBackground
-@Deprecated("v39：使用 LightBackground", replaceWith = ReplaceWith("LightBackground"))
-val VitalAppBarBgEnd get() = LightBackground
-
-/**
  * 活力大标题：可选全宽珊瑚橙渐变背景头部，或仅珊瑚橙文字。
  *
  * 用于无 TopAppBar 的列表/设置页顶部，营造活力感。
@@ -171,7 +162,7 @@ fun VitalLargeTitle(
                 .fillMaxWidth()
                 .background(
                     brush = Brush.linearGradient(
-                        colors = listOf(HeroGradientStart, HeroGradientEnd)
+                        colors = listOf(BrandGradientStart, BrandGradientEnd)
                     ),
                     shape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp)
                 )

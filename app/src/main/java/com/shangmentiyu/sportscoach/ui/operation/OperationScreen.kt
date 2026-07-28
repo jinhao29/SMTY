@@ -73,7 +73,8 @@ import com.shangmentiyu.sportscoach.ui.dailyplan.DailyPlanViewModel
 import com.shangmentiyu.sportscoach.ui.theme.GlassCard
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
-import com.shangmentiyu.sportscoach.ui.theme.GlowCyan
+import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
+import com.shangmentiyu.sportscoach.ui.theme.PrimaryButton
 import com.shangmentiyu.sportscoach.ui.theme.OutlinedDatePickerField
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
@@ -228,18 +229,16 @@ private fun ScheduleTab(vm: OperationViewModel) {
 
         // 新增排课按钮
         item {
-            Button(
+            PrimaryButton(
+                text = "新增排课",
                 onClick = {
                     isCreate = true
                     vm.startCreate()
                     showEditDialog = true
                 },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("新增排课")
-            }
+                modifier = Modifier.fillMaxWidth(),
+                icon = Icons.Outlined.Add
+            )
         }
     }
 
@@ -276,7 +275,7 @@ private fun ScheduleCard(
                 Text(
                     "${s.startTime}-${s.endTime()}",
                     style = MaterialTheme.typography.titleMedium,
-                    color = GlowCyan,
+                    color = LightPrimary,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
@@ -298,7 +297,7 @@ private fun ScheduleCard(
                 Icon(
                     if (s.isActive) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
                     contentDescription = "启停",
-                    tint = if (s.isActive) MaterialTheme.colorScheme.outline else GlowCyan
+                    tint = if (s.isActive) MaterialTheme.colorScheme.outline else LightPrimary
                 )
             }
             IconButton(onClick = onDelete) {
@@ -327,7 +326,7 @@ private fun PackageTab(vm: OperationViewModel) {
         if (renewalAlerts.isNotEmpty()) {
             item {
                 GlassCard(glow = true) {
-                    Text("续费提醒", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = GlowCyan)
+                    Text("续费提醒", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = LightPrimary)
                     Spacer(modifier = Modifier.height(4.dp))
                     renewalAlerts.forEach { pkg ->
                         Text(
@@ -357,14 +356,12 @@ private fun PackageTab(vm: OperationViewModel) {
         }
 
         item {
-            Button(
+            PrimaryButton(
+                text = "新增课时包",
                 onClick = { showAddDialog = true },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("新增课时包")
-            }
+                modifier = Modifier.fillMaxWidth(),
+                icon = Icons.Outlined.Add
+            )
         }
     }
 
@@ -402,7 +399,7 @@ private fun PackageCard(
         pkg.isExhausted -> MaterialTheme.colorScheme.error
         pkg.isLowBalance -> MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
         pkg.isExpired -> MaterialTheme.colorScheme.outline
-        else -> GlowCyan
+        else -> LightPrimary
     }
 
     // === v26 优化6：状态角标 ===
@@ -698,14 +695,12 @@ private fun CoachTab(vm: OperationViewModel) {
         }
 
         item {
-            Button(
+            PrimaryButton(
+                text = "新增教练",
                 onClick = { showAddDialog = true },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("新增教练")
-            }
+                modifier = Modifier.fillMaxWidth(),
+                icon = Icons.Outlined.Add
+            )
         }
     }
 
@@ -724,7 +719,7 @@ private fun CoachTab(vm: OperationViewModel) {
 private fun CoachCard(c: Coach, vm: OperationViewModel) {
     GlassCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.Person, contentDescription = null, tint = GlowCyan, modifier = Modifier.size(28.dp))
+            Icon(Icons.Outlined.Person, contentDescription = null, tint = LightPrimary, modifier = Modifier.size(28.dp))
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(c.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -963,13 +958,11 @@ private fun DailyScheduleCard(
                         Text("查看课时", color = MaterialTheme.colorScheme.primary)
                     }
                 } else {
-                    Button(
+                    PrimaryButton(
+                        text = "签到",
                         onClick = onSign,
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text("签到")
-                    }
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
         }

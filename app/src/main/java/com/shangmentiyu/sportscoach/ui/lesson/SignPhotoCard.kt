@@ -46,6 +46,7 @@ import androidx.core.content.FileProvider
 import com.shangmentiyu.sportscoach.R
 import com.shangmentiyu.sportscoach.core.PhotoCrypto
 import com.shangmentiyu.sportscoach.ui.theme.GlassCard
+import com.shangmentiyu.sportscoach.ui.theme.PrimaryButton
 import com.shangmentiyu.sportscoach.ui.theme.SafeAsyncImage
 import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
 import java.io.File
@@ -268,15 +269,12 @@ fun SignPhotoCard(
                 )
             }
             Spacer(Modifier.height(8.dp))
-            Button(
+            PrimaryButton(
+                text = captureBtnText,
                 onClick = { startCapture() },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-            ) {
-                Icon(Icons.Outlined.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(4.dp))
-                Text(captureBtnText)
-            }
+                icon = Icons.Outlined.CameraAlt
+            )
         }
     }
 }

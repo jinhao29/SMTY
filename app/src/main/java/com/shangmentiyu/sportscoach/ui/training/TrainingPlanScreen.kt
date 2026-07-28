@@ -46,7 +46,7 @@ import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
 import com.shangmentiyu.sportscoach.ui.growth.RadarChart
 import com.shangmentiyu.sportscoach.ui.theme.GlassCard
 import com.shangmentiyu.sportscoach.ui.theme.GlassSectionTitle
-import com.shangmentiyu.sportscoach.ui.theme.GlowCyan
+import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
 import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
 
 /**
@@ -106,7 +106,7 @@ fun TrainingPlanScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator(color = GlowCyan)
+                    CircularProgressIndicator(color = LightPrimary)
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("正在生成训练计划…", color = MaterialTheme.colorScheme.outline)
                 }
@@ -152,7 +152,7 @@ fun TrainingPlanScreen(
                     Icon(
                         Icons.Outlined.AutoAwesome,
                         contentDescription = null,
-                        tint = GlowCyan,
+                        tint = LightPrimary,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))

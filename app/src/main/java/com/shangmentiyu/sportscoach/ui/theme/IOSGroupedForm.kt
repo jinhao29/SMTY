@@ -114,12 +114,12 @@ fun IOSColorPillSelector(
     onSelect: (String) -> Unit
 ) {
     val colorOptions = listOf(
-        "blue" to FeatureIconBlue,
-        "green" to FeatureIconGreen,
-        "orange" to FeatureIconOrange,
-        "purple" to FeatureIconPurple,
-        "pink" to FeatureIconPink,
-        "teal" to FeatureIconTeal
+        "blue" to LightSecondary,
+        "green" to LightTertiary,
+        "orange" to LightPrimary,
+        "purple" to LightPrimary,
+        "pink" to LightPrimaryContainer,
+        "teal" to LightOnSurfaceVariant
     )
     Row(
         modifier = Modifier.fillMaxWidth(),

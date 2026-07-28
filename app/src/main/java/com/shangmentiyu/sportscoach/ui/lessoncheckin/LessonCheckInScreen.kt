@@ -59,11 +59,11 @@ import com.shangmentiyu.sportscoach.data.repo.StudentRepository
 import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
 import com.shangmentiyu.sportscoach.ui.home.SignResult
 import com.shangmentiyu.sportscoach.ui.theme.AttendanceOnTime
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconBlue
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconGreen
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconOrange
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconPink
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconPurple
+import com.shangmentiyu.sportscoach.ui.theme.LightSecondary
+import com.shangmentiyu.sportscoach.ui.theme.LightTertiary
+import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
+import com.shangmentiyu.sportscoach.ui.theme.LightPrimaryContainer
+import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
 import com.shangmentiyu.sportscoach.ui.theme.ScoreFail
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
@@ -460,11 +460,11 @@ private fun EmptyHint(title: String, subtitle: String) {
         Box(
             modifier = Modifier
                 .size(56.dp)
-                .background(FeatureIconPurple.copy(alpha = 0.12f), RoundedCornerShape(14.dp)),
+                .background(LightPrimary.copy(alpha = 0.12f), RoundedCornerShape(14.dp)),
             contentAlignment = Alignment.Center
         ) {
             Icon(Icons.Outlined.Add, contentDescription = null,
-                tint = FeatureIconPurple, modifier = Modifier.size(28.dp))
+                tint = LightPrimary, modifier = Modifier.size(28.dp))
         }
         Spacer(Modifier.height(Spacing.md))
         Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
@@ -478,11 +478,11 @@ private fun EmptyHint(title: String, subtitle: String) {
 @Composable
 private fun avatarColorFor(name: String): Color {
     val colors = listOf(
-        FeatureIconPurple,
-        FeatureIconBlue,
-        FeatureIconPink,
-        FeatureIconGreen,
-        FeatureIconOrange
+        LightPrimary,
+        LightSecondary,
+        LightPrimaryContainer,
+        LightTertiary,
+        LightPrimary
     )
     val hash = if (name.isNotEmpty()) name.first().hashCode() else 0
     return colors[((hash % colors.size) + colors.size) % colors.size]

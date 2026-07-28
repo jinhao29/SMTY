@@ -74,12 +74,12 @@ import com.shangmentiyu.sportscoach.core.PhotoCrypto
 import com.shangmentiyu.sportscoach.data.model.ExerciseItem
 import com.shangmentiyu.sportscoach.data.model.Lesson
 import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconBlue
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconGreen
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconOrange
+import com.shangmentiyu.sportscoach.ui.theme.LightSecondary
+import com.shangmentiyu.sportscoach.ui.theme.LightTertiary
+import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
 import com.shangmentiyu.sportscoach.ui.theme.SafeAsyncImage
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconPurple
-import com.shangmentiyu.sportscoach.ui.theme.FeatureIconTeal
+import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
+import com.shangmentiyu.sportscoach.ui.theme.LightOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
 import com.shangmentiyu.sportscoach.ui.theme.ScoreFail
 import com.shangmentiyu.sportscoach.ui.theme.ScoreGood
@@ -512,7 +512,7 @@ private fun ExerciseDisplayRow(item: ExerciseItem) {
         Icon(
             imageVector = if (item.done) Icons.Outlined.CheckCircle else Icons.Outlined.Schedule,
             contentDescription = null,
-            tint = if (item.done) FeatureIconPurple else MaterialTheme.colorScheme.outline,
+            tint = if (item.done) LightPrimary else MaterialTheme.colorScheme.outline,
             modifier = Modifier.size(16.dp)
         )
         Column(modifier = Modifier.weight(1f)) {
@@ -579,10 +579,10 @@ private fun EvalDisplayCard(
                     .height(6.dp)
                     .clip(RoundedCornerShape(3.dp)),
                 color = when {
-                    performance >= 8 -> FeatureIconPurple
-                    performance >= 6 -> FeatureIconBlue
-                    performance >= 4 -> FeatureIconOrange
-                    else -> FeatureIconTeal
+                    performance >= 8 -> LightPrimary
+                    performance >= 6 -> LightSecondary
+                    performance >= 4 -> LightPrimary
+                    else -> LightOnSurfaceVariant
                 },
                 trackColor = MaterialTheme.colorScheme.surfaceVariant
             )
@@ -623,8 +623,8 @@ private fun EvalDisplayCard(
                     .background(
                         Brush.horizontalGradient(
                             listOf(
-                            FeatureIconPurple.copy(alpha = 0.08f),
-                            FeatureIconBlue.copy(alpha = 0.05f)
+                            LightPrimary.copy(alpha = 0.08f),
+                            LightSecondary.copy(alpha = 0.05f)
                         )
                         )
                     )

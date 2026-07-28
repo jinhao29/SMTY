@@ -433,11 +433,11 @@ private fun StudentListItem(
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (student.heightCm > 0) {
                         MetricChip("${student.heightCm}cm",
-                            com.shangmentiyu.sportscoach.ui.theme.FeatureIconPurple)
+                            com.shangmentiyu.sportscoach.ui.theme.LightPrimary)
                     }
                     if (student.weightKg > 0f) {
                         MetricChip("${student.weightKg}kg",
-                            com.shangmentiyu.sportscoach.ui.theme.FeatureIconPurple)
+                            com.shangmentiyu.sportscoach.ui.theme.LightPrimary)
                     }
                     val bmi = if (student.bmi > 0f) student.bmi
                               else if (student.heightCm > 0 && student.weightKg > 0f)
@@ -445,7 +445,7 @@ private fun StudentListItem(
                               else 0f
                     if (bmi > 0f) {
                         MetricChip("BMI ${"%.1f".format(bmi)}",
-                            com.shangmentiyu.sportscoach.ui.theme.FeatureIconPurple)
+                            com.shangmentiyu.sportscoach.ui.theme.LightPrimary)
                     }
                 }
             }
