@@ -98,96 +98,117 @@ fun StudentListTab(
     var editLessonTarget by remember { mutableStateOf<Lesson?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        if (students.isEmpty()) {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text("还没有学员", style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.outline)
-                Spacer(Modifier.height(8.dp))
-                Text("点击顶部筛选栏右侧的 + 添加学员",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outline)
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                    horizontal = Spacing.screenH,
-                    vertical = Spacing.screenV
-                ),
-                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
-            ) {
-                // === v24 优化5：筛选与排序条（极简下拉选择器） ===
-                // v32 优化4：搜索框右侧紧贴 + 按钮，移除底部 FAB 避免遮挡卡片
-                item { StudentFilterBar(
-                    totalCount = students.size,
-                    filteredCount = filteredStudents.size,
-                    sortBy = sortBy,
-                    gradeFilter = gradeFilter,
-                    nameQuery = nameQuery,
-                    onSortByChanged = vm::setSortBy,
-                    onGradeFilterChanged = vm::setGradeFilter,
-                    onNameQueryChanged = vm::setNameQuery,
-                    onReset = vm::resetFilters,
-                    onAddStudent = onAddStudent
-                ) }
-                item {
-                    IosSectionHeader("学员列表（${filteredStudents.size}/${students.size}）")
-                }
-                // === v31 优化3：语音播报模式开关（户外签到语音播报） ===
-                // - 默认关闭，教练在学员列表顶部手动开启
-                // - 开启后 sign() 签到时通过 VoiceAnnouncer 播报"学员 X 已签到，剩余 Y 节课"
-                // - 选中态使用主题色（珊瑚橙），未选中态浅灰，符合 iOS 风格
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = Spacing.screenH, vertical = Spacing.xs),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+        Column(modifier = Modifier.fillMaxSize()) {
+            // === 顶部搜索栏（含添加按钮）：始终显示，即使列表为空 ===
+            // 历史问题：原实现把 StudentFilterBar 放在 if/else 的 else 分支内，
+            // 导致列表为空时搜索栏和添加按钮也被隐藏，用户找不到添加入口。
+            // 修复：把 StudentFilterBar 提到 Column 顶层，无条件显示。
+            StudentFilterBar(
+                totalCount = students.size,
+                filteredCount = filteredStudents.size,
+                sortBy = sortBy,
+                gradeFilter = gradeFilter,
+                nameQuery = nameQuery,
+                onSortByChanged = vm::setSortBy,
+                onGradeFilterChanged = vm::setGradeFilter,
+                onNameQueryChanged = vm::setNameQuery,
+                onReset = vm::resetFilters,
+                onAddStudent = onAddStudent
+            )
+
+            if (students.isEmpty()) {
+                // === 空状态：搜索栏下方居中显示提示文字 ===
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            "语音模式",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant()
+                            "还没有学员",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.outline
                         )
-                        FilterChip(
-                            selected = voiceMode,
-                            onClick = { vm.setVoiceMode(!voiceMode) },
-                            label = { Text(if (voiceMode) "已开启" else "已关闭") }
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "点击上方搜索栏右侧的 + 添加学员",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.outline
                         )
                     }
                 }
-                itemsIndexed(filteredStudents, key = { _, s -> s.name }) { idx, student ->
-                    val remaining = remainingMap[student.name] ?: -1
-                    val nextLesson = nextLessons[student.name]
-                    StudentListItem(
-                        student = student,
-                        remaining = remaining,
-                        nextLesson = nextLesson,
-                        showTopDivider = idx > 0,
-                        onSign = {
-                            vm.sign(student.name) { result ->
-                                if (result.lessonId.isNotBlank()) {
-                                    onSign(result.lessonId)
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = Spacing.screenH,
+                        vertical = Spacing.screenV
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+                ) {
+                    item {
+                        IosSectionHeader("学员列表（${filteredStudents.size}/${students.size}）")
+                    }
+                    // === v31 优化3：语音播报模式开关（户外签到语音播报） ===
+                    // - 默认关闭，教练在学员列表顶部手动开启
+                    // - 开启后 sign() 签到时通过 VoiceAnnouncer 播报"学员 X 已签到，剩余 Y 节课"
+                    // - 选中态使用主题色（珊瑚橙），未选中态浅灰，符合 iOS 风格
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = Spacing.screenH, vertical = Spacing.xs),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "语音模式",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant()
+                            )
+                            FilterChip(
+                                selected = voiceMode,
+                                onClick = { vm.setVoiceMode(!voiceMode) },
+                                label = { Text(if (voiceMode) "已开启" else "已关闭") }
+                            )
+                        }
+                    }
+                    itemsIndexed(filteredStudents, key = { _, s -> s.name }) { idx, student ->
+                        val remaining = remainingMap[student.name] ?: -1
+                        val nextLesson = nextLessons[student.name]
+                        StudentListItem(
+                            student = student,
+                            remaining = remaining,
+                            nextLesson = nextLesson,
+                            showTopDivider = idx > 0,
+                            onSign = {
+                                vm.sign(student.name) { result ->
+                                    if (result.lessonId.isNotBlank()) {
+                                        onSign(result.lessonId)
+                                    }
                                 }
-                            }
-                        },
-                        onGrowth = { onGrowth(student.name) },
-                        onEdit = { onEditStudent(student) },
-                        onDelete = { deleteTarget = student },
-                        onEditNextLesson = { editLessonTarget = nextLesson },
-                        onHeightPrediction = { onHeightPrediction(student.name) },
-                        onDietManage = { onDietManage(student.name) }
-                    )
+                            },
+                            onGrowth = { onGrowth(student.name) },
+                            onEdit = { onEditStudent(student) },
+                            onDelete = { deleteTarget = student },
+                            onEditNextLesson = { editLessonTarget = nextLesson },
+                            onHeightPrediction = { onHeightPrediction(student.name) },
+                            onDietManage = { onDietManage(student.name) }
+                        )
+                    }
+                    // v37 修复：列表末尾追加底部安全间距
+                    // 防止最后一张学员卡片被底部导航栏遮挡，确保末项完整可见
+                    item {
+                        Spacer(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(Spacing.screenV + 80.dp)
+                        )
+                    }
                 }
             }
         }
-        // v32 优化4：移除底部 FloatingActionButton，避免遮挡末张学员卡片
-        // 添加学员入口已迁移至顶部筛选栏搜索框右侧的极简 + 按钮
     }
 
     // 删除学员确认对话框
