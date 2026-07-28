@@ -1,6 +1,5 @@
 package com.shangmentiyu.sportscoach.ui.stagesummary
 
-import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -61,7 +60,7 @@ fun StageSummaryScreen(onBack: () -> Unit) {
     val loading by vm.loading.collectAsState()
 
     Scaffold(
-        containerColor = Color(0xFF121212),  // v38：全局深色背景
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text("阶段性总结") },

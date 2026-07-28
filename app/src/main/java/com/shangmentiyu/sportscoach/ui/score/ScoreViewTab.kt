@@ -62,7 +62,6 @@ import com.shangmentiyu.sportscoach.ui.theme.ScoreGood
 import com.shangmentiyu.sportscoach.ui.theme.ScorePass
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
-import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 
 /**
  * 查看成绩 Tab：学员选择 + 概览统计 + 成绩对比 + 按项目分组的历史成绩（含进步/退步趋势 + 编辑/删除）。
@@ -93,7 +92,7 @@ fun ScoreViewTab(onEditScore: (String) -> Unit = {}) {
             modifier = Modifier.fillMaxWidth().padding(32.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text("正在加载…", color = appOnSurface().copy(alpha = 0.5f))
+            Text("正在加载…", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
         }
         return
     }
@@ -210,14 +209,14 @@ private fun StudentPicker(
             Spacer(Modifier.width(Spacing.md))
             Column(modifier = Modifier.weight(1f)) {
                 Text("当前学员", style = MaterialTheme.typography.labelMedium,
-                    color = appOnSurface().copy(alpha = 0.55f))
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
                 Text(selected ?: "未选择", style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold)
             }
             Icon(
                 if (expanded) Icons.Outlined.ExpandMore else Icons.Outlined.ChevronRight,
                 contentDescription = null,
-                tint = appOnSurface().copy(alpha = 0.4f),
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                 modifier = Modifier.size(20.dp)
             )
         }
@@ -301,7 +300,7 @@ private fun StatCell(label: String, value: String, bgColor: Color, small: Boolea
             fontWeight = FontWeight.Bold
         )
         Text(label, style = MaterialTheme.typography.labelSmall,
-            color = appOnSurface().copy(alpha = 0.55f))
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
     }
 }
 
@@ -334,7 +333,7 @@ private fun ProjectSection(
                 fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.width(Spacing.sm))
             Text("${records.size} 次记录", style = MaterialTheme.typography.labelSmall,
-                color = appOnSurface().copy(alpha = 0.45f))
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f))
         }
 
         // === 成绩对比卡片（首末对比，至少 2 条记录才显示）===
@@ -419,10 +418,10 @@ private fun ScoreCompareCard(records: List<AnalyticsViewModel.ScoreRecord>) {
         // 首末对比详情
         Column(modifier = Modifier.weight(1f)) {
             Text("成绩对比", style = MaterialTheme.typography.labelMedium,
-                color = appOnSurface().copy(alpha = 0.55f))
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(first.value, style = MaterialTheme.typography.titleMedium,
-                    color = appOnSurface().copy(alpha = 0.6f))
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                 Text(" → ", style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.outline)
                 Text(last.value, style = MaterialTheme.typography.titleMedium,
@@ -430,7 +429,7 @@ private fun ScoreCompareCard(records: List<AnalyticsViewModel.ScoreRecord>) {
             }
             Text("${first.date.takeLast(5)} → ${last.date.takeLast(5)}",
                 style = MaterialTheme.typography.labelSmall,
-                color = appOnSurface().copy(alpha = 0.45f))
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f))
         }
 
         // 差值徽章
@@ -464,7 +463,7 @@ private fun ScoreRecordRow(
     ) {
         // 日期
         Text(record.date.takeLast(5), style = MaterialTheme.typography.bodyMedium,
-            color = appOnSurface().copy(alpha = 0.7f),
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
             modifier = Modifier.width(48.dp))
 
         // 实测值 + 项目名
@@ -473,7 +472,7 @@ private fun ScoreRecordRow(
             Text(record.value, style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold)
             Text(record.projectName, style = MaterialTheme.typography.labelSmall,
-                color = appOnSurface().copy(alpha = 0.5f))
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
 
             // 进步/退步趋势（与上一条记录对比）
             if (prevRecord != null) {
@@ -494,7 +493,7 @@ private fun ScoreRecordRow(
                 }
             } else {
                 Text("首次测试", style = MaterialTheme.typography.labelSmall,
-                    color = appOnSurface().copy(alpha = 0.4f))
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
             }
         }
 
@@ -562,6 +561,6 @@ private fun EmptyHint(title: String, subtitle: String) {
         Text(title, style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(Spacing.xs))
         Text(subtitle, style = MaterialTheme.typography.labelMedium,
-            color = appOnSurface().copy(alpha = 0.55f))
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
     }
 }

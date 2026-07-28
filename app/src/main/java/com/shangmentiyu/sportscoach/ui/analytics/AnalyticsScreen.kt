@@ -56,7 +56,6 @@ import com.shangmentiyu.sportscoach.ui.theme.ScoreGood
 import com.shangmentiyu.sportscoach.ui.theme.ScorePass
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
-import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appSurface
 
@@ -91,7 +90,7 @@ fun AnalyticsScreen(onBack: () -> Unit) {
     var studentPickerOpen by remember { mutableStateOf(false) }
 
     Scaffold(
-        containerColor = Color(0xFF121212)  // v38：全局深色背景
+        containerColor = appSurface()
     ) { padding ->
         if (loading) {
             Box(
@@ -101,7 +100,7 @@ fun AnalyticsScreen(onBack: () -> Unit) {
                 Text(
                     "正在加载…",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = appOnSurface().copy(alpha = 0.5f)
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                 )
             }
             return@Scaffold
@@ -265,7 +264,7 @@ private fun StudentPickerCard(
             Icon(
                 if (expanded) Icons.Outlined.ExpandMore else Icons.Outlined.ChevronRight,
                 contentDescription = null,
-                tint = appOnSurface().copy(alpha = 0.4f),
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                 modifier = Modifier.size(20.dp)
             )
         }
@@ -436,7 +435,7 @@ private fun ProjectSection(
             Text(
                 "${records.size} 次记录",
                 style = MaterialTheme.typography.labelSmall,
-                color = appOnSurface().copy(alpha = 0.45f)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
             )
         }
 
@@ -512,7 +511,7 @@ private fun ProgressSummaryRow(records: List<AnalyticsViewModel.ScoreRecord>) {
             Text(
                 "${oldest.date} 至 ${latest.date}",
                 style = MaterialTheme.typography.labelSmall,
-                color = appOnSurface().copy(alpha = 0.5f)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
             )
         }
         Column(horizontalAlignment = Alignment.End) {
@@ -525,7 +524,7 @@ private fun ProgressSummaryRow(records: List<AnalyticsViewModel.ScoreRecord>) {
             Text(
                 "分数变化",
                 style = MaterialTheme.typography.labelSmall,
-                color = appOnSurface().copy(alpha = 0.5f)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
             )
         }
     }
@@ -559,7 +558,7 @@ private fun ScoreRecordRow(
             Text(
                 record.date.takeLast(5),  // MM-DD
                 style = MaterialTheme.typography.bodyMedium,
-                color = appOnSurface().copy(alpha = 0.7f),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                 modifier = Modifier.width(56.dp)
             )
             Spacer(Modifier.width(Spacing.sm))
@@ -574,7 +573,7 @@ private fun ScoreRecordRow(
                 Text(
                     record.projectName,
                     style = MaterialTheme.typography.labelSmall,
-                    color = appOnSurface().copy(alpha = 0.5f)
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                 )
             }
             // 分数徽章

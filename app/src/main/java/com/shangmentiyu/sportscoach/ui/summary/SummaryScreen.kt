@@ -3,7 +3,6 @@ package com.shangmentiyu.sportscoach.ui.summary
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -89,7 +88,6 @@ import com.shangmentiyu.sportscoach.ui.theme.IOSCard
 import com.shangmentiyu.sportscoach.ui.theme.IOSSectionHeader
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
-import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
 import com.shangmentiyu.sportscoach.util.ShareUtils
 import org.json.JSONObject
@@ -127,7 +125,7 @@ fun SummaryScreen(
     }
 
     Scaffold(
-        containerColor = Color(0xFF121212),  // v38：全局深色背景
+        containerColor = appGroupedBackground(),
         topBar = {
             TopAppBar(
                 title = { Text("课后小结") },
@@ -477,7 +475,7 @@ private fun TrainingContentCard(exercises: List<ExerciseItem>) {
                 "训练内容",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
-                color = appOnSurface().copy(alpha = 0.7f)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
             )
             Spacer(Modifier.weight(1f))
             val doneCount = exercises.count { it.done }
@@ -522,8 +520,8 @@ private fun ExerciseDisplayRow(item: ExerciseItem) {
                 item.name,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
-                color = if (item.done) appOnSurface()
-                        else appOnSurface().copy(alpha = 0.6f)
+                color = if (item.done) MaterialTheme.colorScheme.onSurface
+                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
             )
             Text(
                 "${item.sets}组 × ${item.reps}（强度${item.intensity}）",
@@ -570,7 +568,7 @@ private fun EvalDisplayCard(
             Text(
                 "整体表现",
                 style = MaterialTheme.typography.bodyMedium,
-                color = appOnSurface().copy(alpha = 0.7f),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                 modifier = Modifier.width(72.dp)
             )
             Spacer(Modifier.width(8.dp))
@@ -602,12 +600,12 @@ private fun EvalDisplayCard(
             Text(
                 "下次课目标",
                 style = MaterialTheme.typography.labelMedium,
-                color = appOnSurface().copy(alpha = 0.7f)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
             )
             Text(
                 nextGoal,
                 style = MaterialTheme.typography.bodyMedium,
-                color = appOnSurface()
+                color = MaterialTheme.colorScheme.onSurface
             )
         }
 
@@ -616,7 +614,7 @@ private fun EvalDisplayCard(
             Text(
                 "教练寄语",
                 style = MaterialTheme.typography.labelMedium,
-                color = appOnSurface().copy(alpha = 0.7f)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
             )
             Box(
                 modifier = Modifier
@@ -635,7 +633,7 @@ private fun EvalDisplayCard(
                 Text(
                     coachComment,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = appOnSurface()
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
         }
@@ -667,14 +665,14 @@ private fun InfoRow(
         Text(
             label,
             style = MaterialTheme.typography.bodyMedium,
-            color = appOnSurface().copy(alpha = 0.7f),
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
             modifier = Modifier.width(72.dp)
         )
         Spacer(Modifier.width(8.dp))
         Text(
             value,
             style = MaterialTheme.typography.bodyMedium,
-            color = appOnSurface(),
+            color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.Medium
         )
     }

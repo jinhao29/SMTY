@@ -1,7 +1,6 @@
 package com.shangmentiyu.sportscoach.ui.parent
 
 import android.app.Application
-import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -51,7 +50,6 @@ import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
 import com.shangmentiyu.sportscoach.ui.theme.GlassCard
 import com.shangmentiyu.sportscoach.ui.theme.GlassSectionTitle
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
-import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
 
 /**
@@ -80,7 +78,7 @@ fun ParentReportScreen(onBack: () -> Unit) {
     var showGenerateDialog by remember { mutableStateOf(false) }
 
     Scaffold(
-        containerColor = Color(0xFF121212),  // v38：全局深色背景
+        containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
@@ -134,7 +132,7 @@ fun ParentReportScreen(onBack: () -> Unit) {
                 Text(
                     "暂无报告，点击右上角 + 生成",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = appOnSurface().copy(alpha = 0.6f),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     modifier = Modifier.padding(top = 32.dp).align(Alignment.CenterHorizontally)
                 )
             } else {

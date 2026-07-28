@@ -196,19 +196,6 @@ interface LessonDao {
     suspend fun renameStudent(oldName: String, newName: String)
 
     /**
-     * === v33 数据流加固：按 studentId 级联改名（推荐路径） ===
-     *
-     * 与 [renameStudent] 区别：本方法基于 studentId 精准定位，不受同名干扰。
-     * 仅更新 studentId 匹配的行，旧数据 studentId 为 NULL 不会被误改。
-     *
-     * @param studentId 学员唯一 ID
-     * @param newName 新姓名
-     * @return 受影响行数（用于审计与诊断）
-     */
-    @Query("UPDATE lessons SET studentName = :newName WHERE studentId = :studentId")
-    suspend fun updateStudentNameByStudentId(studentId: String, newName: String): Int
-
-    /**
      * === Bug 修复2：清理过去未完成的长期排课记录（历史废弃占位排课） ===
      *
      * 业务背景：

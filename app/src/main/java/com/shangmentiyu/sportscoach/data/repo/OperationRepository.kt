@@ -1,6 +1,5 @@
 package com.shangmentiyu.sportscoach.data.repo
 
-import android.util.Log
 import androidx.room.withTransaction
 import com.shangmentiyu.sportscoach.core.AutoBackupScheduler
 import com.shangmentiyu.sportscoach.data.db.AppDatabase
@@ -513,185 +512,22 @@ class OperationRepository(
     fun getSchedulesByDay(dayOfWeek: Int): Flow<List<Schedule>> = scheduleDao.getByDay(dayOfWeek)
     suspend fun getScheduleById(id: String): Schedule? = scheduleDao.getById(id)
 
-    /**
-     * v30：新增排课属于核心数据变更，触发自动备份防抖
-     *
-     * v38 修复：用 [db.withTransaction] 包裹写入，确保主键冲突 / 约束违反 / JSON 序列化异常
-     * 时 [return@withTransaction] 能正确返回 false 失败状态，避免黑盒吞掉错误。
-     *
-     * 事务边界说明：
-     * - 当前仅 [scheduleDao.insert] 一条写入操作；若失败则数据未落库，return false 即可。
-     * - schedule_memory 表的写入由 ViewModel 层 [com.shangmentiyu.sportscoach.ui.operation.OperationViewModel]
-     *   通过 memoryRepo 独立完成。若未来需要将 schedules + schedule_memory 纳入同一事务，
-     *   应在本方法事务块内扩展 memoryDao 写入，并在失败分支 throw 异常以触发整体回滚。
-     *
-     * @return true 表示写入成功；false 表示事务内出现异常（schedule 未落库）
-     */
-    suspend fun addSchedule(schedule: Schedule): Boolean {
-        val database = db ?: run {
-            // db 未注入（单元测试或旧路径）：降级到非事务写入，仍捕获异常返回状态
-            return try {
-                scheduleDao.insert(schedule)
-                AutoBackupScheduler.notifyDataChange()
-                true
-            } catch (e: Exception) {
-                android.util.Log.e("OperationRepo",
-                    "addSchedule（无事务降级）失败：${e.message}", e)
-                false
-            }
-        }
-        val success: Boolean = try {
-            database.withTransaction {
-                try {
-                    scheduleDao.insert(schedule)
-                    true
-                } catch (e: Exception) {
-                    // 主键冲突 / 约束违反 / 序列化异常等
-                    // 由于 insert 失败时无数据被修改，return false 即可（无需 throw 触发回滚）
-                    android.util.Log.e("OperationRepo",
-                        "addSchedule 事务内异常：${e.message}", e)
-                    return@withTransaction false
-                }
-            }
-        } catch (e: Exception) {
-            // withTransaction 自身异常（如死锁、磁盘满）
-            android.util.Log.e("OperationRepo",
-                "addSchedule 事务失败：${e.message}", e)
-            false
-        }
-        if (success) AutoBackupScheduler.notifyDataChange()
-        return success
+    /** v30：新增排课属于核心数据变更，触发自动备份防抖 */
+    suspend fun addSchedule(schedule: Schedule) {
+        scheduleDao.insert(schedule)
+        AutoBackupScheduler.notifyDataChange()
     }
 
-    /**
-     * v30：更新排课属于核心数据变更，触发自动备份防抖
-     *
-     * v38 修复：用 [db.withTransaction] 包裹写入，确保主键冲突 / 约束违反 / JSON 序列化异常
-     * 时 [return@withTransaction] 能正确返回 false 失败状态，避免黑盒吞掉错误。
-     *
-     * @return true 表示更新成功；false 表示事务内出现异常（schedule 未变更）
-     */
-    suspend fun updateSchedule(schedule: Schedule): Boolean {
-        val database = db ?: run {
-            // db 未注入（单元测试或旧路径）：降级到非事务写入，仍捕获异常返回状态
-            return try {
-                scheduleDao.update(schedule)
-                AutoBackupScheduler.notifyDataChange()
-                true
-            } catch (e: Exception) {
-                android.util.Log.e("OperationRepo",
-                    "updateSchedule（无事务降级）失败：${e.message}", e)
-                false
-            }
-        }
-        val success: Boolean = try {
-            database.withTransaction {
-                try {
-                    scheduleDao.update(schedule)
-                    true
-                } catch (e: Exception) {
-                    android.util.Log.e("OperationRepo",
-                        "updateSchedule 事务内异常：${e.message}", e)
-                    return@withTransaction false
-                }
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("OperationRepo",
-                "updateSchedule 事务失败：${e.message}", e)
-            false
-        }
-        if (success) AutoBackupScheduler.notifyDataChange()
-        return success
+    /** v30：更新排课属于核心数据变更，触发自动备份防抖 */
+    suspend fun updateSchedule(schedule: Schedule) {
+        scheduleDao.update(schedule)
+        AutoBackupScheduler.notifyDataChange()
     }
 
     /** v30：删除排课属于核心数据变更，触发自动备份防抖 */
     suspend fun deleteSchedule(id: String) {
         scheduleDao.deleteById(id)
         AutoBackupScheduler.notifyDataChange()
-    }
-
-    /**
-     * === v33 数据流加固（模块 2 核心）：排课保存防重与异常抛出 ===
-     *
-     * 解决用户痛点："排课修改保存失败但没有报错"。
-     *
-     * 现有 [addSchedule] / [updateSchedule] 已分别处理新增 / 更新场景，
-     * 但调用方需先判断 schedule.id 是否存在再决定调用哪个方法。
-     * 如果调用方误判（如编辑模式 id 丢失走 [addSchedule]），
-     * 会触发主键冲突被静默吞掉，用户感知为"保存失败无报错"。
-     *
-     * 本方法封装"智能判断 + 异常归集"逻辑：
-     * 1. 通过 [scheduleDao.getById] 查询是否已存在同 id 的排课
-     * 2. 存在 → [scheduleDao.update]；不存在 → [scheduleDao.insert]
-     * 3. 整个流程包裹 try-catch，所有异常通过 [Log.e] 输出到 Logcat（tag=DataFlow）
-     * 4. 返回 true=保存成功；false=保存失败（调用方可读 Logcat 排查）
-     *
-     * 与 [addSchedule] / [updateSchedule] 的区别：
-     * - 自动判断新增/更新，调用方无需关心 schedule.id 是否为空
-     * - 失败时返回 false 而非吞掉异常，调用方据此向用户 Toast 提示
-     * - 异常全部通过 [Log.e]（tag=DataFlow）输出，便于 Logcat 过滤定位
-     *
-     * 事务边界说明：
-     * - 包裹在 [db.withTransaction] 内，确保查询+写入原子完成
-     * - 若 db 未注入（单元测试/旧路径），降级为非事务模式但仍捕获异常
-     *
-     * @param schedule 待保存的排课对象（id 必须正确传递，编辑模式由 UI 层填入原 id）
-     * @return true=保存成功；false=保存失败（异常已记录到 Logcat）
-     */
-    suspend fun saveSchedule(schedule: Schedule): Boolean {
-        val database = db
-        return try {
-            if (database != null) {
-                // 有事务支持：查询+写入原子完成，避免并发保存期间出现"判断时不存在、写入时已存在"的竞态
-                database.withTransaction {
-                    val existing = scheduleDao.getById(schedule.id)
-                    if (existing != null) {
-                        // 已存在 → 更新
-                        val affected = scheduleDao.update(schedule)
-                        if (affected == 0) {
-                            // update 返回 0 表示记录在事务内被并发删除，回滚并返回 false
-                            throw IllegalStateException(
-                                "update 未生效（affected=0），schedule.id=${schedule.id} 可能已被删除"
-                            )
-                        }
-                        Log.i("DataFlow",
-                            "saveSchedule 更新成功：id=${schedule.id}, student=${schedule.studentName}")
-                    } else {
-                        // 不存在 → 新增
-                        scheduleDao.insert(schedule)
-                        Log.i("DataFlow",
-                            "saveSchedule 新增成功：id=${schedule.id}, student=${schedule.studentName}")
-                    }
-                }
-            } else {
-                // 降级：无事务支持，仍执行智能判断
-                val existing = scheduleDao.getById(schedule.id)
-                if (existing != null) {
-                    scheduleDao.update(schedule)
-                    Log.i("DataFlow",
-                        "saveSchedule 更新成功（无事务降级）：id=${schedule.id}")
-                } else {
-                    scheduleDao.insert(schedule)
-                    Log.i("DataFlow",
-                        "saveSchedule 新增成功（无事务降级）：id=${schedule.id}")
-                }
-            }
-            // 保存成功后触发自动备份
-            AutoBackupScheduler.notifyDataChange()
-            true
-        } catch (e: Exception) {
-            // 所有异常通过 Log.e 输出到 Logcat，tag=DataFlow，便于过滤定位
-            // 常见异常：
-            // - SQLitePrimaryKeyConstraintException：主键冲突（insert 时 id 已存在）
-            // - SQLiteConstraintException：外键/唯一约束违反
-            // - IllegalStateException：update 未生效（affected=0）
-            // - JSONException：content 字段 JSON 序列化异常（由 Converters 抛出）
-            Log.e("DataFlow",
-                "保存失败：schedule.id=${schedule.id}, student=${schedule.studentName}, " +
-                    "dayOfWeek=${schedule.dayOfWeek}, startTime=${schedule.startTime}, " +
-                    "contentLen=${schedule.content.length}, ${e.message}", e)
-            false
-        }
     }
 
     /** 清空所有排课记录（课表管理"清空全部"功能） */

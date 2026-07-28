@@ -24,9 +24,11 @@ import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
@@ -49,10 +51,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shangmentiyu.sportscoach.R
 import com.shangmentiyu.sportscoach.data.model.Student
 import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
-import com.shangmentiyu.sportscoach.ui.theme.CapsuleSelectedBg
-import com.shangmentiyu.sportscoach.ui.theme.CapsuleSelectedText
-import com.shangmentiyu.sportscoach.ui.theme.CapsuleUnselectedBg
-import com.shangmentiyu.sportscoach.ui.theme.CapsuleUnselectedText
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
 
@@ -98,46 +96,15 @@ fun HomeScreen(
     }
 
     Scaffold(
-        containerColor = Color(0xFF121212),  // v38：全局深色背景
+        containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbarHost) }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            // === v38 深色主题：顶部 Tab 改为深色背景上的胶囊型按钮 ===
-            // - 选中：紫色底（#6C5CE7）+ 白字
-            // - 未选中：深灰底（#2C2C2E）+ 白字
-            // - 全圆角胶囊（RoundedCornerShape(50%)），无下划线，无横线分隔
-            // - 横向排列，间距 8dp
-            val tabLabels = listOf(
-                stringResource(R.string.home_tab_pre_class),
-                stringResource(R.string.home_tab_lesson_manage),
-                stringResource(R.string.home_tab_post_class),
-                stringResource(R.string.home_tab_student_list)
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xFF121212))  // v38：显式指定深色背景，杜绝白色横条
-                    .padding(horizontal = Spacing.screenH, vertical = Spacing.sm),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-            ) {
-                tabLabels.forEachIndexed { idx, label ->
-                    val isSelected = tabIndex == idx
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                        color = if (isSelected) CapsuleSelectedText else CapsuleUnselectedText,
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(50))  // 全圆角胶囊
-                            .background(if (isSelected) CapsuleSelectedBg else CapsuleUnselectedBg)
-                            .clickable { tabIndex = idx }
-                            .padding(vertical = 10.dp, horizontal = 4.dp)
-                    )
-                }
+            PrimaryTabRow(selectedTabIndex = tabIndex) {
+                Tab(selected = tabIndex == 0, onClick = { tabIndex = 0 }, text = { Text(stringResource(R.string.home_tab_pre_class)) })
+                Tab(selected = tabIndex == 1, onClick = { tabIndex = 1 }, text = { Text(stringResource(R.string.home_tab_lesson_manage)) })
+                Tab(selected = tabIndex == 2, onClick = { tabIndex = 2 }, text = { Text(stringResource(R.string.home_tab_post_class)) })
+                Tab(selected = tabIndex == 3, onClick = { tabIndex = 3 }, text = { Text(stringResource(R.string.home_tab_student_list)) })
             }
             // === v5 新增：双端同步状态横幅（绿色=已握手 / 橙色=同步中 / 离线时隐藏） ===
             SyncHandshakeBanner(

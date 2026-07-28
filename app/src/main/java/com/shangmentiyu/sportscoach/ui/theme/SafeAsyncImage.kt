@@ -39,7 +39,7 @@ import coil.request.ImageRequest
  * - 加载中：显示浅色背景 + 加载指示器
  * - 加载失败（ByteArray 损坏 / Bitmap 解码异常）：显示浅色背景 + ImageNotSupported 图标
  * - 数据为空（fallback）：与加载失败同样处理，保证 UI 一致
- * - 不改变任何视觉风格：浅色背景沿用 appOnSurface().copy(alpha = 0.05f)
+ * - 不改变任何视觉风格：浅色背景沿用 MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
  *
  * === v34 新增：全屏图片查看器支持 ===
  * - [enableZoomPreview]=true 时，点击缩略图弹出 [ZoomableImageViewer] 全屏查看器
@@ -91,17 +91,10 @@ fun SafeAsyncImage(
     var showFullScreen by remember { mutableStateOf(false) }
 
     // 构造带 crossfade 的 ImageRequest，提升加载体验
-    // v37 任务3：强制限制图片大小 + 启用内存/磁盘缓存
-    //   - size(200, 200)：避免加载原始大图占用过多内存（签到照片通常 1080p+）
-    //   - memoryCachePolicy(ENABLED)：解码后 Bitmap 缓存到内存，滑动列表复用
-    //   - diskCachePolicy(ENABLED)：磁盘缓存原始字节，避免重复解密 AES-GCM
     val request = remember(model) {
         ImageRequest.Builder(context)
             .data(model)
             .crossfade(true)
-            .size(200, 200)
-            .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
-            .diskCachePolicy(coil.request.CachePolicy.ENABLED)
             .build()
     }
 
@@ -133,7 +126,7 @@ fun SafeAsyncImage(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(appOnSurface().copy(alpha = 0.05f)),
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)),
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator(
@@ -154,13 +147,13 @@ fun SafeAsyncImage(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(appOnSurface().copy(alpha = 0.05f)),
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.ImageNotSupported,
                         contentDescription = "照片加载失败",
-                        tint = appOnSurface().copy(alpha = 0.5f),
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                         modifier = Modifier.size(28.dp)
                     )
                 }

@@ -68,7 +68,6 @@ import com.shangmentiyu.sportscoach.ui.theme.ScoreFail
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
-import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appSurface
 import kotlinx.coroutines.flow.SharingStarted
@@ -182,7 +181,7 @@ fun LessonCheckInScreen(
     // 签到成功后仅显示 Snackbar 反馈，用户可主动点击「查看课时」进入详情
 
     Scaffold(
-        containerColor = Color(0xFF121212),  // v38：全局深色背景
+        containerColor = appGroupedBackground(),
         topBar = {
             TopAppBar(
                 title = { Text("上课签到", style = MaterialTheme.typography.titleLarge,
@@ -348,7 +347,7 @@ private fun TodaySignedCard(lesson: Lesson, onClick: () -> Unit) {
                 fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
             Text("${lesson.time} · ${lesson.attendance} · ${lesson.lessonType}",
                 style = MaterialTheme.typography.labelSmall,
-                color = appOnSurface().copy(alpha = 0.55f))
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
         }
         Icon(Icons.Outlined.PlayArrow, contentDescription = null,
             tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
@@ -420,7 +419,7 @@ private fun SignRow(
                 Text(
                     subtitleFor(student, remaining),
                     style = MaterialTheme.typography.labelSmall,
-                    color = appOnSurface().copy(alpha = 0.55f)
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
                 )
             }
             // 签到按钮：蓝色圆形 + 白色加号
@@ -444,7 +443,7 @@ private fun IosSectionHeader(text: String) {
         text = text.uppercase(),
         style = MaterialTheme.typography.labelMedium,
         fontWeight = FontWeight.SemiBold,
-        color = appOnSurface().copy(alpha = 0.55f),
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 4.dp, vertical = Spacing.xs)
@@ -471,7 +470,7 @@ private fun EmptyHint(title: String, subtitle: String) {
         Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
         Spacer(Modifier.height(Spacing.xs))
         Text(subtitle, style = MaterialTheme.typography.labelMedium,
-            color = appOnSurface().copy(alpha = 0.55f))
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
     }
 }
 

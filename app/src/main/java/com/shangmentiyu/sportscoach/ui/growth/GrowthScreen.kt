@@ -91,7 +91,6 @@ import com.shangmentiyu.sportscoach.ui.theme.VitalPurpleEnd
 import com.shangmentiyu.sportscoach.ui.theme.VitalPurpleStart
 import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
-import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 
 /**
@@ -187,7 +186,7 @@ fun GrowthScreen(
     }
 
     Scaffold(
-        containerColor = Color(0xFF121212),  // v38：全局深色背景
+        containerColor = appGroupedBackground(),
         topBar = {
             TopAppBar(
                 title = { Text("成长档案", color = Color.White, fontWeight = FontWeight.SemiBold) },
@@ -346,19 +345,19 @@ fun GrowthScreen(
                                 Icons.Outlined.Schedule,
                                 contentDescription = null,
                                 modifier = Modifier.size(72.dp),
-                                tint = appOnSurface().copy(alpha = 0.3f)
+                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
                             )
                             Spacer(Modifier.height(Spacing.md))
                             Text(
                                 "暂无训练记录",
                                 style = MaterialTheme.typography.titleMedium,
-                                color = appOnSurface().copy(alpha = 0.5f)
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                             )
                             Spacer(Modifier.height(Spacing.xs))
                             Text(
                                 "签到后即可查看成长档案",
                                 style = MaterialTheme.typography.labelMedium,
-                                color = appOnSurface().copy(alpha = 0.4f)
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                             )
                         }
                     }
@@ -975,7 +974,7 @@ private fun ScoreRow(
                 Text(
                     score.value,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = appOnSurface().copy(alpha = 0.55f)
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
                 )
             }
             if (previousScore != null) {
@@ -1062,7 +1061,7 @@ private fun PersonalBestRow(
                 Text(
                     "${best.value} · ${best.date}",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = appOnSurface().copy(alpha = 0.55f)
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
                 )
             }
             ScoreBadge(score = best.score, grade = best.grade)
@@ -1121,7 +1120,7 @@ private fun HistoryRow(
                 Text(
                     "${lesson.lessonType} · ${lesson.duration}分钟 · 成绩${scoreCount}项",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = appOnSurface().copy(alpha = 0.55f)
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
                 )
             }
             Text(

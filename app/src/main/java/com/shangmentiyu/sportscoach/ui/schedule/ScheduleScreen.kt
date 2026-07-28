@@ -204,7 +204,7 @@ fun ScheduleScreen(
     }
 
     Scaffold(
-        containerColor = Color(0xFF121212),  // v38：全局深色背景
+        containerColor = appGroupedBackground(),
         topBar = {
             TopAppBar(
                 title = { Text("课表", fontWeight = FontWeight.Bold) },
@@ -238,11 +238,8 @@ fun ScheduleScreen(
             )
         },
         floatingActionButton = {
-            // v37 任务4：FAB 触觉反馈
-            val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
             FloatingActionButton(
                 onClick = {
-                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                     isCreate = true
                     prefillDay = selectedDayOfWeek
                     vm.startCreate()
@@ -398,13 +395,13 @@ fun ScheduleScreen(
                         "时间：${target.startTime}" +
                             if (target.lessonType.isNotBlank()) " · ${target.lessonType}" else "",
                         style = MaterialTheme.typography.bodySmall,
-                        color = appOnSurface().copy(alpha = 0.6f)
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
                     if (target.location.isNotBlank()) {
                         Text(
                             "地点：${target.location}",
                             style = MaterialTheme.typography.bodySmall,
-                            color = appOnSurface().copy(alpha = 0.6f)
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                         )
                     }
                     Spacer(Modifier.height(Spacing.sm))

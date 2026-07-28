@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- v38 全局深色主题：启动屏统一深色，杜绝冷启动白屏 -->
-    <color name="launch_background_light">#FF121212</color>
+    <!-- 启动屏底色：明亮模式白色，与 appBackground() 保持一致 -->
+    <color name="launch_background_light">#FFFFFFFF</color>
+    <!-- 启动屏底色：深色模式纯黑，与 NightBackground 保持一致 -->
     <color name="launch_background_dark">#FF000000</color>
 </resources>

@@ -13,17 +13,8 @@ import com.shangmentiyu.sportscoach.data.model.ExerciseItem
  * 多选周几支持：
  * - 新建模式：[daysOfWeek] 非空时，按所选的多个周几循环创建多条 Schedule，避免重复添加
  * - 编辑模式：仅编辑单条记录的 [dayOfWeek]，[daysOfWeek] 为空
- *
- * === v33 数据流加固：新增 [id] 字段 ===
- * 编辑模式下必须携带原 Schedule 的 id，用于：
- * 1. OperationRepository.saveSchedule 智能判断新增/更新（避免主键冲突静默失败）
- * 2. 与 OperationViewModel.editingSchedule 双重保险：若 editingSchedule 因协程时序问题为 null，
- *    但 form.id 非空时仍可走更新路径
- * 3. 新建模式下 id 为空字符串，Repository 层据此识别为新增
  */
 data class ScheduleForm(
-    /** 编辑模式携带原 Schedule.id；新建模式为空字符串 */
-    val id: String = "",
     val studentName: String = "",
     val coachName: String = "李",    // 教练默认为"李"
     val dayOfWeek: Int = 1,          // 1=周一 ... 7=周日（编辑模式使用，或新建模式回退值）

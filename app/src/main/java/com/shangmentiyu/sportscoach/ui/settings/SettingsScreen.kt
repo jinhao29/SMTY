@@ -83,7 +83,6 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
-import com.shangmentiyu.sportscoach.ui.components.LoadingOverlay
 import com.shangmentiyu.sportscoach.update.UpdateManager
 import com.shangmentiyu.sportscoach.update.UpdateResult
 import com.shangmentiyu.sportscoach.BuildConfig
@@ -95,7 +94,6 @@ import com.shangmentiyu.sportscoach.ui.theme.FeatureIconOrange
 import com.shangmentiyu.sportscoach.ui.theme.FeatureIconPurple
 import com.shangmentiyu.sportscoach.ui.theme.GradientEnd
 import com.shangmentiyu.sportscoach.ui.theme.GradientStart
-import com.shangmentiyu.sportscoach.ui.theme.CardBackground
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
@@ -127,8 +125,6 @@ fun SettingsScreen() {
     val backupInProgress by vm.backupInProgress.collectAsState()
     val backupProgress by vm.backupProgress.collectAsState()
     val needRestart by vm.needRestart.collectAsState()
-    // v37 任务5：统一的 IO 操作加载状态（导出/备份进行中显示蒙层，防止重复点击）
-    val isLoading by vm.isLoading.collectAsState()
     // === v30 全自动无感备份开关状态 ===
     val autoBackupEnabled by vm.autoBackupEnabled.collectAsState()
 
@@ -337,7 +333,7 @@ fun SettingsScreen() {
     }
 
     Scaffold(
-        containerColor = Color(0xFF121212)  // v38：全局深色背景
+        containerColor = appSurface()
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             Column(
@@ -363,7 +359,7 @@ fun SettingsScreen() {
                     Text(
                         "教练信息 · 数据同步 · 关于",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFFA6A8AB)  // v38：浅灰副标题
+                        color = appOnSurfaceVariant()
                     )
                 }
 
@@ -391,19 +387,22 @@ fun SettingsScreen() {
                                     "教练姓名",
                                     style = MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = Color.White  // v38：深色卡片主标题白字
+                                    color = MaterialTheme.colorScheme.onBackground
                                 )
                                 Spacer(Modifier.height(2.dp))
                                 Text(
                                     if (coach.isBlank()) "未设置" else coach,
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFFA6A8AB)  // v38：浅灰副标题
+                                    color = if (coach.isBlank())
+                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                                    else
+                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                                 )
                             }
                             Icon(
                                 Icons.Outlined.ChevronRight,
                                 contentDescription = "编辑",
-                                tint = Color(0xFFA6A8AB),  // v38：浅灰箭头
+                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -485,7 +484,7 @@ fun SettingsScreen() {
                                     "电脑端训练计划截图",
                                     style = MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = Color.White  // v38：深色卡片主标题白字
+                                    color = appOnSurface()
                                 )
                                 Spacer(Modifier.height(2.dp))
                                 Text(
@@ -501,7 +500,7 @@ fun SettingsScreen() {
                                     color = when {
                                         lanPlanSyncing || pendingLanPlan != null ->
                                             FeatureIconOrange
-                                        else -> Color(0xFFA6A8AB)  // v38：浅灰副标题
+                                        else -> appOnSurfaceVariant()
                                     }
                                 )
                             }
@@ -581,7 +580,7 @@ fun SettingsScreen() {
                                 Text(
                                     "正在从局域网下载训练计划截图…",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFFA6A8AB)  // v38：浅灰副标题
+                                    color = appOnSurfaceVariant()
                                 )
                             }
                         }
@@ -622,13 +621,13 @@ fun SettingsScreen() {
                                     "常用训练动作",
                                     style = MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = Color.White  // v38：深色卡片主标题白字
+                                    color = appOnSurface()
                                 )
                                 Spacer(Modifier.height(2.dp))
                                 Text(
                                     "排课时点击胶囊即可快速追加，共 ${exerciseBlocks.size} 个动作",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFFA6A8AB)  // v38：浅灰副标题
+                                    color = appOnSurfaceVariant()
                                 )
                             }
                         }
@@ -698,18 +697,16 @@ fun SettingsScreen() {
                             OutlinedTextField(
                                 value = newBlockInput,
                                 onValueChange = { newBlockInput = it },
-                                label = { Text("新动作名称", color = Color(0xFFA6A8AB)) },
-                                placeholder = { Text("如：引体向上", color = Color(0xFFA6A8AB)) },
+                                label = { Text("新动作名称") },
+                                placeholder = { Text("如：引体向上") },
                                 singleLine = true,
                                 modifier = Modifier.weight(1f),
                                 leadingIcon = {
-                                    Icon(Icons.Outlined.Add, contentDescription = null, tint = Color(0xFFA6A8AB))
+                                    Icon(Icons.Outlined.Add, contentDescription = null)
                                 },
                                 colors = OutlinedTextFieldDefaults.colors(
                                     cursorColor = MaterialTheme.colorScheme.primary,
-                                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                    focusedTextColor = Color.White,
-                                    unfocusedTextColor = Color.White
+                                    focusedBorderColor = MaterialTheme.colorScheme.primary
                                 )
                             )
                             Button(
@@ -721,7 +718,7 @@ fun SettingsScreen() {
                                 },
                                 enabled = newBlockInput.isNotBlank()
                             ) {
-                                Text("添加", color = Color.White)  // v38：紫色按钮白字
+                                Text("添加")
                             }
                         }
                     }
@@ -784,7 +781,7 @@ fun SettingsScreen() {
                                 Text(
                                     progressMsg,
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFFA6A8AB)  // v38：浅灰副标题
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                                 )
                             }
                         }
@@ -817,7 +814,7 @@ fun SettingsScreen() {
                                     "自动备份",
                                     style = MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = Color.White  // v38：深色卡片主标题白字
+                                    color = appOnSurface()
                                 )
                                 Spacer(Modifier.height(2.dp))
                                 Text(
@@ -829,7 +826,7 @@ fun SettingsScreen() {
                                     color = if (autoBackupEnabled)
                                         FeatureIconGreen
                                     else
-                                        Color(0xFFA6A8AB)  // v38：浅灰副标题
+                                        appOnSurfaceVariant()
                                 )
                             }
                             Switch(
@@ -867,7 +864,7 @@ fun SettingsScreen() {
                                     "启用 WebDAV 云盘推送",
                                     style = MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = Color.White  // v38：深色卡片主标题白字
+                                    color = appOnSurface()
                                 )
                                 Spacer(Modifier.height(2.dp))
                                 Text(
@@ -879,7 +876,7 @@ fun SettingsScreen() {
                                     color = if (webDavConfig.enabled)
                                         FeatureIconGreen
                                     else
-                                        Color(0xFFA6A8AB)  // v38：浅灰副标题
+                                        appOnSurfaceVariant()
                                 )
                             }
                             Switch(
@@ -924,61 +921,55 @@ fun SettingsScreen() {
                                 OutlinedTextField(
                                     value = baseUrl,
                                     onValueChange = { baseUrl = it },
-                                    label = { Text("WebDAV 服务器地址", color = Color(0xFFA6A8AB)) },
-                                    placeholder = { Text("https://dav.jianguoyun.com/dav/", color = Color(0xFFA6A8AB)) },
+                                    label = { Text("WebDAV 服务器地址") },
+                                    placeholder = { Text("https://dav.jianguoyun.com/dav/") },
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth(),
                                     leadingIcon = {
-                                        Icon(Icons.Outlined.Cloud, contentDescription = null, tint = Color(0xFFA6A8AB))
+                                        Icon(Icons.Outlined.Cloud, contentDescription = null)
                                     },
                                     colors = OutlinedTextFieldDefaults.colors(
                                         cursorColor = MaterialTheme.colorScheme.primary,
-                                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                        focusedTextColor = Color.White,
-                                        unfocusedTextColor = Color.White
+                                        focusedBorderColor = MaterialTheme.colorScheme.primary
                                     )
                                 )
                                 OutlinedTextField(
                                     value = remoteDir,
                                     onValueChange = { remoteDir = it },
-                                    label = { Text("远程存放目录", color = Color(0xFFA6A8AB)) },
-                                    placeholder = { Text("shangmentiyu/backup", color = Color(0xFFA6A8AB)) },
+                                    label = { Text("远程存放目录") },
+                                    placeholder = { Text("shangmentiyu/backup") },
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth(),
                                     leadingIcon = {
-                                        Icon(Icons.Outlined.FolderOpen, contentDescription = null, tint = Color(0xFFA6A8AB))
+                                        Icon(Icons.Outlined.FolderOpen, contentDescription = null)
                                     },
                                     colors = OutlinedTextFieldDefaults.colors(
                                         cursorColor = MaterialTheme.colorScheme.primary,
-                                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                        focusedTextColor = Color.White,
-                                        unfocusedTextColor = Color.White
+                                        focusedBorderColor = MaterialTheme.colorScheme.primary
                                     )
                                 )
                                 OutlinedTextField(
                                     value = username,
                                     onValueChange = { username = it },
-                                    label = { Text("账号 / 应用专用密码", color = Color(0xFFA6A8AB)) },
+                                    label = { Text("账号 / 应用专用密码") },
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth(),
                                     leadingIcon = {
-                                        Icon(Icons.Outlined.Person, contentDescription = null, tint = Color(0xFFA6A8AB))
+                                        Icon(Icons.Outlined.Person, contentDescription = null)
                                     },
                                     colors = OutlinedTextFieldDefaults.colors(
                                         cursorColor = MaterialTheme.colorScheme.primary,
-                                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                        focusedTextColor = Color.White,
-                                        unfocusedTextColor = Color.White
+                                        focusedBorderColor = MaterialTheme.colorScheme.primary
                                     )
                                 )
                                 OutlinedTextField(
                                     value = password,
                                     onValueChange = { password = it },
-                                    label = { Text("密码（应用级专用密码）", color = Color(0xFFA6A8AB)) },
+                                    label = { Text("密码（应用级专用密码）") },
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth(),
                                     leadingIcon = {
-                                        Icon(Icons.Outlined.Lock, contentDescription = null, tint = Color(0xFFA6A8AB))
+                                        Icon(Icons.Outlined.Lock, contentDescription = null)
                                     },
                                     visualTransformation = if (passwordVisible)
                                         VisualTransformation.None
@@ -996,16 +987,13 @@ fun SettingsScreen() {
                                                 contentDescription = if (passwordVisible)
                                                     "隐藏密码"
                                                 else
-                                                    "显示密码",
-                                                tint = Color(0xFFA6A8AB)
+                                                    "显示密码"
                                             )
                                         }
                                     },
                                     colors = OutlinedTextFieldDefaults.colors(
                                         cursorColor = MaterialTheme.colorScheme.primary,
-                                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                        focusedTextColor = Color.White,
-                                        unfocusedTextColor = Color.White
+                                        focusedBorderColor = MaterialTheme.colorScheme.primary
                                     )
                                 )
 
@@ -1031,7 +1019,7 @@ fun SettingsScreen() {
                                                 color = MaterialTheme.colorScheme.onPrimary
                                             )
                                         } else {
-                                            Text("测试连接", color = Color.White)  // v38：紫色按钮白字
+                                            Text("测试连接")
                                         }
                                     }
                                     Button(
@@ -1046,7 +1034,7 @@ fun SettingsScreen() {
                                         },
                                         modifier = Modifier.weight(1f)
                                     ) {
-                                        Text("保存配置", color = Color.White)  // v38：紫色按钮白字
+                                        Text("保存配置")
                                     }
                                 }
 
@@ -1085,13 +1073,13 @@ fun SettingsScreen() {
                                     "签到照片占用",
                                     style = MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = Color.White  // v38：深色卡片主标题白字
+                                    color = appOnSurface()
                                 )
                                 Spacer(Modifier.height(2.dp))
                                 Text(
                                     "${vm.formatBytes(signPhotosSize)} · 共 ${signPhotosCount} 张照片",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFFA6A8AB)  // v38：浅灰副标题
+                                    color = appOnSurfaceVariant()
                                 )
                             }
                             // 一年前可清理数量徽标（无则不显示）
@@ -1167,7 +1155,7 @@ fun SettingsScreen() {
                                     "孤立照片",
                                     style = MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = Color.White  // v38：深色卡片主标题白字
+                                    color = appOnSurface()
                                 )
                                 Spacer(Modifier.height(2.dp))
                                 Text(
@@ -1176,7 +1164,7 @@ fun SettingsScreen() {
                                     else
                                         "暂无孤立照片",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFFA6A8AB)  // v38：浅灰副标题
+                                    color = appOnSurfaceVariant()
                                 )
                             }
                             if (orphanPhotoCount > 0) {
@@ -1251,7 +1239,7 @@ fun SettingsScreen() {
                                     "应用缓存",
                                     style = MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = Color.White  // v38：深色卡片主标题白字
+                                    color = appOnSurface()
                                 )
                                 Spacer(Modifier.height(2.dp))
                                 Text(
@@ -1260,7 +1248,7 @@ fun SettingsScreen() {
                                     else
                                         "缓存目录为空",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFFA6A8AB)  // v38：浅灰副标题
+                                    color = appOnSurfaceVariant()
                                 )
                             }
                             if (cacheFileCount > 0) {
@@ -1407,13 +1395,13 @@ fun SettingsScreen() {
                                     "体育教学助手",
                                     style = MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = Color.White  // v38：深色卡片主标题白字
+                                    color = MaterialTheme.colorScheme.onBackground
                                 )
                                 Spacer(Modifier.height(2.dp))
                                 Text(
                                     "v1.0",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFFA6A8AB)  // v38：浅灰副标题
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
                                 )
                             }
                         }
@@ -1441,13 +1429,13 @@ fun SettingsScreen() {
                                 Text(
                                     "课堂实时记录 · 即时打分 · 课后小结",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = Color.White  // v38：深色卡片主标题白字
+                                    color = MaterialTheme.colorScheme.onBackground
                                 )
                                 Spacer(Modifier.height(2.dp))
                                 Text(
                                     "Excel 同步桌面端",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFFA6A8AB)  // v38：浅灰副标题
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
                                 )
                             }
                         }
@@ -1464,10 +1452,10 @@ fun SettingsScreen() {
                         .align(Alignment.BottomCenter)
                         .padding(Spacing.lg),
                     action = {
-                        TextButton(onClick = { vm.clearStatus() }) { Text("关闭", color = Color(0xFFA6A8AB)) }  // v38：浅灰副标题
+                        TextButton(onClick = { vm.clearStatus() }) { Text("关闭") }
                     }
                 ) {
-                    Text(msg, color = Color.White)  // v38：深色背景白字
+                    Text(msg)
                 }
             }
 
@@ -1480,14 +1468,13 @@ fun SettingsScreen() {
                         OutlinedTextField(
                             value = coachInput,
                             onValueChange = { coachInput = it },
-                            label = { Text("教练姓名", color = Color(0xFFA6A8AB)) },
+                            label = { Text("教练姓名") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                             colors = OutlinedTextFieldDefaults.colors(
                                 cursorColor = MaterialTheme.colorScheme.primary,
                                 focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White
+                                focusedTextColor = MaterialTheme.colorScheme.onSurface
                             )
                         )
                     },
@@ -1498,10 +1485,10 @@ fun SettingsScreen() {
                                 vm.setCoach(trimmed)
                             }
                             showCoachDialog = false
-                        }) { Text("确认保存", color = Color.White) }  // v38：紫色按钮白字
+                        }) { Text("确认保存") }
                     },
                     dismissButton = {
-                        TextButton(onClick = { showCoachDialog = false }) { Text("取消", color = Color(0xFFA6A8AB)) }  // v38：浅灰副标题
+                        TextButton(onClick = { showCoachDialog = false }) { Text("取消") }
                     }
                 )
             }
@@ -1517,7 +1504,7 @@ fun SettingsScreen() {
                             Text(
                                 "恢复操作将覆盖当前所有学员、课时包、排课、签到记录与照片。",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White  // v38：深色背景白字
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(Modifier.height(Spacing.sm))
                             Text(
@@ -1529,7 +1516,7 @@ fun SettingsScreen() {
                             Text(
                                 "恢复成功后应用将自动重启以加载新数据。",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFFA6A8AB)  // v38：浅灰副标题
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
                         }
                     },
@@ -1539,10 +1526,10 @@ fun SettingsScreen() {
                             // 用户确认后弹出文件选择器
                             // 使用 arrayOf("*/*") 让用户可选择任意位置（网盘/本地）的备份文件
                             restoreFileLauncher.launch(arrayOf("*/*"))
-                        }) { Text("我已知晓，选择备份文件", color = Color.White) }  // v38：紫色按钮白字
+                        }) { Text("我已知晓，选择备份文件") }
                     },
                     dismissButton = {
-                        TextButton(onClick = { showRestoreConfirm = false }) { Text("取消", color = Color(0xFFA6A8AB)) }  // v38：浅灰副标题
+                        TextButton(onClick = { showRestoreConfirm = false }) { Text("取消") }
                     }
                 )
             }
@@ -1558,14 +1545,14 @@ fun SettingsScreen() {
                         Text(
                             "数据已成功恢复，需要重启应用以加载新数据。点击\"立即重启\"将关闭并重新打开应用。",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White  // v38：深色背景白字
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     },
                     confirmButton = {
                         Button(onClick = {
                             vm.consumeNeedRestart()
                             vm.restartApp()
-                        }) { Text("立即重启", color = Color.White) }  // v38：紫色按钮白字
+                        }) { Text("立即重启") }
                     },
                     dismissButton = {
                         // 不提供取消按钮：数据已覆盖，旧 ViewModel 已失效，必须重启
@@ -1583,7 +1570,7 @@ fun SettingsScreen() {
                             Text(
                                 "将永久删除 ${cleanableCount} 张一年前的签到照片，此操作不可撤销。",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White  // v38：深色背景白字
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(Modifier.height(Spacing.sm))
                             Text(
@@ -1595,7 +1582,7 @@ fun SettingsScreen() {
                             Text(
                                 "一年内的签到照片不受影响。",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFFA6A8AB)  // v38：浅灰副标题
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
                         }
                     },
@@ -1603,10 +1590,10 @@ fun SettingsScreen() {
                         Button(onClick = {
                             showCleanPhotosConfirm = false
                             vm.cleanOldSignPhotos()
-                        }) { Text("确认清理", color = Color.White) }  // v38：紫色按钮白字
+                        }) { Text("确认清理") }
                     },
                     dismissButton = {
-                        TextButton(onClick = { showCleanPhotosConfirm = false }) { Text("取消", color = Color(0xFFA6A8AB)) }  // v38：浅灰副标题
+                        TextButton(onClick = { showCleanPhotosConfirm = false }) { Text("取消") }
                     }
                 )
             }
@@ -1622,7 +1609,7 @@ fun SettingsScreen() {
                             Text(
                                 "将永久删除 ${orphanPhotoCount} 个孤立照片（未被任何课时引用且超过 6 个月），释放 ${vm.formatBytes(orphanPhotoSize)}。",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White  // v38：深色背景白字
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(Modifier.height(Spacing.sm))
                             Text(
@@ -1634,7 +1621,7 @@ fun SettingsScreen() {
                             Text(
                                 "建议：清理前请先点击\"一键备份所有数据\"创建当前数据的备份，以防万一。",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFFA6A8AB)  // v38：浅灰副标题
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
                         }
                     },
@@ -1642,10 +1629,10 @@ fun SettingsScreen() {
                         Button(onClick = {
                             showCleanOrphanPhotosConfirm = false
                             vm.cleanOrphanPhotos()
-                        }) { Text("确认清理", color = Color.White) }  // v38：紫色按钮白字
+                        }) { Text("确认清理") }
                     },
                     dismissButton = {
-                        TextButton(onClick = { showCleanOrphanPhotosConfirm = false }) { Text("取消", color = Color(0xFFA6A8AB)) }  // v38：浅灰副标题
+                        TextButton(onClick = { showCleanOrphanPhotosConfirm = false }) { Text("取消") }
                     }
                 )
             }
@@ -1661,13 +1648,13 @@ fun SettingsScreen() {
                             Text(
                                 "将清理 ${cacheFileCount} 个临时缓存文件，释放 ${vm.formatBytes(cacheSize)}。",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White  // v38：深色背景白字
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(Modifier.height(Spacing.sm))
                             Text(
                                 "缓存清理后系统会按需自动重建，不影响学员数据、签到照片与排课记录。",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFFA6A8AB)  // v38：浅灰副标题
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
                             Spacer(Modifier.height(Spacing.sm))
                             Text(
@@ -1681,16 +1668,13 @@ fun SettingsScreen() {
                         Button(onClick = {
                             showCleanCacheConfirm = false
                             vm.cleanCacheFiles()
-                        }) { Text("确认清理", color = Color.White) }  // v38：紫色按钮白字
+                        }) { Text("确认清理") }
                     },
                     dismissButton = {
-                        TextButton(onClick = { showCleanCacheConfirm = false }) { Text("取消", color = Color(0xFFA6A8AB)) }  // v38：浅灰副标题
+                        TextButton(onClick = { showCleanCacheConfirm = false }) { Text("取消") }
                     }
                 )
             }
-
-            // v37 任务5：导出/备份进行中弹出加载蒙层，拦截外部点击防止重复触发
-            LoadingOverlay(visible = isLoading, message = "正在处理，请稍候…")
         }
     }
 }
@@ -1721,26 +1705,32 @@ private fun IosSectionWrapper(
 }
 
 /**
- * v36 全局 UI 统一：设置页分组卡片（对标 BaseLightCard）。
- * - 纯白背景 #FFFFFF
- * - 20dp 圆角（统一主要卡片圆角规格）
- * - 4dp 柔和阴影
- * - 无顶部渐变装饰条（移除原橙色/青色粗横线）
+ * iOS Inset Grouped 卡片：纯白 + 10pt 圆角 + 1.5dp 活力蓝紫渐变全包裹边框 + 顶部 4dp 装饰条。
  */
 @Composable
 private fun IosGroupedListCard(content: @Composable () -> Unit) {
-    // v38 深色主题：深色卡背景 #1C1C1E，无 border，无顶部装饰条
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .shadow(
                 elevation = 4.dp,
-                shape = RoundedCornerShape(20.dp),
-                ambientColor = Color(0x33000000),
-                spotColor = Color(0x33000000)
+                shape = RoundedCornerShape(10.dp),
+                ambientColor = Color(0x1A000000),
+                spotColor = Color(0x1A000000)
             )
-            .background(CardBackground, RoundedCornerShape(20.dp))
+            .background(Color.White, RoundedCornerShape(10.dp))
     ) {
+        // 顶部 4dp 渐变装饰条（活力蓝紫）
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(4.dp)
+                .background(
+                    brush = Brush.linearGradient(
+                        colors = listOf(GradientStart, GradientEnd)
+                    )
+                )
+        )
         content()
     }
 }
@@ -1812,19 +1802,19 @@ private fun SettingsActionRow(
                     title,
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold,
-                    color = Color.White  // v38：深色卡片主标题白字
+                    color = appOnSurface()
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
                     subtitle,
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFFA6A8AB)  // v38：浅灰副标题
+                    color = appOnSurfaceVariant()
                 )
             }
             Icon(
                 Icons.Outlined.ChevronRight,
                 contentDescription = null,
-                tint = Color(0xFFA6A8AB),  // v38：浅灰箭头
+                tint = appOnSurfaceVariant(),
                 modifier = Modifier.size(20.dp)
             )
         }
@@ -1844,13 +1834,13 @@ private fun StatItem(label: String, value: String) {
             value,
             style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Bold,
-            color = Color.White  // v38：深色卡片数值白字
+            color = MaterialTheme.colorScheme.primary
         )
         Spacer(Modifier.height(Spacing.xs))
         Text(
             label,
             style = MaterialTheme.typography.labelMedium,
-            color = Color(0xFFA6A8AB)  // v38：浅灰标签
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
         )
     }
 }

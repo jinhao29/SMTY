@@ -1,6 +1,7 @@
 package com.shangmentiyu.sportscoach.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -39,9 +40,9 @@ fun BaseCard(
     contentPadding: Dp = Spacing.cardPadding,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    // v38：统一深色卡背景 #1C1C1E，取消双轨
-    val containerColor = Color(0xFF1C1C1E)
-    val shadowColor = Color(0x33000000)
+    val isDark = isSystemInDarkTheme()
+    val containerColor = if (isDark) Color(0xFF2C2C2E) else Color.White
+    val shadowColor = if (isDark) Color(0x33000000) else Color(0x0A000000)
 
     Card(
         modifier = modifier

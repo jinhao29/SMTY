@@ -16,13 +16,10 @@ plugins {
 //    - VERSION_NAME = 1.0.<github.run_number>（与 Release tag 严格一致）
 // 2. 本地环境（Android Studio 直接打包）：环境变量不存在时使用默认值
 //    - versionCode = 1
-//    - versionName = "0.0.1"
+//    - versionName = "1.0.0-local"
 // 设计说明：
 // - github.run_number 在仓库维度严格递增，可保证每次构建 versionCode 唯一递增
-// - 本地 fallback 故意设为极低版本（0.0.1 / versionCode=1），
-//   这样本地编译安装的 App 会认为自己是一个极低版本的旧 App，
-//   从而在 UpdateChecker 中检测到 GitHub 上的新版本（如 v33）并触发更新弹窗，
-//   方便开发者在手机上完整测试自动更新流程。
+// - 本地默认值保证 AS 直接打包不报错，发布版本号由 CI 严格控制
 
 // === Release 签名配置（CI 通过 Secrets 注入 / 本地可选 keystore.properties） ===
 // 设计要点：
@@ -50,10 +47,9 @@ android {
         targetSdk = 35
 
         // 让版本号自动读取环境变量，并设置默认本地开发版本
-        // CI 环境通过 workflow 注入 VERSION_CODE / VERSION_NAME，本地 fallback 到极低版本
-        // 本地 fallback versionCode=1, versionName="0.0.1" → 触发 UpdateChecker 检测到新版本
+        // CI 环境通过 workflow 注入 VERSION_CODE / VERSION_NAME，本地 fallback 到默认值
         versionCode = (System.getenv("VERSION_CODE")?.toIntOrNull() ?: 1)
-        versionName = (System.getenv("VERSION_NAME") ?: "0.0.1")
+        versionName = (System.getenv("VERSION_NAME") ?: "1.0.0-local")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

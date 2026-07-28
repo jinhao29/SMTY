@@ -165,13 +165,7 @@ class ScheduleRepository(
      * 保存前调用 [checkCoachConflict] 检测教练时间冲突，编辑场景排除自身 ID，
      * 冲突时抛出 [CoachConflictException] 并阻止更新，由 ViewModel 捕获并弹窗提示。
      *
-     * === Bug 修复：检测 update 静默失败 ===
-     * ScheduleDao.update 返回受影响行数。若返回 0，说明待编辑的记录已被删除
-     * （如用户在编辑过程中触发了"清空全部课表"），原代码静默返回成功让用户误以为已保存。
-     * 现抛 [NoSuchElementException] 由 ViewModel catch 后向用户提示具体原因。
-     *
      * @throws CoachConflictException 教练时间冲突
-     * @throws NoSuchElementException 待更新记录不存在（已被删除）
      */
     suspend fun updateSchedule(schedule: Schedule) {
         checkCoachConflict(
@@ -180,10 +174,7 @@ class ScheduleRepository(
             startTime = schedule.startTime,
             excludeScheduleId = schedule.id
         )
-        val affected = dao.update(schedule)
-        if (affected != 1) {
-            throw NoSuchElementException("排课记录不存在或已被删除（id=${schedule.id}，affected=$affected）")
-        }
+        dao.update(schedule)
         // v30：更新排课属于核心数据变更，触发自动备份防抖
         AutoBackupScheduler.notifyDataChange()
     }
@@ -246,9 +237,6 @@ class ScheduleRepository(
      * 1. 查询同教练 + 同 dayOfWeek + 同 startTime 且启用中的旧排课（排除自身 ID）
      * 2. 逐条 [deleteById] 删除冲突项
      * 3. 直接 [dao.update] 写入编辑后的排课（不再触发 [checkCoachConflict]）
-     *
-     * === Bug 修复：检测 update 静默失败 ===
-     * 同 [updateSchedule]，若待更新记录已被删除则抛 [NoSuchElementException]。
      */
     suspend fun updateScheduleForce(schedule: Schedule) {
         deleteConflictingSchedules(
@@ -257,10 +245,7 @@ class ScheduleRepository(
             startTime = schedule.startTime,
             excludeScheduleId = schedule.id
         )
-        val affected = dao.update(schedule)
-        if (affected != 1) {
-            throw NoSuchElementException("排课记录不存在或已被删除（id=${schedule.id}，affected=$affected）")
-        }
+        dao.update(schedule)
         // v30：强制更新排课属于核心数据变更，触发自动备份防抖
         AutoBackupScheduler.notifyDataChange()
     }

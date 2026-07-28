@@ -39,7 +39,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
@@ -65,11 +64,8 @@ import com.shangmentiyu.sportscoach.data.model.Student
 import com.shangmentiyu.sportscoach.ui.components.BaseDarkCard
 import com.shangmentiyu.sportscoach.ui.home.HomeViewModel.GradeFilter
 import com.shangmentiyu.sportscoach.ui.home.HomeViewModel.StudentSortBy
-import com.shangmentiyu.sportscoach.ui.theme.CapsuleSelectedBg
-import com.shangmentiyu.sportscoach.ui.theme.CapsuleUnselectedText
 import com.shangmentiyu.sportscoach.ui.theme.GradientEnd
 import com.shangmentiyu.sportscoach.ui.theme.GradientStart
-import com.shangmentiyu.sportscoach.ui.theme.SearchFieldBg
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.StudentCardButtonBg
 import com.shangmentiyu.sportscoach.ui.theme.StudentCardButtonIcon
@@ -117,11 +113,11 @@ fun StudentListTab(
                 verticalArrangement = Arrangement.Center
             ) {
                 Text("还没有学员", style = MaterialTheme.typography.titleMedium,
-                    color = Color.White)  // v38：深色背景白字
+                    color = MaterialTheme.colorScheme.outline)
                 Spacer(Modifier.height(8.dp))
                 Text("点击顶部筛选栏右侧的 + 添加学员",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFFA6A8AB))  // v38：浅灰副标题
+                    color = MaterialTheme.colorScheme.outline)
             }
         } else {
             LazyColumn(
@@ -152,9 +148,7 @@ fun StudentListTab(
                 // === v31 优化3：语音播报模式开关（户外签到语音播报） ===
                 // - 默认关闭，教练在学员列表顶部手动开启
                 // - 开启后 sign() 签到时通过 VoiceAnnouncer 播报"学员 X 已签到，剩余 Y 节课"
-                // === v38 视觉微调：融入深色主题，去除刺眼白底 ===
-                // - 未选中：底色 #2C2C2E 深灰 + 浅灰文字 #A6A8AB（与筛选胶囊统一）
-                // - 选中：底色 #6C5CE7 紫色 + 白色文字（主题色，不再用白底）
+                // - 选中态使用主题色（珊瑚橙），未选中态浅灰，符合 iOS 风格
                 item {
                     Row(
                         modifier = Modifier
@@ -166,33 +160,24 @@ fun StudentListTab(
                         Text(
                             "语音模式",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White  // v38：深色背景白字
+                            color = com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant()
                         )
                         FilterChip(
                             selected = voiceMode,
                             onClick = { vm.setVoiceMode(!voiceMode) },
-                            label = { Text(if (voiceMode) "已开启" else "已关闭") },
-                            colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
-                                containerColor = Color(0xFF2C2C2E),
-                                labelColor = Color(0xFFA6A8AB),
-                                selectedContainerColor = Color(0xFF6C5CE7),
-                                selectedLabelColor = Color.White
-                            )
+                            label = { Text(if (voiceMode) "已开启" else "已关闭") }
                         )
                     }
                 }
                 itemsIndexed(filteredStudents, key = { _, s -> s.name }) { idx, student ->
                     val remaining = remainingMap[student.name] ?: -1
                     val nextLesson = nextLessons[student.name]
-                    // v37 任务4：触觉反馈，提升按钮点击物理感
-                    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
                     StudentListItem(
                         student = student,
                         remaining = remaining,
                         nextLesson = nextLesson,
                         showTopDivider = idx > 0,
                         onSign = {
-                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                             vm.sign(student.name) { result ->
                                 if (result.lessonId.isNotBlank()) {
                                     onSign(result.lessonId)
@@ -200,32 +185,17 @@ fun StudentListTab(
                             }
                         },
                         onGrowth = { onGrowth(student.name) },
-                        onEdit = {
-                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                            onEditStudent(student)
-                        },
-                        onDelete = {
-                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                            deleteTarget = student
-                        },
+                        onEdit = { onEditStudent(student) },
+                        onDelete = { deleteTarget = student },
                         onEditNextLesson = { editLessonTarget = nextLesson },
                         onHeightPrediction = { onHeightPrediction(student.name) },
                         onDietManage = { onDietManage(student.name) }
                     )
                 }
-                // v37 修复：列表末尾追加底部安全间距
-                // 防止最后一张学员卡片被底部导航栏遮挡，确保末项完整可见
-                item {
-                    Spacer(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(Spacing.screenV + 80.dp)
-                    )
-                }
             }
         }
         // v32 优化4：移除底部 FloatingActionButton，避免遮挡末张学员卡片
-        // 添加学员入口已迁移至顶部筛选栏搜索框右侧的紫色圆形 + 按钮
+        // 添加学员入口已迁移至顶部筛选栏搜索框右侧的极简 + 按钮
     }
 
     // 删除学员确认对话框
@@ -233,7 +203,7 @@ fun StudentListTab(
         GlassAlertDialog(
             onDismissRequest = { deleteTarget = null },
             title = "删除学员",
-            content = { Text("确认删除学员「${student.name}」及其所有课时记录？此操作不可撤销。", color = Color.White) },  // v38：深色背景白字
+            content = { Text("确认删除学员「${student.name}」及其所有课时记录？此操作不可撤销。") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -243,7 +213,7 @@ fun StudentListTab(
                 ) { Text("删除", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                TextButton(onClick = { deleteTarget = null }) { Text("取消", color = Color(0xFFA6A8AB)) }  // v38：浅灰副标题
+                TextButton(onClick = { deleteTarget = null }) { Text("取消") }
             }
         )
     }
@@ -287,7 +257,7 @@ private fun EditNextLessonDialog(
                 Text(
                     "学员：${lesson.studentName}",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White  // v38：深色背景白字
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                 )
                 OutlinedDatePickerField(
                     value = dateInput,
@@ -304,10 +274,10 @@ private fun EditNextLessonDialog(
         confirmButton = {
             TextButton(
                 onClick = { onConfirm(dateInput, timeInput) }
-            ) { Text("保存", color = Color.White) }  // v38：紫色按钮白字
+            ) { Text("保存") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消", color = Color(0xFFA6A8AB)) }  // v38：浅灰副标题
+            TextButton(onClick = onDismiss) { Text("取消") }
         }
     )
 }
@@ -327,32 +297,6 @@ private fun StudentListItem(
     onDietManage: () -> Unit = {}
 ) {
     // v35 视觉重构：深色卡 #1C1C1E + 渐变头像 + 青色按钮，移除橙色分割线
-    // v37 性能优化：缓存 Brush 与计算结果，避免滑动时每次重组都重新创建
-    val avatarBrush = remember(GradientStart, GradientEnd) {
-        Brush.linearGradient(colors = listOf(GradientStart, GradientEnd))
-    }
-    // 缓存基本信息字符串，仅当 student 变化时重新计算
-    val basicInfo = remember(student.age, student.gender, student.grade) {
-        val gradeLabel = com.shangmentiyu.sportscoach.core.Standards.gradeLabel(student.grade)
-        buildString {
-            if (student.age > 0) append("${student.age}岁")
-            if (student.gender.isNotBlank()) {
-                if (isNotEmpty()) append(" · ")
-                append(student.gender)
-            }
-            if (gradeLabel.isNotEmpty()) {
-                if (isNotEmpty()) append(" · ")
-                append(gradeLabel)
-            }
-        }
-    }
-    // 缓存 BMI 计算，避免每次重组都执行浮点运算
-    val bmi = remember(student.heightCm, student.weightKg, student.bmi) {
-        if (student.bmi > 0f) student.bmi
-        else if (student.heightCm > 0 && student.weightKg > 0f)
-            student.weightKg / ((student.heightCm / 100f) * (student.heightCm / 100f))
-        else 0f
-    }
     BaseDarkCard {
         Column(
             modifier = Modifier
@@ -365,21 +309,21 @@ private fun StudentListItem(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // v35：头像背景改为青色渐变 #00D2FF → #3A7BD5
-                // v37：使用缓存的 avatarBrush，避免每次重组都创建 Brush 对象
-                // v38 视觉微调：首字母字号从 titleMedium 升级为 titleLarge，
-                // 让每个学员头像中央的首字母（如"陈"、"秦"）更醒目，提升列表辨识度。
-                // 保留蓝色渐变底色不变，仅文字白色加粗放大。
                 Box(
                     modifier = Modifier
                         .size(48.dp)
                         .clip(CircleShape)
-                        .background(brush = avatarBrush),
+                        .background(
+                            brush = Brush.linearGradient(
+                                colors = listOf(GradientStart, GradientEnd)
+                            )
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         student.name.firstOrNull()?.toString() ?: "?",
                         color = Color.White,
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -395,7 +339,18 @@ private fun StudentListItem(
             }
 
             // 第二行：基本信息（年龄、性别、年级）—— v35：副标题灰 #8E8E93
-            // v37：basicInfo 已在顶部用 remember 缓存，此处直接引用
+            val gradeLabel = com.shangmentiyu.sportscoach.core.Standards.gradeLabel(student.grade)
+            val basicInfo = buildString {
+                if (student.age > 0) append("${student.age}岁")
+                if (student.gender.isNotBlank()) {
+                    if (isNotEmpty()) append(" · ")
+                    append(student.gender)
+                }
+                if (gradeLabel.isNotEmpty()) {
+                    if (isNotEmpty()) append(" · ")
+                    append(gradeLabel)
+                }
+            }
             if (basicInfo.isNotBlank()) {
                 Spacer(Modifier.height(6.dp))
                 Text(basicInfo,
@@ -463,7 +418,10 @@ private fun StudentListItem(
                     if (student.weightKg > 0f) {
                         MetricChip("${student.weightKg}kg", StudentCardButtonIcon)
                     }
-                    // v37：使用顶部缓存的 bmi，避免每次重组都执行浮点运算
+                    val bmi = if (student.bmi > 0f) student.bmi
+                              else if (student.heightCm > 0 && student.weightKg > 0f)
+                                  student.weightKg / ((student.heightCm / 100f) * (student.heightCm / 100f))
+                              else 0f
                     if (bmi > 0f) {
                         MetricChip("BMI ${"%.1f".format(bmi)}", StudentCardButtonIcon)
                     }
@@ -502,27 +460,22 @@ private fun StudentListItem(
 
 /**
  * 文字按键样式类型。
- * - [PRIMARY]：浅灰文字 + 深灰背景（用于次要主操作：身高预测、饮食）
- * - [NEUTRAL]：浅灰文字 + 深灰背景（用于中性操作：编辑）
- * - [DANGER]：浅红文字 + 深灰背景（用于危险操作：删除，仅文字区分语义）
- * - [SOLID]：浅灰文字 + 深灰背景（用于主操作：签到，不再用亮蓝渐变）
- *
- * === v38 视觉微调：所有类型统一深灰底 #2C2C2E ===
- * 原设计中 SOLID 类型使用青色渐变实心背景，在深色卡片上过于吵闹。
- * 现统一为深灰底，仅 DANGER 文字保留浅红 #FF453A，其余均为浅灰 #A6A8AB。
- * 去除突兀的亮蓝色实心按钮，让卡片底部按钮组视觉一致、克制。
+ * - [PRIMARY]：主色文字 + 浅主色背景（用于次要主操作：身高预测、饮食）
+ * - [NEUTRAL]：次要文字色 + 浅灰背景（用于中性操作：编辑）
+ * - [DANGER]：错误色文字 + 浅错误色背景（用于危险操作：删除）
+ * - [SOLID]：主色实心背景 + 白色文字（用于主操作：签到）
  */
 enum class TextActionType { PRIMARY, NEUTRAL, DANGER, SOLID }
 
 /**
- * v35 视觉重构 → v38 视觉微调：文字按键（深色卡专用）。
+ * v35 视觉重构：文字按键（深色卡专用）。
  *
- * 设计要点（v38 定稿）：
+ * 设计要点（参考图2 学员卡片）：
  * - 圆角胶囊形背景，文字居中
- * - 所有类型统一深灰背景 #2C2C2E
- * - NEUTRAL/PRIMARY/SOLID 文字浅灰 #A6A8AB
- * - DANGER 文字浅红 #FF453A（语义区分，底色不变）
- * - 无 border，无渐变，仅依赖文字颜色区分操作语义
+ * - 暗色背景 #2C2C2E + 青色文字 #00D2FF（中性操作）
+ * - SOLID 类型使用青色渐变 #00D2FF → #3A7BD5 + 白色文字（主操作：签到）
+ * - DANGER 类型保留语义红色文字
+ * - 无 border，仅依赖背景色区隔
  *
  * @param text 按钮文字
  * @param onClick 点击回调
@@ -534,19 +487,34 @@ private fun TextActionButton(
     onClick: () -> Unit,
     type: TextActionType
 ) {
-    // v38：所有类型统一深灰底，仅文字颜色区分
-    val backgroundColor = StudentCardButtonBg  // #2C2C2E
+    // v35：深色卡按钮配色
+    val backgroundColor = when (type) {
+        TextActionType.PRIMARY -> StudentCardButtonBg
+        TextActionType.NEUTRAL -> StudentCardButtonBg
+        TextActionType.DANGER -> StudentCardButtonBg
+        TextActionType.SOLID -> Color.Transparent  // SOLID 使用渐变背景
+    }
     val textColor = when (type) {
-        TextActionType.PRIMARY -> Color(0xFFA6A8AB)
-        TextActionType.NEUTRAL -> Color(0xFFA6A8AB)
-        TextActionType.DANGER -> Color(0xFFFF453A)  // 保留语义浅红
-        TextActionType.SOLID -> Color(0xFFA6A8AB)   // 签到不再用渐变，改浅灰
+        TextActionType.PRIMARY -> StudentCardButtonIcon
+        TextActionType.NEUTRAL -> StudentCardButtonIcon
+        TextActionType.DANGER -> Color(0xFFFF453A)  // 保留语义红色
+        TextActionType.SOLID -> Color.White
     }
 
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(10.dp))
-            .background(backgroundColor)
+            .then(
+                if (type == TextActionType.SOLID) {
+                    Modifier.background(
+                        brush = Brush.linearGradient(
+                            colors = listOf(GradientStart, GradientEnd)
+                        )
+                    )
+                } else {
+                    Modifier.background(backgroundColor)
+                }
+            )
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center
@@ -615,12 +583,12 @@ internal fun StudentFilterBar(
     // 年级下拉菜单展开状态
     var gradeExpanded by remember { mutableStateOf(false) }
 
-    // v36 全局 UI 统一：筛选栏容器去除深色 surface 背景，融入全局 #F5F7FA 底色
-    // 内部下拉框与搜索框统一使用 #F0F2F5 浅灰胶囊背景 + 无边框
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(Spacing.sm)
+            .clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(Spacing.md)
     ) {
         // 第一行：筛选标题 + 计数 + 重置按钮
         Row(
@@ -638,14 +606,14 @@ internal fun StudentFilterBar(
                 text = "筛选与排序",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
-                color = Color.White  // v38：深色背景白字
+                color = com.shangmentiyu.sportscoach.ui.theme.appOnSurface()
             )
             Spacer(Modifier.width(Spacing.sm))
             // 计数徽标（筛选后/总数）
             Text(
                 text = "$filteredCount/$totalCount",
                 style = MaterialTheme.typography.labelMedium,
-                color = Color(0xFFA6A8AB)  // v38：浅灰统计数据
+                color = com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant()
             )
             Spacer(Modifier.weight(1f))
             // 重置按钮（仅在有激活筛选时显示）
@@ -665,8 +633,7 @@ internal fun StudentFilterBar(
                     Spacer(Modifier.width(2.dp))
                     Text(
                         "重置",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color(0xFFA6A8AB)  // v38：浅灰副标题
+                        style = MaterialTheme.typography.labelMedium
                     )
                 }
             }
@@ -680,8 +647,6 @@ internal fun StudentFilterBar(
             horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
         ) {
             // 排序下拉
-            // v38 视觉微调：去掉外部 label，胶囊内只显示当前选中值 + 图标 + 箭头
-            // 文字与图标统一浅灰 #A6A8AB，底色 #2C2C2E（SearchFieldBg）
             ExposedDropdownMenuBox(
                 expanded = sortExpanded,
                 onExpandedChange = { sortExpanded = !sortExpanded },
@@ -691,40 +656,16 @@ internal fun StudentFilterBar(
                     value = sortByLabel(sortBy),
                     onValueChange = {},
                     readOnly = true,
+                    label = { Text("排序") },
                     leadingIcon = {
                         Icon(
                             Icons.Outlined.Sort,
                             contentDescription = null,
-                            tint = Color(0xFFA6A8AB),
                             modifier = Modifier.size(18.dp)
                         )
                     },
-                    trailingIcon = {
-                        Icon(
-                            Icons.Outlined.ArrowDropDown,
-                            contentDescription = null,
-                            tint = Color(0xFFA6A8AB),
-                            modifier = Modifier.size(20.dp)
-                        )
-                    },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(sortExpanded) },
                     singleLine = true,
-                    shape = RoundedCornerShape(50),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = SearchFieldBg,
-                        unfocusedContainerColor = SearchFieldBg,
-                        disabledContainerColor = SearchFieldBg,
-                        focusedBorderColor = Color.Transparent,
-                        unfocusedBorderColor = Color.Transparent,
-                        disabledBorderColor = Color.Transparent,
-                        focusedTextColor = Color(0xFFA6A8AB),
-                        unfocusedTextColor = Color(0xFFA6A8AB),
-                        disabledTextColor = Color(0xFFA6A8AB),
-                        focusedLeadingIconColor = Color(0xFFA6A8AB),
-                        unfocusedLeadingIconColor = Color(0xFFA6A8AB),
-                        focusedTrailingIconColor = Color(0xFFA6A8AB),
-                        unfocusedTrailingIconColor = Color(0xFFA6A8AB),
-                        cursorColor = MaterialTheme.colorScheme.primary
-                    ),
                     modifier = Modifier
                         .fillMaxWidth()
                         .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true)
@@ -746,7 +687,6 @@ internal fun StudentFilterBar(
             }
 
             // 年级下拉
-            // v38 视觉微调：同排序下拉，去掉 label，统一浅灰文字 + #2C2C2E 底色
             ExposedDropdownMenuBox(
                 expanded = gradeExpanded,
                 onExpandedChange = { gradeExpanded = !gradeExpanded },
@@ -756,40 +696,16 @@ internal fun StudentFilterBar(
                     value = gradeFilterLabel(gradeFilter),
                     onValueChange = {},
                     readOnly = true,
+                    label = { Text("年级") },
                     leadingIcon = {
                         Icon(
                             Icons.Outlined.FilterList,
                             contentDescription = null,
-                            tint = Color(0xFFA6A8AB),
                             modifier = Modifier.size(18.dp)
                         )
                     },
-                    trailingIcon = {
-                        Icon(
-                            Icons.Outlined.ArrowDropDown,
-                            contentDescription = null,
-                            tint = Color(0xFFA6A8AB),
-                            modifier = Modifier.size(20.dp)
-                        )
-                    },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(gradeExpanded) },
                     singleLine = true,
-                    shape = RoundedCornerShape(50),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = SearchFieldBg,
-                        unfocusedContainerColor = SearchFieldBg,
-                        disabledContainerColor = SearchFieldBg,
-                        focusedBorderColor = Color.Transparent,
-                        unfocusedBorderColor = Color.Transparent,
-                        disabledBorderColor = Color.Transparent,
-                        focusedTextColor = Color(0xFFA6A8AB),
-                        unfocusedTextColor = Color(0xFFA6A8AB),
-                        disabledTextColor = Color(0xFFA6A8AB),
-                        focusedLeadingIconColor = Color(0xFFA6A8AB),
-                        unfocusedLeadingIconColor = Color(0xFFA6A8AB),
-                        focusedTrailingIconColor = Color(0xFFA6A8AB),
-                        unfocusedTrailingIconColor = Color(0xFFA6A8AB),
-                        cursorColor = MaterialTheme.colorScheme.primary
-                    ),
                     modifier = Modifier
                         .fillMaxWidth()
                         .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true)
@@ -823,12 +739,11 @@ internal fun StudentFilterBar(
             OutlinedTextField(
                 value = nameQuery,
                 onValueChange = onNameQueryChanged,
-                label = { Text("搜索姓名", color = Color(0xFFA6A8AB)) },  // v38：浅灰副标题
+                label = { Text("搜索姓名") },
                 leadingIcon = {
                     Icon(
                         Icons.Outlined.Search,
                         contentDescription = null,
-                        tint = Color(0xFFA6A8AB),  // v38：浅灰图标
                         modifier = Modifier.size(18.dp)
                     )
                 },
@@ -841,49 +756,34 @@ internal fun StudentFilterBar(
                             Icon(
                                 Icons.Outlined.Close,
                                 contentDescription = "清空",
-                                tint = Color(0xFFA6A8AB),  // v38：浅灰图标
                                 modifier = Modifier.size(16.dp)
                             )
                         }
                     }
                 },
                 singleLine = true,
-                shape = RoundedCornerShape(50),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = SearchFieldBg,
-                    unfocusedContainerColor = SearchFieldBg,
-                    disabledContainerColor = SearchFieldBg,
-                    focusedBorderColor = Color.Transparent,
-                    unfocusedBorderColor = Color.Transparent,
-                    disabledBorderColor = Color.Transparent,
-                    focusedTextColor = Color.White,  // v38：深色背景白字
-                    unfocusedTextColor = Color.White,  // v38：深色背景白字
-                    focusedLabelColor = MaterialTheme.colorScheme.primary,
-                    unfocusedLabelColor = Color(0xFFA6A8AB),  // v38：浅灰副标题
-                    cursorColor = MaterialTheme.colorScheme.primary
-                ),
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Text,
                     imeAction = ImeAction.Search
                 ),
                 modifier = Modifier.weight(1f)
             )
-            // v36 全局 UI 统一：+ 按钮改为纯紫色圆形图标
-            // - 圆形 36dp，纯紫底 #6C5CE7，白色 + 图标
-            // - 与深色卡片风格对齐，去除半透明底色
+            // 极简细线框圆形 + 按钮：主题色 #FF6B47，与搜索框等高
+            // - 圆形 36dp，1dp 细线框，无填充背景，避免突兀
+            // - 图标 18dp，与搜索框 leadingIcon 视觉重量一致
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(36.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f))
                     .clickable(onClick = onAddStudent),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     Icons.Outlined.Add,
                     contentDescription = "添加学员",
-                    tint = Color.White,
-                    modifier = Modifier.size(20.dp)
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }

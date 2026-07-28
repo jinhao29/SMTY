@@ -156,13 +156,10 @@ private fun ZoomableImageContent(
     }
 
     // 带 crossfade 的 ImageRequest，提升加载体验
-    // v37 任务3：全屏预览启用内存/磁盘缓存，不限制 size（全屏需原图清晰度）
     val request = remember(model) {
         ImageRequest.Builder(context)
             .data(model)
             .crossfade(true)
-            .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
-            .diskCachePolicy(coil.request.CachePolicy.ENABLED)
             .build()
     }
 

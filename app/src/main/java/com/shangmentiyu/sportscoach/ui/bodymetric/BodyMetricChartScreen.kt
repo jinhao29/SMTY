@@ -75,7 +75,7 @@ fun BodyMetricChartScreen(onBack: () -> Unit) {
     var showAddDialog by remember { mutableStateOf(false) }
 
     Scaffold(
-        containerColor = Color(0xFF121212),  // v38：全局深色背景
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text("体型变化曲线") },
@@ -89,13 +89,8 @@ fun BodyMetricChartScreen(onBack: () -> Unit) {
         },
         floatingActionButton = {
             if (selectedStudent.isNotBlank()) {
-                // v37 任务4：FAB 触觉反馈
-                val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
                 FloatingActionButton(
-                    onClick = {
-                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                        showAddDialog = true
-                    },
+                    onClick = { showAddDialog = true },
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = Color.White,
                     shape = RoundedCornerShape(16.dp)

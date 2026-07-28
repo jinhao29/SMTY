@@ -1,6 +1,5 @@
 package com.shangmentiyu.sportscoach.ui.score
 
-import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -41,7 +40,7 @@ fun ScoreScreen(
     var tabIndex by remember { mutableStateOf(1) } // 默认"查看成绩"
 
     Scaffold(
-        containerColor = Color(0xFF121212)  // v38：全局深色背景
+        containerColor = appSurface()
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             PrimaryTabRow(selectedTabIndex = tabIndex) {

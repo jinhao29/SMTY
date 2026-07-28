@@ -40,14 +40,13 @@ import androidx.compose.ui.unit.dp
  */
 
 /**
- * iOS 分组风格深色圆角卡片容器（Inset Grouped Card）。
+ * iOS 分组风格白色圆角卡片容器（Inset Grouped Card）。
  *
- * v38 视觉规格（深色主题）：
- * - 深色背景 #1C1C1E（CardBackground）
- * - 20dp 圆角（统一卡片圆角规格）
- * - 6dp 柔和投影（极弱黑色，模拟卡片阴影）
+ * 视觉规格：
+ * - 白色背景（appSurface）
+ * - 10dp 圆角（与 GlassCard 一致）
+ * - 6dp 柔和投影（低 alpha 黑色，模拟 iOS 卡片阴影，提升浮动感）
  * - 12dp 内边距（紧凑，避免过大）
- * - 无 border，仅依赖圆角 + background + 极弱阴影区隔层级
  *
  * @param contentPadding 内边距，默认 12dp
  */
@@ -62,12 +61,12 @@ fun IOSCard(
             .fillMaxWidth()
             .shadow(
                 elevation = 6.dp,
-                shape = RoundedCornerShape(20.dp),
-                ambientColor = Color.Black.copy(alpha = 0.20f),
-                spotColor = Color.Black.copy(alpha = 0.30f)
+                shape = RoundedCornerShape(10.dp),
+                ambientColor = Color.Black.copy(alpha = 0.06f),
+                spotColor = Color.Black.copy(alpha = 0.12f)
             )
-            .clip(RoundedCornerShape(20.dp))
-            .background(CardBackground)
+            .clip(RoundedCornerShape(10.dp))
+            .background(appSurface())
             .padding(contentPadding),
         content = content
     )

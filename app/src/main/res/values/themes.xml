@@ -1,16 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- v38 全局深色主题：Activity 主题改用 Material（深色版），
-     配合 Compose 内部 SportsCoachTheme 强制深色，杜绝冷启动白屏。 -->
 <resources>
-    <style name="Theme.SportsCoach" parent="android:Theme.Material.NoActionBar">
+    <style name="Theme.SportsCoach" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
-        <!-- v38：深色背景 → 状态栏/导航条图标改浅色 -->
-        <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowLightNavigationBar">false</item>
-        <!-- 启动屏背景：消除冷启动白屏，与 appBackground() 色值 #121212 无缝衔接 -->
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <!-- 启动屏背景：消除冷启动白屏，与 appBackground() 色值无缝衔接。
+             视觉效果不变，只是把系统默认白底替换为品牌底色。 -->
         <item name="android:windowBackground">@drawable/launch_screen</item>
-        <!-- v38：windowBackground 已是深色，取消 windowBackground 的纯白覆盖 -->
-        <item name="android:colorBackground">@color/launch_background_dark</item>
     </style>
 </resources>

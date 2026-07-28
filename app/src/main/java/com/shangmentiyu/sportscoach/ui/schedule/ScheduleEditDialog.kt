@@ -2,7 +2,6 @@ package com.shangmentiyu.sportscoach.ui.schedule
 
 import android.content.Context
 import android.net.Uri
-import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Image
@@ -142,8 +141,6 @@ fun ScheduleEditDialog(
 ) {
     val students by vm.students.collectAsState()
     val editing by vm.editingSchedule.collectAsState()
-    // === 保存失败时用于 Toast 提示异常信息（不再黑盒吞掉错误）===
-    val context = LocalContext.current
     // 排课记忆：时间/地点历史下拉
     val timeMemories by vm.timeMemories.collectAsState()
     val locationMemories by vm.locationMemories.collectAsState()
@@ -225,12 +222,8 @@ fun ScheduleEditDialog(
 
     // 暂存当前表单快照，用于冲突确认后用 forceReplace=true 重新提交
     // （用户在确认框期间未修改表单，state 变量保持不变，直接复用即可）
-    // === v33 数据流加固：编辑模式下必须携带 editing.id ===
-    // 防止 OperationViewModel.editingSchedule 因协程时序问题为 null 时误走"新增"路径
-    // 导致 Room 主键冲突静默失败
     val buildForm: () -> ScheduleForm = {
         ScheduleForm(
-            id = if (!isCreate) editing?.id ?: "" else "",
             studentName = studentName,
             coachName = coachName,
             dayOfWeek = dayOfWeek,
@@ -903,16 +896,7 @@ fun ScheduleEditDialog(
                         }
                         // v25 优化5：不再立即 onSaved()
                         // 由 vm.saveSuccessEvent 触发关闭，由 vm.coachConflictEvent 触发冲突确认框
-                        // === Bug 修复：包裹 try-catch，避免黑盒吞掉异常 ===
-                        // vm.saveSchedule 本身是异步（safeLaunch 协程），同步路径上的异常可被此处捕获；
-                        // 异步路径上的异常由 ViewModel 内部 catch 处理并通过 _toast 推送。
-                        // 此处 try-catch 作为二次防护，保证任何同步异常都向用户可见。
-                        try {
-                            vm.saveSchedule(buildForm())
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                            Toast.makeText(context, "保存失败: ${e.message}", Toast.LENGTH_LONG).show()
-                        }
+                        vm.saveSchedule(buildForm())
                     },
                     modifier = Modifier
                         .fillMaxWidth()

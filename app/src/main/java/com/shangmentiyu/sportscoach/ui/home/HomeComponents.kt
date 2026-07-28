@@ -33,14 +33,9 @@ import com.shangmentiyu.sportscoach.ui.theme.Spacing
  *
  * 包含卡片容器、分组头/脚注、统计项、指标 chip、课时徽章等，
  * 供主页 4 个 Tab 复用，保持视觉一致性。
- *
- * === v38 全局深色主题 ===
- * 原 IosCard / IosGroupedListCard 使用 Color.White 纯白底 + 黑色阴影，
- * 在 #121212 深色背景上形成刺眼的白色补丁。
- * 现统一改为 #1C1C1E 深灰底 + 透明阴影，与 BaseDarkCard 保持一致。
  */
 
-/** iOS Inset Grouped 卡片：深灰底 #1C1C1E + 10dp 圆角（v38 深色版） */
+/** iOS Inset Grouped 卡片：纯白 + 10dp 圆角 + 4.dp 柔和阴影 */
 @Composable
 internal fun IosCard(
     modifier: Modifier = Modifier,
@@ -48,8 +43,14 @@ internal fun IosCard(
 ) {
     Column(
         modifier = modifier
+            .shadow(
+                elevation = 4.dp,
+                shape = RoundedCornerShape(10.dp),
+                ambientColor = Color(0x1A000000),
+                spotColor = Color(0x1A000000)
+            )
             .background(
-                color = Color(0xFF1C1C1E),  // v38：深灰卡片底色
+                color = Color.White,
                 shape = RoundedCornerShape(10.dp)
             )
     ) {
@@ -57,7 +58,7 @@ internal fun IosCard(
     }
 }
 
-/** iOS Inset Grouped 列表卡片：深灰底 + 允许多行内容（v38 深色版） */
+/** iOS Inset Grouped 列表卡片：允许多行内容 + 柔和阴影 */
 @Composable
 internal fun IosGroupedListCard(
     modifier: Modifier = Modifier,
@@ -66,8 +67,14 @@ internal fun IosGroupedListCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .shadow(
+                elevation = 4.dp,
+                shape = RoundedCornerShape(10.dp),
+                ambientColor = Color(0x1A000000),
+                spotColor = Color(0x1A000000)
+            )
             .background(
-                color = Color(0xFF1C1C1E),  // v38：深灰卡片底色
+                color = Color.White,
                 shape = RoundedCornerShape(10.dp)
             )
     ) {
@@ -82,9 +89,7 @@ internal fun IosSectionHeader(text: String) {
         text = text.uppercase(),
         style = MaterialTheme.typography.labelLarge,
         fontWeight = FontWeight.SemiBold,
-        // v38 全局深色主题：section header 文字从浅青 GradientStart 改为纯白
-        // 原 #00D2FF 在白底上还能看见，在 #121212 黑底上会显得突兀
-        color = Color.White,
+        color = GradientStart,
         modifier = Modifier.padding(
             start = Spacing.screenH,
             end = Spacing.screenH,
@@ -104,15 +109,13 @@ internal fun StatItem(label: String, value: String) {
             text = value,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
-            // v38：原 GradientStart (#00D2FF) 亮蓝在深色卡片上过于突兀，改纯白
-            color = Color.White
+            color = GradientStart
         )
         Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.bodySmall,
-            // v38：outline 在深色主题下为 Transparent，改浅灰保证可见
-            color = Color(0xFFA6A8AB)
+            color = MaterialTheme.colorScheme.outline
         )
     }
 }
