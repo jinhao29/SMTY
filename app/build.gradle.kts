@@ -46,10 +46,11 @@ android {
         minSdk = 26
         targetSdk = 35
 
-        // 让版本号自动读取环境变量，并设置默认本地开发版本
-        // CI 环境通过 workflow 注入 VERSION_CODE / VERSION_NAME，本地 fallback 到默认值
-        versionCode = (System.getenv("VERSION_CODE")?.toIntOrNull() ?: 1)
-        versionName = (System.getenv("VERSION_NAME") ?: "1.0.0-local")
+        // 让版本号通过 Gradle -P 参数传递，比环境变量更稳定可靠
+        // CI 环境通过 -PVERSION_CODE / -PVERSION_NAME 注入，本地 fallback 到默认值
+        // 用法：./gradlew assembleRelease -PVERSION_CODE=123 -PVERSION_NAME=1.0.123
+        versionCode = (project.properties["VERSION_CODE"] as? String)?.toIntOrNull() ?: 1
+        versionName = (project.properties["VERSION_NAME"] as? String) ?: "1.0.0-local"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

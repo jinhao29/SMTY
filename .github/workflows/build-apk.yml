@@ -56,16 +56,6 @@ jobs:
       - name: 授予 gradlew 执行权限
         run: chmod +x ./gradlew
 
-      - name: 动态注入版本号
-        # 通过 GITHUB_ENV 注入 VERSION_CODE 和 VERSION_NAME 环境变量
-        # build.gradle.kts 中的 defaultConfig 会读取这两个变量动态生成 versionCode / versionName
-        # github.run_number 在仓库维度严格递增（从 1 开始：1, 2, 3...）
-        # 本地构建时环境变量不存在，使用 build.gradle.kts 中的默认值
-        # （versionCode=1, versionName=1.0.0-local）
-        run: |
-          echo "VERSION_CODE=${{ github.run_number }}" >> $GITHUB_ENV
-          echo "VERSION_NAME=1.0.${{ github.run_number }}" >> $GITHUB_ENV
-
       - name: 配置 Release 签名
         # 若已配置 KEYSTORE_BASE64 Secret，则解码 keystore + 写入 keystore.properties
         # build.gradle.kts 检测到 keystore.properties 时自动切换 release 签名
@@ -122,11 +112,13 @@ jobs:
           echo "已切换 Gradle wrapper 为官方源（gradle-8.13-all.zip）"
 
       - name: 构建 Release APK
-        # 通过 GITHUB_ENV 注入的 VERSION_CODE / VERSION_NAME 会被 build.gradle.kts 自动读取
-        # 无需通过 -P 参数或 sed 替换，环境变量自动生效
+        # 通过 -P 参数向 Gradle 传递 VERSION_CODE / VERSION_NAME，比环境变量更稳定可靠
+        # build.gradle.kts 中 defaultConfig 读取 project.properties["VERSION_CODE"] / ["VERSION_NAME"]
+        # github.run_number 在仓库维度严格递增（从 1 开始：1, 2, 3...）
+        # 本地构建时不传 -P 参数，build.gradle.kts fallback 到默认值（versionCode=1, versionName=1.0.0-local）
         # --no-configuration-cache：避免 Version Catalog + KSP 在配置缓存下的兼容性问题
         # --build-cache：启用 Gradle Build Cache，配合 actions/cache@v4 实现跨 run 复用编译产物
-        run: ./gradlew assembleRelease --no-daemon --stacktrace --no-configuration-cache --build-cache
+        run: ./gradlew assembleRelease -PVERSION_CODE=${{ github.run_number }} -PVERSION_NAME=1.0.${{ github.run_number }} --no-daemon --stacktrace --no-configuration-cache --build-cache
 
       - name: 清理 Gradle 缓存中的临时文件
         # 避免缓存膨胀：移除构建过程中产生的临时/锁文件，仅保留可复用部分
