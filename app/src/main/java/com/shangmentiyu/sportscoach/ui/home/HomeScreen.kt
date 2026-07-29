@@ -98,14 +98,16 @@ fun HomeScreen(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        snackbarHost = { SnackbarHost(snackbarHost) }
+        snackbarHost = { SnackbarHost(snackbarHost) },
+        // === v40 修复：contentWindowInsets 设为 0，让 content 从屏幕顶部开始 ===
+        // 状态栏避让由 CapsuleTabBar 内部的 statusBarsPadding() 唯一负责，
+        // 避免 padding(padding) + statusBarsPadding() 双重叠加产生大量留白
+        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0)
     ) { padding ->
-        // === v40 任务1：移除顶部多余留白，只保留一次 statusBarsPadding() ===
-        // 胶囊 Tab 栏直接对齐系统状态栏底部
+        // padding 此时为 0（因 contentWindowInsets 设为 0），保留 .padding(padding) 以兼容 Scaffold 行为
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             // === v40 任务2a：自定义胶囊 Tab 栏 ===
-            // 选中：珊瑚橙背景 #FF6B47 + 白字
-            // 未选中：浅灰背景 #F0F0F0 + 深灰字
+            // CapsuleTabBar 内部唯一一次 statusBarsPadding()，胶囊紧贴状态栏底部
             val tabLabels = listOf(
                 stringResource(R.string.home_tab_pre_class),
                 stringResource(R.string.home_tab_lesson_manage),
@@ -117,6 +119,8 @@ fun HomeScreen(
                 selectedIndex = tabIndex,
                 onSelected = { tabIndex = it }
             )
+            // === 警示横幅：胶囊 Tab 下方固定 8dp 间距（严禁超过 8dp）===
+            Spacer(Modifier.height(8.dp))
             // === v5 新增：双端同步状态横幅 ===
             SyncHandshakeBanner(
                 state = syncHandshake,
