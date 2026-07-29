@@ -40,7 +40,8 @@ import java.util.concurrent.TimeUnit
  */
 object UpdateChecker {
 
-    private const val TAG = "UpdateChecker"
+    // === 诊断统一 Tag：在 Logcat 过滤 "AutoUpdate" 即可看到全链路日志 ===
+    private const val TAG = "AutoUpdate"
 
     /** GitHub 用户名（仓库所有者）—— ⚠️ 请核对！ */
     private const val GITHUB_OWNER = "jinhao29"
@@ -150,20 +151,40 @@ object UpdateChecker {
      * - 其他 HTTP 错误码 / JSON 解析错误：→ 返回 [UpdateResult.Error]
      */
     suspend fun checkForUpdate(): UpdateResult = withContext(Dispatchers.IO) {
+        // === 全链路诊断日志：入口埋点 ===
+        // 在 Logcat 过滤 "AutoUpdate" 即可看到从入口到最终返回的完整链路
+        Log.d(
+            TAG,
+            "========== 开始检查更新 =========="
+        )
+        Log.d(
+            TAG,
+            "开始检查更新，本地版本: ${BuildConfig.VERSION_NAME}, 本地 Code: ${BuildConfig.VERSION_CODE}"
+        )
+        Log.d(TAG, "请求端点: $API_LATEST_RELEASE")
+        Log.d(TAG, "User-Agent: $USER_AGENT")
+
         try {
             val request = Request.Builder()
                 .url(API_LATEST_RELEASE)
                 .build()  // User-Agent / Accept 已由拦截器统一注入
 
+            Log.d(TAG, ">> 发起 HTTP 请求...")
             httpClient.newCall(request).execute().use { response ->
+                Log.d(
+                    TAG,
+                    "<< 收到响应：HTTP ${response.code} ${response.message}, " +
+                            "url=${response.request.url}"
+                )
+
                 if (!response.isSuccessful) {
                     // === 功能 4：404 静默拦截 ===
                     // 仓库尚未发布 Release 时 GitHub 返回 404，
                     // 此时绝不弹错误窗，仅 Log.d 记录后视为"已是最新"
                     if (response.code == 404) {
-                        Log.d(
+                        Log.w(
                             TAG,
-                            "GitHub 仓库 $GITHUB_OWNER/$GITHUB_REPO 暂无 Release（HTTP 404），" +
+                            "❌ GitHub 仓库 $GITHUB_OWNER/$GITHUB_REPO 暂无 Release（HTTP 404），" +
                                     "视为已是最新版本，不弹错误窗"
                         )
                         return@withContext UpdateResult.UpToDate
@@ -176,21 +197,40 @@ object UpdateChecker {
                         500, 502, 503 -> "\n可能原因：GitHub 服务暂时不可用，请稍后再试。"
                         else -> ""
                     }
+                    Log.e(TAG, "❌ HTTP 请求失败: ${response.code} ${response.message}$hint")
                     return@withContext UpdateResult.Error(
                         "GitHub API 请求失败: HTTP ${response.code} ${response.message}$hint"
                     )
                 }
 
                 val body = response.body?.string()
-                    ?: return@withContext UpdateResult.Error("响应体为空")
+                if (body == null) {
+                    Log.e(TAG, "❌ 响应体为空（response.body == null）")
+                    return@withContext UpdateResult.Error("响应体为空")
+                }
+                // 打印响应体长度 + 前 500 字符，便于排查 JSON 解析问题
+                Log.d(TAG, "✅ 响应体长度: ${body.length} 字符")
+                Log.d(TAG, "响应体预览（前 500 字符）: ${body.take(500)}")
 
                 val release = try {
                     gson.fromJson(body, GitHubRelease::class.java)
                 } catch (e: Exception) {
+                    Log.e(TAG, "❌ 解析 Release JSON 失败: ${e.message}", e)
                     return@withContext UpdateResult.Error("解析 Release JSON 失败: ${e.message}")
-                } ?: return@withContext UpdateResult.Error("解析 Release JSON 失败")
+                }
+                if (release == null) {
+                    Log.e(TAG, "❌ 解析 Release JSON 返回 null（gson.fromJson 返回 null）")
+                    return@withContext UpdateResult.Error("解析 Release JSON 失败")
+                }
+
+                Log.d(
+                    TAG,
+                    "✅ Release 解析成功: tagName=${release.tagName}, " +
+                            "assetsCount=${release.assets.size}, bodyLength=${release.body.length}"
+                )
 
                 if (release.tagName.isBlank()) {
+                    Log.e(TAG, "❌ Release 缺少 tag_name（tagName 为空）")
                     return@withContext UpdateResult.Error("Release 缺少 tag_name")
                 }
 
@@ -199,10 +239,13 @@ object UpdateChecker {
                     // Release 已发布但没有 APK 附件：视为"无可用更新"，避免错误弹窗
                     Log.w(
                         TAG,
-                        "Release ${release.tagName} 已发布但缺少 APK 附件，视为无可用更新"
+                        "❌ Release ${release.tagName} 已发布但缺少 APK 附件！" +
+                                "assets=${release.assets.size}, " +
+                                "请在 GitHub Release 页面上传 APK 文件后重试"
                     )
                     return@withContext UpdateResult.UpToDate
                 }
+                Log.d(TAG, "✅ APK 下载链接: $apkUrl")
 
                 // === v33+ 版本比对：tag_name 数字部分 vs 本地 versionCode 整数对比 ===
                 // 从 GitHub Release tag_name（如 "v33"）提取数字部分作为远端 versionCode
@@ -227,12 +270,20 @@ object UpdateChecker {
                 // 且 GitHub API 成功返回了 Release（能走到这里说明云端有发布），
                 // 直接判定为"有新版本"，跳过数字大小比较。
                 // 这样本地调试版每次检查更新都会提示，确保开发者能第一时间看到云端版本。
-                if (localVersionName.contains("-local") || localVersionCode == 99999) {
+                val isLocalDevName = localVersionName.contains("-local")
+                val isLocalDevCode = localVersionCode == 99999
+                Log.d(
+                    TAG,
+                    "调试版判定: contains('-local')=$isLocalDevName, " +
+                            "versionCode==99999=$isLocalDevCode"
+                )
+                if (isLocalDevName || isLocalDevCode) {
                     Log.d(
                         TAG,
-                        "检测到本地调试版（versionName=$localVersionName, " +
-                                "versionCode=$localVersionCode），强制判定为有更新"
+                        "🚀 触发调试版强制更新逻辑！versionName=$localVersionName, " +
+                                "versionCode=$localVersionCode → 直接返回 NewVersionAvailable"
                     )
+                    Log.d(TAG, "========== 检查结束（调试版强制更新）==========")
                     return@withContext UpdateResult.NewVersionAvailable(
                         tagName = release.tagName,
                         downloadUrl = apkUrl,
@@ -240,31 +291,44 @@ object UpdateChecker {
                     )
                 }
 
+                // === 正常版本比对 ===
                 if (remoteVersionCode > localVersionCode) {
+                    Log.d(
+                        TAG,
+                        "✅ 发现新版本：remoteVersionCode($remoteVersionCode) > " +
+                                "localVersionCode($localVersionCode)"
+                    )
+                    Log.d(TAG, "========== 检查结束（有更新）==========")
                     UpdateResult.NewVersionAvailable(
                         tagName = release.tagName,
                         downloadUrl = apkUrl,
                         releaseNotes = release.body
                     )
                 } else {
+                    Log.d(
+                        TAG,
+                        "ℹ️ 当前已是最新：remoteVersionCode($remoteVersionCode) <= " +
+                                "localVersionCode($localVersionCode)"
+                    )
+                    Log.d(TAG, "========== 检查结束（已是最新）==========")
                     UpdateResult.UpToDate
                 }
             }
         } catch (e: SocketTimeoutException) {
             // 网络超时（检查阶段）：不弹错误窗，仅日志记录，视为"已是最新"
-            Log.w(TAG, "检查更新超时：${e.message}，视为当前已是最新版本", e)
+            Log.w(TAG, "❌ 检查更新超时（SocketTimeoutException）：${e.message}，视为当前已是最新版本", e)
             UpdateResult.UpToDate
         } catch (e: UnknownHostException) {
             // 无法解析主机（无网络/DNS 失败）：不弹错误窗，仅日志记录
-            Log.w(TAG, "无法连接 GitHub（网络不可用）：${e.message}", e)
+            Log.w(TAG, "❌ 无法连接 GitHub（UnknownHostException，网络不可用）：${e.message}", e)
             UpdateResult.UpToDate
         } catch (e: java.io.IOException) {
             // 其他 IO 异常（连接重置等）：不弹错误窗，仅日志记录
-            Log.w(TAG, "网络 IO 异常：${e.message}", e)
+            Log.w(TAG, "❌ 网络 IO 异常（IOException）：${e.message}", e)
             UpdateResult.UpToDate
         } catch (e: Exception) {
             // 未预期异常：返回 Error，由 UI 决定是否提示
-            Log.e(TAG, "检查更新未预期异常", e)
+            Log.e(TAG, "❌ 检查更新未预期异常: ${e.javaClass.simpleName}: ${e.message}", e)
             UpdateResult.Error("检查更新失败: ${e.message ?: "未知错误"}")
         }
     }

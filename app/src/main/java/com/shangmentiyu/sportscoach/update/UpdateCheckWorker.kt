@@ -4,6 +4,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
@@ -28,6 +29,8 @@ class UpdateCheckWorker(
 ) : CoroutineWorker(appContext, params) {
 
     companion object {
+        // === 诊断统一 Tag：与 UpdateChecker/UpdateManager 一致 ===
+        private const val TAG = "AutoUpdate"
         private const val NOTIFICATION_CHANNEL_ID = "update_channel_v2"
         private const val NOTIFICATION_CHANNEL_NAME = "应用更新"
         private const val NOTIFICATION_ID_DOWNLOADING = 1001
@@ -41,18 +44,22 @@ class UpdateCheckWorker(
         get() = inputData.getInt(UpdateManager.KEY_RETRY_COUNT, 0)
 
     override suspend fun doWork(): Result {
+        Log.d(TAG, ">> UpdateCheckWorker.doWork 入口：retryCount=$currentRetryCount")
         return try {
             // 1. 检查更新
             val updateResult = UpdateChecker.checkForUpdate()
+            Log.d(TAG, "Worker 收到检查结果: ${updateResult.javaClass.simpleName}")
 
             when (updateResult) {
                 is UpdateResult.UpToDate -> {
                     // 已是最新版本：取消可能存在的失败重试链，本次检查链自然终止
+                    Log.d(TAG, "Worker: UpToDate，取消重试链，任务结束")
                     UpdateManager.cancelRetryChain(applicationContext)
                     Result.success()
                 }
                 is UpdateResult.NewVersionAvailable -> {
                     // 2. 有新版本，发送下载中通知（可点击打开 App）
+                    Log.d(TAG, "Worker: 发现新版本 ${updateResult.tagName}，开始下载 APK")
                     createNotificationChannel()
                     showDownloadingNotification(updateResult.tagName)
                     // 同步推送 UI 进度总线：App 在前台时立即显示下载进度浮层
@@ -67,6 +74,7 @@ class UpdateCheckWorker(
                     var success = false
                     try {
                         val apkFile = UpdateInstaller.getApkFile(applicationContext)
+                        Log.d(TAG, "Worker: APK 目标路径 = ${apkFile.absolutePath}")
                         success = UpdateChecker.downloadApk(
                             downloadUrl = updateResult.downloadUrl,
                             destFile = apkFile,
@@ -83,12 +91,14 @@ class UpdateCheckWorker(
                     } catch (e: UpdateChecker.DownloadException) {
                         // === 功能 4：网络不稳定 / 下载失败友好提示 ===
                         // userMessage 已是面向用户的文案，直接展示到通知与 UI
+                        Log.e(TAG, "Worker: 下载失败 DownloadException: ${e.userMessage}", e)
                         downloadFailedMessage = e.userMessage
                         success = false
                     }
 
                     if (success) {
                         // 4. 下载完成，发送可安装通知（点击直接跳转安装界面）
+                        Log.d(TAG, "Worker: 下载完成，发送可安装通知")
                         showReadyNotification(updateResult.tagName)
                         // 同步 UI 进度总线：UI 据此隐藏进度浮层并触发安装
                         UpdateProgressBus.emit(
@@ -102,6 +112,7 @@ class UpdateCheckWorker(
                         // 断点续传会在下次重试时继续下载，不重新开始
                         val failMsg = downloadFailedMessage
                             ?: "下载失败，将在 1 小时后自动重试"
+                        Log.w(TAG, "Worker: 下载失败，排程重试。failMsg=$failMsg")
                         showFailedNotification(failMsg)
                         UpdateProgressBus.emit(
                             UpdateProgressBus.UpdateProgress.Failed(failMsg)
@@ -112,6 +123,7 @@ class UpdateCheckWorker(
                 }
                 is UpdateResult.Error -> {
                     // 检查失败：排程 1h/6h 后台重试
+                    Log.w(TAG, "Worker: 检查失败 Error: ${updateResult.message}，排程重试")
                     UpdateManager.scheduleRetryIfNeeded(applicationContext, currentRetryCount)
                     // 同步 UI 进度总线（仅在用户主动触发的即时检查场景下可见）
                     UpdateProgressBus.emit(
@@ -124,6 +136,7 @@ class UpdateCheckWorker(
             }
         } catch (e: Exception) {
             // 未捕获异常：同样排程重试，避免异常导致重试链断裂
+            Log.e(TAG, "Worker: doWork 未捕获异常: ${e.javaClass.simpleName}: ${e.message}", e)
             UpdateManager.scheduleRetryIfNeeded(applicationContext, currentRetryCount)
             UpdateProgressBus.emit(
                 UpdateProgressBus.UpdateProgress.Failed(e.message ?: "更新检查异常，将在 1 小时后自动重试")

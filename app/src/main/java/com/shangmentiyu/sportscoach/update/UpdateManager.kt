@@ -41,7 +41,8 @@ import java.util.concurrent.TimeUnit
  */
 object UpdateManager {
 
-    private const val TAG = "UpdateManager"
+    // === 诊断统一 Tag：与 UpdateChecker 一致，Logcat 过滤 "AutoUpdate" 看全链路 ===
+    private const val TAG = "AutoUpdate"
 
     /** 定期检查任务的唯一名称（用于去重，避免重复注册） */
     private const val PERIODIC_WORK_NAME = "smty_periodic_update_check"
@@ -234,20 +235,21 @@ object UpdateManager {
     suspend fun checkNowSync(): UpdateResult {
         // v33+：移除 -local 拦截，开发版也正常请求 GitHub 接口
         // 若远端 versionCode > 本地 versionCode，依然返回 NewVersionAvailable 触发弹窗
+        Log.d(TAG, ">> checkNowSync 入口：开始同步检查更新")
         return try {
             val result = UpdateChecker.checkForUpdate()
             when (result) {
                 is UpdateResult.UpToDate ->
-                    Log.i(TAG, "检查完成：当前已是最新版本")
+                    Log.i(TAG, "<< checkNowSync 返回：当前已是最新版本")
                 is UpdateResult.NewVersionAvailable ->
-                    Log.i(TAG, "检查完成：发现新版本 ${result.tagName}")
+                    Log.i(TAG, "<< checkNowSync 返回：发现新版本 ${result.tagName}，URL=${result.downloadUrl}")
                 is UpdateResult.Error ->
-                    Log.w(TAG, "检查失败：${result.message}")
+                    Log.w(TAG, "<< checkNowSync 返回：检查失败 - ${result.message}")
             }
             result
         } catch (e: Exception) {
             // 兜底：理论上 UpdateChecker 已 try-catch，这里再兜一层防止崩溃
-            Log.e(TAG, "checkNowSync 未捕获异常：${e.message}", e)
+            Log.e(TAG, "<< checkNowSync 未捕获异常：${e.javaClass.simpleName}: ${e.message}", e)
             UpdateResult.UpToDate
         }
     }
