@@ -26,14 +26,9 @@ import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.SportsScore
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -52,7 +47,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -72,10 +66,8 @@ import com.shangmentiyu.sportscoach.ui.score.ScoreScreen
 import com.shangmentiyu.sportscoach.ui.settings.SettingsScreen
 import com.shangmentiyu.sportscoach.ui.settings.SettingsViewModel
 import com.shangmentiyu.sportscoach.ui.summary.SummaryScreen
-import com.shangmentiyu.sportscoach.ui.theme.LightOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
-import com.shangmentiyu.sportscoach.ui.theme.appSurface
 import com.shangmentiyu.sportscoach.ui.training.TrainingPlanScreen
 import com.shangmentiyu.sportscoach.ui.operation.OperationScreen
 import com.shangmentiyu.sportscoach.ui.schedule.ScheduleScreen
@@ -240,64 +232,47 @@ fun SportsApp() {
         },
         bottomBar = {
             if (showBottomBar) {
-                NavigationBar(
-                    containerColor = appSurface(),
-                    tonalElevation = 0.dp
-                ) {
-                    bottomItems.forEach { item ->
-                        val selected = currentDestination?.hierarchy?.any { it.route == item.route } == true
-                        NavigationBarItem(
-                            selected = selected,
-                            onClick = {
-                                navController.navigate(item.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
+                // === v40 重构：胶囊式悬浮底部导航栏 + 中央凸出 FAB ===
+                // - 30dp 大圆角纯白面板 + 柔和阴影 + 12dp 底部留白
+                // - 选中珊瑚橙 #FF6B47，未选中浅灰 #A6A8AB
+                // - 中央 FAB（珊瑚橙圆形 + 白加号）凸出 20dp，点击添加学员
+                FloatingBottomBar(
+                    items = bottomItems,
+                    currentRoute = currentDestination?.route,
+                    onNavigate = { route ->
+                        navController.navigate(route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onFabClick = {
+                        // FAB 触发核心操作：添加学员
+                        navController.navigate(Routes.ADD_STUDENT)
+                    },
+                    // 主页 Tab 动态角标：
+                    // - 未签到数 > 0：数字角标（强提示今日有课未签到）
+                    // - 仅有今日排课但已全部签到：小圆点
+                    // - 无今日排课：不显示
+                    badgeForRoute = { route ->
+                        if (route == Routes.HOME) {
+                            when {
+                                unsignedTodayCount > 0 -> {
+                                    androidx.compose.material3.Badge {
+                                        Text(
+                                            text = unsignedTodayCount.coerceAtMost(99).toString()
+                                        )
                                     }
-                                    launchSingleTop = true
-                                    restoreState = true
                                 }
-                            },
-                            // === v28 优化6：主页 Tab 增加动态 Badge 角标 ===
-                            // - 未签到数 > 0：显示数字角标（强提示教练今日还有课未签到）
-                            // - 仅有今日排课但已全部签到：显示小圆点（提示今日有课已处理完）
-                            // - 无今日排课：不显示任何角标
-                            icon = {
-                                if (item.route == Routes.HOME) {
-                                    BadgedBox(
-                                        badge = {
-                                            when {
-                                                unsignedTodayCount > 0 -> {
-                                                    // 数字角标：未签到的课程数
-                                                    Badge {
-                                                        Text(
-                                                            text = unsignedTodayCount.coerceAtMost(99).toString()
-                                                        )
-                                                    }
-                                                }
-                                                hasTodayScheduleBadge -> {
-                                                    // 小圆点：今日有排课但已全部签到
-                                                    Badge()
-                                                }
-                                            }
-                                        }
-                                    ) {
-                                        Icon(item.icon, contentDescription = item.label)
-                                    }
-                                } else {
-                                    Icon(item.icon, contentDescription = item.label)
+                                hasTodayScheduleBadge -> {
+                                    androidx.compose.material3.Badge()
                                 }
-                            },
-                            label = { Text(item.label) },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = LightPrimary,
-                                selectedTextColor = LightPrimary,
-                                unselectedIconColor = LightOnSurfaceVariant,
-                                unselectedTextColor = LightOnSurfaceVariant,
-                                indicatorColor = Color.Transparent
-                            )
-                        )
+                            }
+                        }
                     }
-                }
+                )
             }
         }
     ) { innerPadding ->
