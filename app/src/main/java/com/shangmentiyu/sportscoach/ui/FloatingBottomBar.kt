@@ -149,8 +149,8 @@ private fun NavTabItem(
     onClick: () -> Unit,
     badgeContent: @Composable () -> Unit = {}
 ) {
-    // 选中 = 珊瑚橙 #FF6B47；未选中 = 浅灰 #A6A8AB
-    val color = if (selected) appPrimary() else Color(0xFFA6A8AB)
+    // v40 任务3：选中 = 珊瑚橙 #FF6B47；未选中 = 深灰 #6B6B6B
+    val color = if (selected) appPrimary() else Color(0xFF6B6B6B)
 
     Column(
         modifier = Modifier

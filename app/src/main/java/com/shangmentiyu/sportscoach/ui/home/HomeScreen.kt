@@ -8,6 +8,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CloudDone
@@ -24,11 +26,9 @@ import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
@@ -47,12 +47,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shangmentiyu.sportscoach.R
 import com.shangmentiyu.sportscoach.data.model.Student
 import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
-import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
+import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 
 /**
  * 主页：4 Tab 结构（课前准备 / 课时管理 / 课后反馈 / 学员列表）。
@@ -99,29 +100,38 @@ fun HomeScreen(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbarHost) }
     ) { padding ->
+        // === v40 任务1：移除顶部多余留白，只保留一次 statusBarsPadding() ===
+        // 胶囊 Tab 栏直接对齐系统状态栏底部
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            PrimaryTabRow(selectedTabIndex = tabIndex) {
-                Tab(selected = tabIndex == 0, onClick = { tabIndex = 0 }, text = { Text(stringResource(R.string.home_tab_pre_class)) })
-                Tab(selected = tabIndex == 1, onClick = { tabIndex = 1 }, text = { Text(stringResource(R.string.home_tab_lesson_manage)) })
-                Tab(selected = tabIndex == 2, onClick = { tabIndex = 2 }, text = { Text(stringResource(R.string.home_tab_post_class)) })
-                Tab(selected = tabIndex == 3, onClick = { tabIndex = 3 }, text = { Text(stringResource(R.string.home_tab_student_list)) })
-            }
-            // === v5 新增：双端同步状态横幅（绿色=已握手 / 橙色=同步中 / 离线时隐藏） ===
+            // === v40 任务2a：自定义胶囊 Tab 栏 ===
+            // 选中：珊瑚橙背景 #FF6B47 + 白字
+            // 未选中：浅灰背景 #F0F0F0 + 深灰字
+            val tabLabels = listOf(
+                stringResource(R.string.home_tab_pre_class),
+                stringResource(R.string.home_tab_lesson_manage),
+                stringResource(R.string.home_tab_post_class),
+                stringResource(R.string.home_tab_student_list)
+            )
+            CapsuleTabBar(
+                labels = tabLabels,
+                selectedIndex = tabIndex,
+                onSelected = { tabIndex = it }
+            )
+            // === v5 新增：双端同步状态横幅 ===
             SyncHandshakeBanner(
                 state = syncHandshake,
                 onClick = { vm.triggerBackupSync() }
             )
-            // === v25 优化1：全局到期预警横幅（仅当存在即将到期课时包时显示） ===
+            // === v25 优化1：全局到期预警横幅 ===
             ExpiryBanner(
                 message = expiringBannerText,
                 onClick = {
-                    // 跳转至最紧急学员的成长档案
                     expiringPackages.firstOrNull()?.let { pkg ->
                         onGrowth(pkg.studentName)
                     }
                 }
             )
-            // Crossfade 平滑切换 Tab，保留各 Tab 滚动位置与输入状态
+            // Crossfade 平滑切换 Tab
             Crossfade(
                 targetState = tabIndex,
                 animationSpec = tween(durationMillis = 220),
@@ -141,6 +151,57 @@ fun HomeScreen(
                         onDietManage = onDietManage
                     )
                 }
+            }
+        }
+    }
+}
+
+/**
+ * 胶囊式 Tab 栏（v40 任务2a）。
+ *
+ * 4 个等宽胶囊按钮横向排列：
+ * - 选中：珊瑚橙背景 #FF6B47 + 白字 + SemiBold
+ * - 未选中：浅灰背景 #F0F0F0 + 深灰字 + Medium
+ * - 全圆角胶囊，紧凑间距
+ *
+ * @param labels Tab 标签列表
+ * @param selectedIndex 当前选中索引
+ * @param onSelected 选中回调
+ */
+@Composable
+private fun CapsuleTabBar(
+    labels: List<String>,
+    selectedIndex: Int,
+    onSelected: (Int) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .padding(horizontal = Spacing.screenH, vertical = Spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+    ) {
+        labels.forEachIndexed { index, label ->
+            val isSelected = index == selectedIndex
+            val bgColor = if (isSelected) appPrimary() else Color(0xFFF0F0F0)
+            val textColor = if (isSelected) Color.White else Color(0xFF6B6B6B)
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(50))
+                    .background(bgColor)
+                    .clickable { onSelected(index) }
+                    .padding(vertical = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = label,
+                    color = textColor,
+                    fontSize = 12.sp,
+                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                    maxLines = 1
+                )
             }
         }
     }
@@ -177,7 +238,7 @@ private fun ExpiryBanner(
                 .fillMaxWidth()
                 .padding(horizontal = Spacing.screenH, vertical = Spacing.sm)
                 .clip(RoundedCornerShape(10.dp))
-                .background(Color(0xFFFFF4E5))   // 软性警告色（浅橙）
+                .background(appPrimary().copy(alpha = 0.08f))   // v40 任务2c：浅珊瑚橙背景
                 .clickable(onClick = onClick)
                 .padding(horizontal = Spacing.md, vertical = Spacing.sm),
             verticalAlignment = Alignment.CenterVertically,
@@ -186,13 +247,13 @@ private fun ExpiryBanner(
             Icon(
                 Icons.Outlined.NotificationsActive,
                 contentDescription = null,
-                tint = Color(0xFFE08A2B),   // 软性警告色（深橙图标）
+                tint = appPrimary(),   // v40 任务2c：珊瑚橙图标
                 modifier = Modifier.size(18.dp)
             )
             Text(
                 text = bannerText,
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFF7A4A0E),    // 软性警告色（深棕文字）
+                color = Color(0xFF1A1A1A),    // v40 任务2c：深黑文字（高对比度）
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.weight(1f, fill = false)
             )

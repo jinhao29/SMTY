@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,10 +43,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -256,18 +259,35 @@ fun SportsApp() {
                     // - 未签到数 > 0：数字角标（强提示今日有课未签到）
                     // - 仅有今日排课但已全部签到：小圆点
                     // - 无今日排课：不显示
+                    // v40 任务2b：角标统一珊瑚橙 #FF6B47
                     badgeForRoute = { route ->
                         if (route == Routes.HOME) {
                             when {
                                 unsignedTodayCount > 0 -> {
-                                    androidx.compose.material3.Badge {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(16.dp)
+                                            .clip(RoundedCornerShape(50))
+                                            .background(LightPrimary)
+                                            .border(1.dp, Color.White, RoundedCornerShape(50)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
                                         Text(
-                                            text = unsignedTodayCount.coerceAtMost(99).toString()
+                                            text = unsignedTodayCount.coerceAtMost(99).toString(),
+                                            color = Color.White,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold
                                         )
                                     }
                                 }
                                 hasTodayScheduleBadge -> {
-                                    androidx.compose.material3.Badge()
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(RoundedCornerShape(50))
+                                            .background(LightPrimary)
+                                            .border(1.dp, Color.White, RoundedCornerShape(50))
+                                    )
                                 }
                             }
                         }

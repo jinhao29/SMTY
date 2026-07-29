@@ -829,7 +829,8 @@ private fun DaySelector(
                     text = day.dateLabel,
                     fontSize = 12.sp,
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                    color = if (isSelected) selectedText else appOnSurface().copy(alpha = 0.9f)
+                    // v40 任务2b：未选中态日期数字用珊瑚橙 #FF6B47
+                    color = if (isSelected) selectedText else appPrimary()
                 )
             }
         }
@@ -967,25 +968,40 @@ private fun KeepScheduleCard(
                     }
                 }
             }
-            // 第二行：课程时间 · 地点 · 教练姓名（灰色 #6B6B6B 小字号，点号分隔）
+            // 第二行：课程时间（珊瑚橙）· 地点 · 教练姓名（灰色 #6B6B6B 小字号，点号分隔）
+            // v40 任务2b：时间部分统一珊瑚橙 #FF6B47
+            val timeText = "${schedule.startTime}-${schedule.endTime()}"
             val metaText = buildString {
-                append("${schedule.startTime}-${schedule.endTime()}")
                 if (schedule.location.isNotBlank()) {
-                    append(" · ")
                     append(schedule.location)
                 }
                 if (schedule.coachName.isNotBlank()) {
-                    append(" · ")
+                    if (isNotEmpty()) append(" · ")
                     append("教练：${schedule.coachName}")
                 }
             }
-            Text(
-                text = metaText,
-                fontSize = 12.sp,
-                color = appOnSurfaceVariant(),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = timeText,
+                    fontSize = 12.sp,
+                    color = appPrimary(),
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1
+                )
+                if (metaText.isNotBlank()) {
+                    Text(
+                        text = "· $metaText",
+                        fontSize = 12.sp,
+                        color = appOnSurfaceVariant(),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                }
+            }
         }
 
         // === 最右侧：珊瑚橙"训练课"胶囊标签（课时类型）===
