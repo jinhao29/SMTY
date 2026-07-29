@@ -18,6 +18,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CloudDone
@@ -181,8 +186,13 @@ private fun CapsuleTabBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(horizontal = Spacing.screenH, vertical = Spacing.sm),
+            // v40 修正1：精准设置状态栏避让，只避让 statusBars，不叠加其他 inset
+            // 紧贴状态栏底部，不额外加 vertical padding，消除胶囊与状态栏之间的空隙
+            .windowInsetsPadding(
+                WindowInsets.systemBars
+                    .only(WindowInsetsSides.Top)
+            )
+            .padding(horizontal = Spacing.screenH),
         horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
     ) {
         labels.forEachIndexed { index, label ->

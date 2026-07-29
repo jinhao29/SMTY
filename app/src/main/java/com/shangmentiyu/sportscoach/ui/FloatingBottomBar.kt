@@ -66,18 +66,20 @@ fun FloatingBottomBar(
             .padding(horizontal = 16.dp)
             .padding(bottom = 12.dp)
     ) {
-        // === 胶囊式导航面板（v40 微调：阴影淡化 8dp→4dp）===
+        // === v40 修正2：胶囊容器强制纯白 + 极柔和投影 ===
+        // 背景色 = Color(0xFFFFFFFF) 纯白，禁止渐变/半透明
+        // 阴影极淡（ambient 0.03 / spot 0.05），稳稳浮在浅灰底上
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
                 .shadow(
-                    elevation = 4.dp,
+                    elevation = 6.dp,
                     shape = RoundedCornerShape(30.dp),
-                    ambientColor = Color.Black.copy(alpha = 0.04f),
-                    spotColor = Color.Black.copy(alpha = 0.06f)
+                    ambientColor = Color.Black.copy(alpha = 0.03f),
+                    spotColor = Color.Black.copy(alpha = 0.05f)
                 ),
             shape = RoundedCornerShape(30.dp),
-            color = Color.White
+            color = Color(0xFFFFFFFF)  // 纯白，禁止任何渐变或半透明
         ) {
             Row(
                 modifier = Modifier
