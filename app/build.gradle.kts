@@ -13,13 +13,14 @@ plugins {
 // 策略：
 // 1. CI 环境（GitHub Actions）：workflow 通过 GITHUB_ENV 注入 VERSION_CODE 和 VERSION_NAME
 //    - VERSION_CODE = github.run_number（严格递增，每次 push +1）
-//    - VERSION_NAME = 1.0.<github.run_number>（与 Release tag 严格一致）
-// 2. 本地环境（Android Studio 直接打包）：环境变量不存在时使用默认值
-//    - versionCode = 1
-//    - versionName = "1.0.0-local"
+//    - VERSION_NAME = 0.<github.run_number>（从 0.1 开始递增）
+// 2. 本地环境（Android Studio 直接打包）：环境变量不存在时使用极大默认值
+//    - versionCode = 99999
+//    - versionName = "9.9.9-local"
 // 设计说明：
 // - github.run_number 在仓库维度严格递增，可保证每次构建 versionCode 唯一递增
-// - 本地默认值保证 AS 直接打包不报错，发布版本号由 CI 严格控制
+// - 本地默认值 99999 永远高于 GitHub 发布版本，彻底屏蔽本地调试时的更新提示
+// - 版本号从 0.1 开始，便于后续 1.0 正式发布时做明显的 major 版本跃迁
 
 // === Release 签名配置（CI 通过 Secrets 注入 / 本地可选 keystore.properties） ===
 // 设计要点：
@@ -46,11 +47,14 @@ android {
         minSdk = 26
         targetSdk = 35
 
-        // 让版本号通过 Gradle -P 参数传递，比环境变量更稳定可靠
-        // CI 环境通过 -PVERSION_CODE / -PVERSION_NAME 注入，本地 fallback 到默认值
-        // 用法：./gradlew assembleRelease -PVERSION_CODE=123 -PVERSION_NAME=1.0.123
-        versionCode = (project.properties["VERSION_CODE"] as? String)?.toIntOrNull() ?: 1
-        versionName = (project.properties["VERSION_NAME"] as? String) ?: "1.0.0-local"
+        // 版本号策略：
+        // - 本地调试（无环境变量）：versionCode=99999, versionName=9.9.9-local
+        //   极大版本号，永远高于 GitHub 发布版本，彻底屏蔽本地调试时的更新提示
+        // - GitHub Actions 云端打包：通过 GITHUB_ENV 注入 VERSION_CODE / VERSION_NAME
+        //   versionCode = github.run_number（1, 2, 3...）
+        //   versionName = 0.${github.run_number}（0.1, 0.2, 0.33...）
+        versionCode = (System.getenv("VERSION_CODE")?.toIntOrNull() ?: 99999)
+        versionName = (System.getenv("VERSION_NAME") ?: "9.9.9-local")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
