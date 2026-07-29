@@ -22,7 +22,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.shangmentiyu.sportscoach.ui.theme.BrandGradientStart
 import com.shangmentiyu.sportscoach.ui.theme.LightOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
 import com.shangmentiyu.sportscoach.ui.theme.LightSecondary
@@ -31,6 +30,8 @@ import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
 import com.shangmentiyu.sportscoach.ui.theme.ScoreFail
 import com.shangmentiyu.sportscoach.ui.theme.ScorePass
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
+import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
+import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 
 /**
  * 主页共用 iOS 风格组件集合。
@@ -86,14 +87,14 @@ internal fun IosGroupedListCard(
     }
 }
 
-/** iOS 列表分组头：13pt SemiBold 活力蓝紫色大写标题 */
+/** iOS 列表分组头：13pt SemiBold 活力珊瑚橙大写标题 */
 @Composable
 internal fun IosSectionHeader(text: String) {
     Text(
         text = text.uppercase(),
         style = MaterialTheme.typography.labelLarge,
         fontWeight = FontWeight.SemiBold,
-        color = BrandGradientStart,
+        color = appPrimary(),
         modifier = Modifier.padding(
             start = Spacing.screenH,
             end = Spacing.screenH,
@@ -113,13 +114,13 @@ internal fun StatItem(label: String, value: String) {
             text = value,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
-            color = BrandGradientStart
+            color = appPrimary()
         )
         Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.outline
+            color = appOnSurfaceVariant()
         )
     }
 }
