@@ -124,8 +124,8 @@ fun HomeScreen(
                 selectedIndex = tabIndex,
                 onSelected = { tabIndex = it }
             )
-            // === 警示横幅：胶囊 Tab 下方固定 8dp 间距（严禁超过 8dp）===
-            Spacer(Modifier.height(8.dp))
+            // === 警示横幅：胶囊 Tab 下方固定 4dp 间距（v41 进一步减少留白）===
+            Spacer(Modifier.height(4.dp))
             // === v5 新增：双端同步状态横幅 ===
             SyncHandshakeBanner(
                 state = syncHandshake,

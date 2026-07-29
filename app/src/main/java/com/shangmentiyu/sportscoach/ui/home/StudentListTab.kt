@@ -1,5 +1,10 @@
 package com.shangmentiyu.sportscoach.ui.home
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -46,16 +52,23 @@ import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import com.shangmentiyu.sportscoach.ui.theme.OutlinedDatePickerField
 import com.shangmentiyu.sportscoach.ui.theme.OutlinedTimePickerField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -101,22 +114,64 @@ fun StudentListTab(
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // === 顶部搜索栏（含添加按钮）：始终显示，即使列表为空 ===
-            // 历史问题：原实现把 StudentFilterBar 放在 if/else 的 else 分支内，
-            // 导致列表为空时搜索栏和添加按钮也被隐藏，用户找不到添加入口。
-            // 修复：把 StudentFilterBar 提到 Column 顶层，无条件显示。
-            StudentFilterBar(
-                totalCount = students.size,
-                filteredCount = filteredStudents.size,
-                sortBy = sortBy,
-                gradeFilter = gradeFilter,
-                nameQuery = nameQuery,
-                onSortByChanged = vm::setSortBy,
-                onGradeFilterChanged = vm::setGradeFilter,
-                onNameQueryChanged = vm::setNameQuery,
-                onReset = vm::resetFilters,
-                onAddStudent = onAddStudent
-            )
+            // === v41：筛选栏滚动隐藏 ===
+            // 下滑列表时自动隐藏 StudentFilterBar，上滑或回到顶部时自动显示
+            val listState = rememberLazyListState()
+            var filterBarVisible by remember { mutableStateOf(true) }
+
+            // 滚动方向监听：通过 nestedScroll 拦截滚动事件判断方向
+            val nestedScrollConnection = remember {
+                object : NestedScrollConnection {
+                    override fun onPreScroll(
+                        available: Offset,
+                        source: NestedScrollSource
+                    ): Offset {
+                        if (available.y > 0) {
+                            // 手指上滑（内容向上滚动），显示筛选栏
+                            filterBarVisible = true
+                        } else if (available.y < 0) {
+                            // 手指下滑（内容向下滚动），隐藏筛选栏
+                            // 但在列表顶部时不隐藏
+                            if (listState.firstVisibleItemIndex > 0 ||
+                                listState.firstVisibleItemScrollOffset > 0
+                            ) {
+                                filterBarVisible = false
+                            }
+                        }
+                        return Offset.Zero
+                    }
+                }
+            }
+
+            // 列表回到顶部时强制显示筛选栏
+            LaunchedEffect(listState) {
+                snapshotFlow {
+                    listState.firstVisibleItemIndex == 0 &&
+                        listState.firstVisibleItemScrollOffset == 0
+                }.collect { atTop ->
+                    if (atTop) filterBarVisible = true
+                }
+            }
+
+            // 筛选栏：带展开/收起动画
+            AnimatedVisibility(
+                visible = filterBarVisible,
+                enter = slideInVertically() + expandVertically(),
+                exit = slideOutVertically() + shrinkVertically()
+            ) {
+                StudentFilterBar(
+                    totalCount = students.size,
+                    filteredCount = filteredStudents.size,
+                    sortBy = sortBy,
+                    gradeFilter = gradeFilter,
+                    nameQuery = nameQuery,
+                    onSortByChanged = vm::setSortBy,
+                    onGradeFilterChanged = vm::setGradeFilter,
+                    onNameQueryChanged = vm::setNameQuery,
+                    onReset = vm::resetFilters,
+                    onAddStudent = onAddStudent
+                )
+            }
 
             if (students.isEmpty()) {
                 // === 空状态：搜索栏下方居中显示提示文字 ===
@@ -142,7 +197,10 @@ fun StudentListTab(
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .nestedScroll(nestedScrollConnection),
+                    state = listState,
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(
                         horizontal = Spacing.screenH,
                         vertical = Spacing.screenV
