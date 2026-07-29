@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -67,15 +66,15 @@ fun FloatingBottomBar(
             .padding(horizontal = 16.dp)
             .padding(bottom = 12.dp)
     ) {
-        // === 胶囊式导航面板 ===
+        // === 胶囊式导航面板（v40 微调：阴影淡化 8dp→4dp）===
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
                 .shadow(
-                    elevation = 8.dp,
+                    elevation = 4.dp,
                     shape = RoundedCornerShape(30.dp),
-                    ambientColor = Color.Black.copy(alpha = 0.06f),
-                    spotColor = Color.Black.copy(alpha = 0.10f)
+                    ambientColor = Color.Black.copy(alpha = 0.04f),
+                    spotColor = Color.Black.copy(alpha = 0.06f)
                 ),
             shape = RoundedCornerShape(30.dp),
             color = Color.White
@@ -83,7 +82,7 @@ fun FloatingBottomBar(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 8.dp),
+                    .padding(vertical = 6.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -97,8 +96,29 @@ fun FloatingBottomBar(
                     )
                 }
 
-                // 中间 FAB 占位空间（宽度与 FAB 一致，保证 Tab 对称）
-                Spacer(modifier = Modifier.size(56.dp))
+                // === 中央 FAB（v40 微调：放弃凸出，放入胶囊内部）===
+                // 原方案 FAB 凸出 20dp 视觉尴尬；改为内置在胶囊 Row 中，48dp 圆形
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .shadow(
+                            elevation = 3.dp,
+                            shape = CircleShape,
+                            ambientColor = Color.Black.copy(alpha = 0.06f),
+                            spotColor = appPrimary().copy(alpha = 0.20f)
+                        )
+                        .clip(CircleShape)
+                        .background(appPrimary())
+                        .clickable(onClick = onFabClick),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Add,
+                        contentDescription = "添加",
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
 
                 // 右侧 Tabs
                 items.drop(halfIndex).forEach { item ->
@@ -110,31 +130,6 @@ fun FloatingBottomBar(
                     )
                 }
             }
-        }
-
-        // === 中央凸出 FAB（珊瑚橙圆形 + 白色加号）===
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .offset(y = (-20).dp)
-                .size(56.dp)
-                .shadow(
-                    elevation = 6.dp,
-                    shape = CircleShape,
-                    ambientColor = Color.Black.copy(alpha = 0.10f),
-                    spotColor = appPrimary().copy(alpha = 0.30f)
-                )
-                .clip(CircleShape)
-                .background(appPrimary())
-                .clickable(onClick = onFabClick),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Add,
-                contentDescription = "添加",
-                tint = Color.White,
-                modifier = Modifier.size(28.dp)
-            )
         }
     }
 }
