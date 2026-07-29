@@ -213,11 +213,33 @@ object UpdateChecker {
                 // 只要 GitHub 上有 tag 数字 > 1 的 Release，本地编译安装的 App 也会触发更新弹窗
                 val remoteVersionCode = extractVersionCodeFromTag(release.tagName)
                 val localVersionCode = BuildConfig.VERSION_CODE
+                val localVersionName = BuildConfig.VERSION_NAME
                 Log.d(
                     TAG,
                     "版本对比：远端 tag=${release.tagName} → remoteVersionCode=$remoteVersionCode, " +
-                            "本地 versionCode=$localVersionCode"
+                            "本地 versionCode=$localVersionCode, versionName=$localVersionName"
                 )
+
+                // === 调试版强制更新拦截 ===
+                // 背景：本地调试打包使用 versionCode=99999 / versionName=9.9.9-local，
+                // 数值永远高于 GitHub 发布的 0.x，导致本地安装后检测不到云端真正的更新。
+                // 规则：只要本地版本名包含 "-local" 或 versionCode==99999（即本地调试版），
+                // 且 GitHub API 成功返回了 Release（能走到这里说明云端有发布），
+                // 直接判定为"有新版本"，跳过数字大小比较。
+                // 这样本地调试版每次检查更新都会提示，确保开发者能第一时间看到云端版本。
+                if (localVersionName.contains("-local") || localVersionCode == 99999) {
+                    Log.d(
+                        TAG,
+                        "检测到本地调试版（versionName=$localVersionName, " +
+                                "versionCode=$localVersionCode），强制判定为有更新"
+                    )
+                    return@withContext UpdateResult.NewVersionAvailable(
+                        tagName = release.tagName,
+                        downloadUrl = apkUrl,
+                        releaseNotes = release.body
+                    )
+                }
+
                 if (remoteVersionCode > localVersionCode) {
                     UpdateResult.NewVersionAvailable(
                         tagName = release.tagName,

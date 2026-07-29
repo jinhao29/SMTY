@@ -122,14 +122,36 @@ fun StudentListTab(
                 snapshotFlow {
                     listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
                 }.collect { (index, offset) ->
-                    // 在顶部时强制显示
-                    if (index == 0 && offset == 0) {
+                    // 通过 layoutInfo 精确判断边界状态，避免底部回弹误判
+                    val layoutInfo = listState.layoutInfo
+                    val visibleItems = layoutInfo.visibleItemsInfo
+                    val totalItems = layoutInfo.totalItemsCount
+                    // 在顶部：第一个可见 item 是 index 0 且无向上偏移
+                    val atTop = visibleItems.isNotEmpty() &&
+                        visibleItems.first().index == 0 &&
+                        visibleItems.first().offset >= 0
+                    // 在底部：最后一个可见 item 是最后一项且完全显示在视口内
+                    val atBottom = visibleItems.isNotEmpty() &&
+                        visibleItems.last().index == totalItems - 1 &&
+                        visibleItems.last().offset + visibleItems.last().size <=
+                            layoutInfo.viewportEndOffset
+                    // 顶部优先：一屏显示完时同时命中 atTop 和 atBottom，此时应显示
+                    if (atTop) {
                         if (!filterBarVisible) filterBarVisible = true
-                        prevIndex = 0
-                        prevOffset = 0
+                        prevIndex = index
+                        prevOffset = offset
                         return@collect
                     }
-                    // 判断滚动方向：index 增大或同 item offset 增大 = 下滑内容（隐藏）
+                    // 关键修复：在底部时强制隐藏
+                    // 原因：LazyColumn 到底部会有边界回弹，offset 变小会被误判为"向上滚动"
+                    // 导致筛选栏错误弹出；到底部时直接强制隐藏，跳过方向判断
+                    if (atBottom) {
+                        if (filterBarVisible) filterBarVisible = false
+                        prevIndex = index
+                        prevOffset = offset
+                        return@collect
+                    }
+                    // 中间区域：用方向判断
                     val isScrollingDown = index > prevIndex ||
                         (index == prevIndex && offset > prevOffset + 10)
                     val isScrollingUp = index < prevIndex ||
