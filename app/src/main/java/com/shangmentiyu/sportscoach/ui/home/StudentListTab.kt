@@ -64,11 +64,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -114,42 +110,37 @@ fun StudentListTab(
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // === v41：筛选栏滚动隐藏 ===
-            // 下滑列表时自动隐藏 StudentFilterBar，上滑或回到顶部时自动显示
+            // === v41：筛选栏滚动隐藏（v42 优化：移除 nestedScroll 改用 snapshotFlow）===
+            // 原 nestedScroll.onPreScroll 在每帧滚动时同步调用，导致严重卡顿
+            // 改用 snapshotFlow 监听 listState 滚动位置，异步计算方向，不影响滚动性能
             val listState = rememberLazyListState()
             var filterBarVisible by remember { mutableStateOf(true) }
 
-            // 滚动方向监听：通过 nestedScroll 拦截滚动事件判断方向
-            val nestedScrollConnection = remember {
-                object : NestedScrollConnection {
-                    override fun onPreScroll(
-                        available: Offset,
-                        source: NestedScrollSource
-                    ): Offset {
-                        if (available.y > 0) {
-                            // 手指上滑（内容向上滚动），显示筛选栏
-                            filterBarVisible = true
-                        } else if (available.y < 0) {
-                            // 手指下滑（内容向下滚动），隐藏筛选栏
-                            // 但在列表顶部时不隐藏
-                            if (listState.firstVisibleItemIndex > 0 ||
-                                listState.firstVisibleItemScrollOffset > 0
-                            ) {
-                                filterBarVisible = false
-                            }
-                        }
-                        return Offset.Zero
-                    }
-                }
-            }
-
-            // 列表回到顶部时强制显示筛选栏
             LaunchedEffect(listState) {
+                var prevIndex = 0
+                var prevOffset = 0
                 snapshotFlow {
-                    listState.firstVisibleItemIndex == 0 &&
-                        listState.firstVisibleItemScrollOffset == 0
-                }.collect { atTop ->
-                    if (atTop) filterBarVisible = true
+                    listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
+                }.collect { (index, offset) ->
+                    // 在顶部时强制显示
+                    if (index == 0 && offset == 0) {
+                        if (!filterBarVisible) filterBarVisible = true
+                        prevIndex = 0
+                        prevOffset = 0
+                        return@collect
+                    }
+                    // 判断滚动方向：index 增大或同 item offset 增大 = 下滑内容（隐藏）
+                    val isScrollingDown = index > prevIndex ||
+                        (index == prevIndex && offset > prevOffset + 10)
+                    val isScrollingUp = index < prevIndex ||
+                        (index == prevIndex && offset < prevOffset - 10)
+                    if (isScrollingDown) {
+                        if (filterBarVisible) filterBarVisible = false
+                    } else if (isScrollingUp) {
+                        if (!filterBarVisible) filterBarVisible = true
+                    }
+                    prevIndex = index
+                    prevOffset = offset
                 }
             }
 
@@ -197,9 +188,7 @@ fun StudentListTab(
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .nestedScroll(nestedScrollConnection),
+                    modifier = Modifier.fillMaxSize(),
                     state = listState,
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(
                         horizontal = Spacing.screenH,
