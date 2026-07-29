@@ -241,7 +241,7 @@ fun ScheduleScreen(
                         Icon(
                             Icons.Outlined.CleaningServices,
                             contentDescription = "清理过去无效排课",
-                            tint = MaterialTheme.colorScheme.primary
+                            tint = appPrimary()
                         )
                     }
                     if (schedules.isNotEmpty()) {
@@ -328,6 +328,15 @@ fun ScheduleScreen(
                     days = weekDays,
                     selectedDayOfWeek = selectedDayOfWeek,
                     onDaySelected = { selectedDayOfWeek = it }
+                )
+
+                // === v40 新增：中央概览卡片（今日总课时 / 已签退 / 剩余排课）===
+                // 参照图2中间屏幕的仪表盘/概览卡片，纯白背景 + 柔和阴影 + 圆角 16dp
+                // 三个核心数据并排展示，数字大加粗居中，使用珊瑚橙或深黑色
+                OverviewCard(
+                    totalToday = daySchedules.size,
+                    signedOut = 0,  // TODO: 从 VM 获取已签退数（当前无直接数据流，暂用 0）
+                    remaining = daySchedules.size  // 剩余排课 = 今日总课时（未区分签退状态时）
                 )
             }
 
@@ -644,17 +653,116 @@ private fun NoBalanceWarningBanner(
 }
 
 /**
- * Keep 风格日期选择条（v34 布局优化3 瘦身版）。
+ * 中央概览卡片（v40 新增）。
  *
- * === v34 布局优化3 ===
- * - 取消白色背景，直接平铺在浅灰底色上
- * - 每项改为胶囊形状（RoundedCornerShape(50) 完全胶囊）
- * - 未选中：浅灰背景（#E8E8EB），次级灰色文字
- * - 选中：珊瑚橙边框（1dp）+ 浅珊瑚橙底色（alpha 0.10）+ 珊瑚橙文字
- *   不再用大块橙色实心背景，整体视觉更轻量
- * - 缩小垂直 padding（10→6），减小顶部整体高度
+ * 参照图2中间屏幕的仪表盘/概览卡片：
+ * - 纯白背景 + 柔和阴影 + 圆角 16dp，无边框
+ * - 三个核心数据并排展示：今日总课时 / 已签退 / 剩余排课
+ * - 数字大号加粗居中，使用珊瑚橙 #FF6B47（突出主数据）或深黑 #1A1A1A
+ * - 标签小号灰色 #6B6B6B
  *
- * 横向滚动，每项显示周几 + 日期（MM-dd）。
+ * @param totalToday 今日总课时
+ * @param signedOut 已签退数
+ * @param remaining 剩余排课数
+ */
+@Composable
+private fun OverviewCard(
+    totalToday: Int,
+    signedOut: Int,
+    remaining: Int
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = 4.dp,
+                shape = RoundedCornerShape(16.dp),
+                ambientColor = Color.Black.copy(alpha = 0.04f),
+                spotColor = Color.Black.copy(alpha = 0.08f)
+            )
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White)
+            .padding(vertical = 16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 今日总课时（珊瑚橙突出）
+            OverviewStatItem(
+                value = totalToday.toString(),
+                label = "今日总课时",
+                valueColor = appPrimary()
+            )
+            // 分隔线
+            Box(
+                modifier = Modifier
+                    .size(width = 1.dp, height = 32.dp)
+                    .background(appOutline().copy(alpha = 0.2f))
+            )
+            // 已签退（深黑色）
+            OverviewStatItem(
+                value = signedOut.toString(),
+                label = "已签退",
+                valueColor = appOnSurface()
+            )
+            // 分隔线
+            Box(
+                modifier = Modifier
+                    .size(width = 1.dp, height = 32.dp)
+                    .background(appOutline().copy(alpha = 0.2f))
+            )
+            // 剩余排课（深黑色）
+            OverviewStatItem(
+                value = remaining.toString(),
+                label = "剩余排课",
+                valueColor = appOnSurface()
+            )
+        }
+    }
+}
+
+/**
+ * 概览卡片单个统计项：大号数字 + 小号标签，居中竖排。
+ */
+@Composable
+private fun OverviewStatItem(
+    value: String,
+    label: String,
+    valueColor: Color
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = value,
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            color = valueColor
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            color = appOnSurfaceVariant(),
+            fontWeight = FontWeight.Normal
+        )
+    }
+}
+
+/**
+ * 横向滚动日历视图（v40 重构版）。
+ *
+ * === v40 布局重构（参照图2中间屏幕的日历视图）===
+ * - 横向滚动的 7 天日历，每项为全圆角胶囊
+ * - 未选中：浅灰背景（#F0F0F0）+ 深灰文字
+ * - 选中：珊瑚橙背景（#FF6B47）+ 白色文字
+ * - 自动滚动：选中项变化时，自动滚动到 LazyRow 可见区域中间
+ *
+ * @param days 本周 7 天数据
+ * @param selectedDayOfWeek 当前选中星期几（1=周一 ... 7=周日）
+ * @param onDaySelected 选中回调
  */
 @Composable
 private fun DaySelector(
@@ -663,11 +771,24 @@ private fun DaySelector(
     onDaySelected: (Int) -> Unit
 ) {
     val todayCal = Calendar.getInstance()
-    // 胶囊形状：50% 圆角 = 完全胶囊
     val capsuleShape = RoundedCornerShape(50)
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+
+    // 选中项变化时，自动滚动到 LazyRow 可见区域中间
+    LaunchedEffect(selectedDayOfWeek, days) {
+        if (days.isNotEmpty()) {
+            val idx = days.indexOfFirst { it.dayOfWeek == selectedDayOfWeek }
+            if (idx >= 0) {
+                // 滚动到选中项，偏移量让它大致居中（-2 表示往前 2 项，让选中项在中间）
+                val target = (idx - 2).coerceAtLeast(0)
+                listState.animateScrollToItem(target)
+            }
+        }
+    }
 
     LazyRow(
         modifier = Modifier.fillMaxWidth(),
+        state = listState,
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = Spacing.screenH),
         horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
     ) {
@@ -680,10 +801,9 @@ private fun DaySelector(
             }
             val displayDayName = if (isToday) "今天" else day.dayName
 
-            // 选中态统一为珊瑚橙背景 + 白色文字，与全局主色 #FF6B47 一致。
-            // 未选中态保持灰色背景 + 深灰文字。
+            // 选中 = 珊瑚橙 #FF6B47 背景 + 白色文字；未选中 = 浅灰 #F0F0F0 背景 + 深灰文字
             val selectedBg = appPrimary()
-            val unselectedBg = Color(0xFFE8E8EB)
+            val unselectedBg = Color(0xFFF0F0F0)
             val selectedText = Color.White
             val unselectedText = appOnSurface().copy(alpha = 0.7f)
 
@@ -717,14 +837,14 @@ private fun DaySelector(
 }
 
 /**
- * Keep 风格课程卡片（v40 重构版）。
+ * 课程详情列表卡片（v40 重构版）。
  *
- * === v40 布局重构（参考 Plan 页列表卡片风格）===
- * - 左侧：深灰色胶囊框显示时段（如 09:00-10:00），独立视觉单元
- * - 中间/右侧：
- *   第一行 = 学员名字（黑色加粗）
- *   第二行 = 时长 · 地点 · 教练名称（灰色弱化文字）
- * - 卡片最右侧：小珊瑚橙箭头指示符（ChevronRight）
+ * === v40 布局重构（参照图1左侧屏幕的任务卡片）===
+ * - 左侧：圆角矩形学员头像占位图（蓝青渐变底色 + 学员姓名首字母白色）
+ * - 中间：堆叠排列信息
+ *   第一行 = 学员姓名（纯黑加粗）
+ *   第二行 = 课程时间 · 地点 · 教练姓名（灰色 #6B6B6B 小字号，点号分隔）
+ * - 右侧：珊瑚橙"训练课"胶囊标签（课时类型）
  * - 卡片圆角 16dp，纯白背景，柔和阴影，无边框
  *
  * 交互：
@@ -772,32 +892,26 @@ private fun KeepScheduleCard(
             .graphicsLayerAlpha(inactiveAlpha),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // === 左侧：深灰色胶囊框显示时段（如 09:00-10:00）===
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
+        // === 左侧：圆角矩形学员头像（蓝青渐变底色 + 首字母白色）===
+        Box(
             modifier = Modifier
+                .size(44.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(Color(0xFFE8E8EB))
-                .padding(horizontal = 10.dp, vertical = 8.dp)
+                .background(
+                    brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                        colors = listOf(
+                            Color(0xFF4A90E2),  // 蓝色
+                            Color(0xFF50C9CE)   // 青色
+                        )
+                    )
+                ),
+            contentAlignment = Alignment.Center
         ) {
             Text(
-                text = schedule.startTime,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                color = appOnSurface(),
-                maxLines = 1
-            )
-            Text(
-                text = "|",
-                fontSize = 10.sp,
-                color = appOnSurfaceVariant().copy(alpha = 0.5f)
-            )
-            Text(
-                text = schedule.endTime(),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = appOnSurfaceVariant(),
-                maxLines = 1
+                text = schedule.studentName.firstOrNull()?.toString() ?: "?",
+                color = Color.White,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
             )
         }
 
@@ -808,7 +922,7 @@ private fun KeepScheduleCard(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            // 第一行：学员名（黑色加粗）+ 过去角标 + 课时类型胶囊
+            // 第一行：学员名（纯黑加粗）+ 过去角标
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
@@ -837,27 +951,25 @@ private fun KeepScheduleCard(
                         )
                     }
                 }
-                if (schedule.lessonType.isNotBlank()) {
-                    val accentColor = scheduleColor(schedule.color)
+                if (!schedule.isActive) {
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(accentColor.copy(alpha = 0.12f))
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(appOnSurfaceVariant().copy(alpha = 0.2f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
                         Text(
-                            text = schedule.lessonType,
-                            fontSize = 11.sp,
-                            color = accentColor,
+                            text = "已暂停",
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.Medium,
-                            maxLines = 1
+                            color = appOnSurfaceVariant()
                         )
                     }
                 }
             }
-            // 第二行：时长 · 地点 · 教练（灰色弱化文字）
+            // 第二行：课程时间 · 地点 · 教练姓名（灰色 #6B6B6B 小字号，点号分隔）
             val metaText = buildString {
-                append("${schedule.durationMinutes}分钟")
+                append("${schedule.startTime}-${schedule.endTime()}")
                 if (schedule.location.isNotBlank()) {
                     append(" · ")
                     append(schedule.location)
@@ -865,10 +977,6 @@ private fun KeepScheduleCard(
                 if (schedule.coachName.isNotBlank()) {
                     append(" · ")
                     append("教练：${schedule.coachName}")
-                }
-                if (!schedule.isActive) {
-                    append(" · ")
-                    append("已暂停")
                 }
             }
             Text(
@@ -880,14 +988,24 @@ private fun KeepScheduleCard(
             )
         }
 
-        // === 最右侧：小珊瑚橙箭头指示符 ===
-        Spacer(Modifier.width(Spacing.xs))
-        Icon(
-            imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-            contentDescription = "查看详情",
-            tint = appPrimary().copy(alpha = 0.6f),
-            modifier = Modifier.size(20.dp)
-        )
+        // === 最右侧：珊瑚橙"训练课"胶囊标签（课时类型）===
+        if (schedule.lessonType.isNotBlank()) {
+            Spacer(Modifier.width(Spacing.sm))
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(appPrimary().copy(alpha = 0.12f))
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+                Text(
+                    text = schedule.lessonType,
+                    fontSize = 11.sp,
+                    color = appPrimary(),
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1
+                )
+            }
+        }
     }
 }
 
@@ -950,7 +1068,7 @@ private fun WeekShiftButton(
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f))
+            .background(appPrimary().copy(alpha = 0.10f))
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -958,14 +1076,14 @@ private fun WeekShiftButton(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
+            tint = appPrimary(),
             modifier = Modifier.size(16.dp)
         )
         Spacer(Modifier.size(4.dp))
         Text(
             text = text,
             style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
+            color = appPrimary(),
             fontWeight = FontWeight.Medium
         )
     }
@@ -986,7 +1104,7 @@ private fun TodayButton(onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.primary)
+            .background(appPrimary())
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center
