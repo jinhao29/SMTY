@@ -24,6 +24,7 @@ import com.shangmentiyu.sportscoach.core.Std
 import com.shangmentiyu.sportscoach.core.Scorer
 import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
 import com.shangmentiyu.sportscoach.ui.theme.*
+import com.shangmentiyu.sportscoach.ui.theme.FloatingSnackbarHost
 import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -54,7 +55,7 @@ fun ScoringScreen(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+        snackbarHost = { FloatingSnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("数据记录") },

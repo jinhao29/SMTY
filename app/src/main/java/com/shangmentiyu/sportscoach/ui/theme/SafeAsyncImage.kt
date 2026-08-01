@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.compose.AsyncImagePainter
+import coil.request.CachePolicy
 import coil.request.ImageRequest
 
 /**
@@ -91,10 +92,13 @@ fun SafeAsyncImage(
     var showFullScreen by remember { mutableStateOf(false) }
 
     // 构造带 crossfade 的 ImageRequest，提升加载体验
+    // === 性能优化：显式启用内存+磁盘缓存，避免 Tab 切换时重复解码 ===
     val request = remember(model) {
         ImageRequest.Builder(context)
             .data(model)
             .crossfade(true)
+            .memoryCachePolicy(CachePolicy.ENABLED)
+            .diskCachePolicy(CachePolicy.ENABLED)
             .build()
     }
 

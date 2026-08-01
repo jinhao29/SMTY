@@ -29,7 +29,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -81,11 +81,11 @@ fun AnalyticsScreen(onBack: () -> Unit) {
         )
     )
 
-    val loading by vm.loading.collectAsState()
-    val students by vm.students.collectAsState()
-    val selectedStudent by vm.selectedStudent.collectAsState()
-    val recordsByProject by vm.recordsByProject.collectAsState()
-    val overview by vm.overview.collectAsState()
+    val loading by vm.loading.collectAsStateWithLifecycle()
+    val students by vm.students.collectAsStateWithLifecycle()
+    val selectedStudent by vm.selectedStudent.collectAsStateWithLifecycle()
+    val recordsByProject by vm.recordsByProject.collectAsStateWithLifecycle()
+    val overview by vm.overview.collectAsStateWithLifecycle()
 
     var studentPickerOpen by remember { mutableStateOf(false) }
 
@@ -105,6 +105,8 @@ fun AnalyticsScreen(onBack: () -> Unit) {
             }
             return@Scaffold
         }
+
+        val studentNames = remember(students) { students.map { it.name } }
 
         LazyColumn(
             modifier = Modifier
@@ -152,7 +154,7 @@ fun AnalyticsScreen(onBack: () -> Unit) {
             // 学员选择器
             item {
                 StudentPickerCard(
-                    students = students.map { it.name },
+                    students = studentNames,
                     selected = selectedStudent,
                     expanded = studentPickerOpen,
                     onToggle = { studentPickerOpen = !studentPickerOpen },

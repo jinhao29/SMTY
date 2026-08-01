@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -23,29 +21,21 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Apps
+import androidx.compose.material.icons.outlined.Calculate
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.CleaningServices
-import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.CloudUpload
-import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.Download
-import androidx.compose.material.icons.outlined.FitnessCenter
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.ImageNotSupported
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.SaveAlt
 import androidx.compose.material.icons.outlined.Storage
-import androidx.compose.material.icons.outlined.SyncAlt
-import androidx.compose.material.icons.outlined.Visibility
-import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import com.shangmentiyu.sportscoach.ui.theme.ProgressDialog
@@ -54,7 +44,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -65,7 +54,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -78,11 +67,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
+import com.shangmentiyu.sportscoach.ui.Routes
 import com.shangmentiyu.sportscoach.update.UpdateManager
 import com.shangmentiyu.sportscoach.update.UpdateResult
 import com.shangmentiyu.sportscoach.BuildConfig
@@ -98,7 +87,8 @@ import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
-import com.shangmentiyu.sportscoach.ui.theme.appSurface
+import com.shangmentiyu.sportscoach.ui.theme.appPrimary
+import com.shangmentiyu.sportscoach.ui.theme.appBackground
 
 /**
  * 设置页：iOS Settings 风格。
@@ -110,41 +100,26 @@ import com.shangmentiyu.sportscoach.ui.theme.appSurface
  * - 数据同步：iOS Settings 列表项（彩色方形图标 + 标题 + 右箭头）
  * - 关于：纯文字信息卡片
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
     val context = LocalContext.current
     val vm: SettingsViewModel = viewModel(
         factory = AppViewModelFactory(context.applicationContext as android.app.Application)
     )
 
-    val coach by vm.coach.collectAsState()
-    val todayCount by vm.todayCount.collectAsState()
-    val totalCount by vm.totalCount.collectAsState()
-    val statusMessage by vm.statusMessage.collectAsState()
-    val backupInProgress by vm.backupInProgress.collectAsState()
-    val backupProgress by vm.backupProgress.collectAsState()
-    val needRestart by vm.needRestart.collectAsState()
+    val coach by vm.coach.collectAsStateWithLifecycle()
+    val todayCount by vm.todayCount.collectAsStateWithLifecycle()
+    val totalCount by vm.totalCount.collectAsStateWithLifecycle()
+    val statusMessage by vm.statusMessage.collectAsStateWithLifecycle()
+    val backupInProgress by vm.backupInProgress.collectAsStateWithLifecycle()
+    val backupProgress by vm.backupProgress.collectAsStateWithLifecycle()
+    val needRestart by vm.needRestart.collectAsStateWithLifecycle()
     // === v30 全自动无感备份开关状态 ===
-    val autoBackupEnabled by vm.autoBackupEnabled.collectAsState()
-
-    // === v25 新增：电脑端截图同步状态订阅 ===
-    // pendingLanPlan：UdpPlanListenerService 收到广播后写入 SharedPreferences，进入设置页时由 ViewModel 读取
-    // lanPlanSyncing：是否正在下载图片，控制按钮禁用与加载动画显示
-    val pendingLanPlan by vm.pendingLanPlan.collectAsState()
-    val lanPlanSyncing by vm.lanPlanSyncing.collectAsState()
-    // 进入设置页时主动刷新一次，确保从通知点击进入时立即显示待同步信息
-    // === v34：包裹 try-catch，避免初始化阶段抛 NPE ===
-    LaunchedEffect(Unit) {
-        try {
-            vm.refreshPendingLanPlan()
-        } catch (e: Exception) {
-            CrashDumper.dumpBoth(context, "SettingsScreen.LaunchedEffect.refreshPendingLanPlan", e)
-        }
-    }
+    val autoBackupEnabled by vm.autoBackupEnabled.collectAsStateWithLifecycle()
 
     // === v24 优化3：统一进度对话框（导出/备份/恢复全程显示）===
-    val progressState by vm.progressState.collectAsState()
+    val progressState by vm.progressState.collectAsStateWithLifecycle()
     // 完成态自动延迟 1.5s 关闭，让用户看到"完成"反馈
     LaunchedEffect(progressState) {
         if (!progressState.isActive && progressState.progress >= 1f && progressState.currentStep.isNotBlank()) {
@@ -157,9 +132,9 @@ fun SettingsScreen() {
     }
 
     // 签到照片存储空间信息（进入设置页时自动扫描一次）
-    val signPhotosSize by vm.signPhotosSize.collectAsState()
-    val signPhotosCount by vm.signPhotosCount.collectAsState()
-    val cleanableCount by vm.cleanableCount.collectAsState()
+    val signPhotosSize by vm.signPhotosSize.collectAsStateWithLifecycle()
+    val signPhotosCount by vm.signPhotosCount.collectAsStateWithLifecycle()
+    val cleanableCount by vm.cleanableCount.collectAsStateWithLifecycle()
     // === v34：包裹 try-catch，扫描失败也不弹 NPE 黑色提示 ===
     LaunchedEffect(Unit) {
         try {
@@ -171,10 +146,10 @@ fun SettingsScreen() {
 
     // === v29 优化3：缓存管理（孤立照片 + 临时缓存） ===
     // 进入设置页时自动扫描一次孤立照片与缓存目录占用，让用户直观感知可清理空间
-    val orphanPhotoCount by vm.orphanPhotoCount.collectAsState()
-    val orphanPhotoSize by vm.orphanPhotoSize.collectAsState()
-    val cacheSize by vm.cacheSize.collectAsState()
-    val cacheFileCount by vm.cacheFileCount.collectAsState()
+    val orphanPhotoCount by vm.orphanPhotoCount.collectAsStateWithLifecycle()
+    val orphanPhotoSize by vm.orphanPhotoSize.collectAsStateWithLifecycle()
+    val cacheSize by vm.cacheSize.collectAsStateWithLifecycle()
+    val cacheFileCount by vm.cacheFileCount.collectAsStateWithLifecycle()
     // === v34：包裹 try-catch，扫描失败也不弹 NPE 黑色提示 ===
     LaunchedEffect(Unit) {
         try {
@@ -333,7 +308,7 @@ fun SettingsScreen() {
     }
 
     Scaffold(
-        containerColor = appSurface()
+        containerColor = appBackground()
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             Column(
@@ -342,7 +317,7 @@ fun SettingsScreen() {
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(Spacing.lg)
             ) {
-                // Large Title
+                // 现代轻量级标题栏：深黑标题 + 深灰副标题（替换原紫色巨型 displayLarge 文字）
                 Column(
                     modifier = Modifier.padding(
                         start = Spacing.screenH,
@@ -352,14 +327,16 @@ fun SettingsScreen() {
                 ) {
                     Text(
                         "设置",
-                        style = MaterialTheme.typography.displayLarge,
-                        color = MaterialTheme.colorScheme.primary  // 活力蓝紫
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1A1A1A),
+                        letterSpacing = (-0.5).sp
                     )
                     Spacer(Modifier.height(Spacing.xs))
                     Text(
                         "教练信息 · 数据同步 · 关于",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = appOnSurfaceVariant()
+                        fontSize = 14.sp,
+                        color = Color(0xFF6B6B6B)
                     )
                 }
 
@@ -457,270 +434,6 @@ fun SettingsScreen() {
                             showTopDivider = true,
                             onClick = { showImportStrategyDialog = true }
                         )
-                    }
-                }
-
-                // === v25 新增：分组 3.5 跨端同步（电脑端截图 → 手机端）===
-                // 局域网纯离线通信：电脑端 PySide6 截图 + HTTP 服务 + UDP 广播
-                // 手机端 UdpPlanListenerService 前台 Service 监听广播 → 通知栏提示
-                // 用户点击"同步电脑端截图"按钮后通过 OkHttp 下载图片并自动关联学员
-                IosSectionWrapper(text = "跨端同步") {
-                    IosGroupedListCard {
-                        // 信息展示行：待同步截图信息（无则提示"暂无待同步"）
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = Spacing.md, vertical = Spacing.md),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(Spacing.md)
-                        ) {
-                            IosIconBadge(
-                                icon = Icons.Outlined.PhoneAndroid,
-                                iconBgColor = LightPrimary,
-                                contentDescription = "电脑端截图同步"
-                            )
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    "电脑端训练计划截图",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = appOnSurface()
-                                )
-                                Spacer(Modifier.height(2.dp))
-                                Text(
-                                    when {
-                                        lanPlanSyncing -> "正在同步，请稍候…"
-                                        pendingLanPlan != null -> {
-                                            val p = pendingLanPlan!!
-                                            "收到 ${p.studentName} 的训练计划（${p.date}）"
-                                        }
-                                        else -> "暂无待同步的截图"
-                                    },
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = when {
-                                        lanPlanSyncing || pendingLanPlan != null ->
-                                            LightPrimary
-                                        else -> appOnSurfaceVariant()
-                                    }
-                                )
-                            }
-                            // 待同步徽标
-                            if (pendingLanPlan != null && !lanPlanSyncing) {
-                                Box(
-                                    modifier = Modifier
-                                        .background(
-                                            color = LightPrimary.copy(alpha = 0.15f),
-                                            shape = RoundedCornerShape(10.dp)
-                                        )
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Text(
-                                        "待同步",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = LightPrimary,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                }
-                            }
-                        }
-                        // 分隔线
-                        Box(
-                            modifier = Modifier
-                                .padding(start = 60.dp)
-                                .fillMaxWidth()
-                                .height(0.5.dp)
-                                .background(appDividerColor())
-                        )
-                        // 操作行：同步电脑端截图
-                        SettingsActionRow(
-                            icon = Icons.Outlined.SyncAlt,
-                            iconBgColor = LightPrimary,
-                            iconContentDescription = "同步电脑端截图",
-                            title = "同步电脑端截图",
-                            subtitle = when {
-                                lanPlanSyncing -> "正在下载并关联学员…"
-                                pendingLanPlan != null -> "点击下载并自动关联到对应学员"
-                                else -> "电脑端发送截图后此处会显示提示"
-                            },
-                            showTopDivider = false,
-                            onClick = {
-                                // === v34：包裹 try-catch，避免同步过程中 NPE 弹黑色提示 ===
-                                try {
-                                    if (!lanPlanSyncing) {
-                                        if (pendingLanPlan != null) {
-                                            vm.syncLanPlanImage()
-                                        } else {
-                                            vm.updateStatus("暂无待同步的电脑端截图，请先在电脑端点击\"截图发送到手机\"")
-                                        }
-                                    }
-                                } catch (e: Exception) {
-                                    CrashDumper.dumpBoth(context, "SettingsScreen.syncLanPlan", e)
-                                    Toast.makeText(
-                                        context,
-                                        "同步电脑端截图失败，请检查网络与电脑端服务",
-                                        Toast.LENGTH_LONG
-                                    ).show()
-                                }
-                            }
-                        )
-                        // 同步进行中时显示加载动画
-                        if (lanPlanSyncing) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = Spacing.md, vertical = Spacing.sm),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-                            ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp,
-                                    color = LightPrimary
-                                )
-                                Text(
-                                    "正在从局域网下载训练计划截图…",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = appOnSurfaceVariant()
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // === v32 优化2：训练动作积木库（自定义常用动作）===
-                // 教练在排课弹窗点击胶囊按钮即可快速追加训练动作到内容文本框
-                // 此处提供管理入口：查看现有积木 / 添加新动作 / 删除已存在动作
-                // 数据持久化：WebDavCredentialsStore（普通 SharedPreferences，JSON 数组）
-                IosSectionWrapper(text = "训练动作积木库") {
-                    IosGroupedListCard {
-                        val exerciseBlocks by vm.exerciseBlocks.collectAsState()
-                    // === v34：包裹 try-catch，加载积木库失败也不弹 NPE 黑色提示 ===
-                    LaunchedEffect(Unit) {
-                        try {
-                            vm.loadExerciseBlocks()
-                        } catch (e: Exception) {
-                            CrashDumper.dumpBoth(context, "SettingsScreen.LaunchedEffect.loadExerciseBlocks", e)
-                        }
-                    }
-
-                        // 信息展示行：积木库说明与当前数量
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = Spacing.md, vertical = Spacing.md),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(Spacing.md)
-                        ) {
-                            IosIconBadge(
-                                icon = Icons.Outlined.FitnessCenter,
-                                iconBgColor = LightPrimary,
-                                contentDescription = "训练动作积木库"
-                            )
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    "常用训练动作",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = appOnSurface()
-                                )
-                                Spacer(Modifier.height(2.dp))
-                                Text(
-                                    "排课时点击胶囊即可快速追加，共 ${exerciseBlocks.size} 个动作",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = appOnSurfaceVariant()
-                                )
-                            }
-                        }
-                        // 分隔线
-                        Box(
-                            modifier = Modifier
-                                .padding(start = 60.dp)
-                                .fillMaxWidth()
-                                .height(0.5.dp)
-                                .background(appDividerColor())
-                        )
-                        // 积木库胶囊列表（FlowRow 自动换行）
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = Spacing.md, vertical = Spacing.sm)
-                        ) {
-                            FlowRow(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
-                            ) {
-                                exerciseBlocks.forEach { block ->
-                                    Row(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(LightPrimary.copy(alpha = 0.08f))
-                                            .padding(horizontal = Spacing.sm, vertical = 6.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        Text(
-                                            block,
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = LightPrimary,
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                        Icon(
-                                            Icons.Outlined.Close,
-                                            contentDescription = "删除 $block",
-                                            tint = LightPrimary.copy(alpha = 0.6f),
-                                            modifier = Modifier
-                                                .size(14.dp)
-                                                .clickable { vm.removeExerciseBlock(block) }
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        // 分隔线
-                        Box(
-                            modifier = Modifier
-                                .padding(start = 60.dp)
-                                .fillMaxWidth()
-                                .height(0.5.dp)
-                                .background(appDividerColor())
-                        )
-                        // 添加新动作输入行
-                        var newBlockInput by remember { mutableStateOf("") }
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = Spacing.md, vertical = Spacing.sm),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-                        ) {
-                            OutlinedTextField(
-                                value = newBlockInput,
-                                onValueChange = { newBlockInput = it },
-                                label = { Text("新动作名称") },
-                                placeholder = { Text("如：引体向上") },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f),
-                                leadingIcon = {
-                                    Icon(Icons.Outlined.Add, contentDescription = null)
-                                },
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    cursorColor = MaterialTheme.colorScheme.primary,
-                                    focusedBorderColor = MaterialTheme.colorScheme.primary
-                                )
-                            )
-                            Button(
-                                onClick = {
-                                    if (newBlockInput.isNotBlank()) {
-                                        vm.addExerciseBlock(newBlockInput)
-                                        newBlockInput = ""
-                                    }
-                                },
-                                enabled = newBlockInput.isNotBlank()
-                            ) {
-                                Text("添加")
-                            }
-                        }
                     }
                 }
 
@@ -833,221 +546,6 @@ fun SettingsScreen() {
                                 checked = autoBackupEnabled,
                                 onCheckedChange = { vm.setAutoBackupEnabled(it) }
                             )
-                        }
-                    }
-                }
-
-                // === v32 优化1：WebDAV 云盘备份（终极异地灾备）===
-                // 教练可绑定自己的坚果云 / Nextcloud / 阿里云盘 WebDAV
-                // 每次本地自动备份时，同时静默推送 Zip 到私人网盘指定目录
-                // 账号密码通过 EncryptedSharedPreferences 加密存储，绝不明文落盘
-                IosSectionWrapper(text = "WebDAV 云盘备份") {
-                    IosGroupedListCard {
-                        val webDavConfig by vm.webDavConfig.collectAsState()
-                        val webDavTesting by vm.webDavTesting.collectAsState()
-
-                        // 启用开关行
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = Spacing.md, vertical = Spacing.md),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(Spacing.md)
-                        ) {
-                            IosIconBadge(
-                                icon = Icons.Outlined.Cloud,
-                                iconBgColor = LightSecondary,
-                                contentDescription = "WebDAV 云盘备份"
-                            )
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    "启用 WebDAV 云盘推送",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = appOnSurface()
-                                )
-                                Spacer(Modifier.height(2.dp))
-                                Text(
-                                    if (webDavConfig.enabled)
-                                        "已启用：每次本地备份将同步推送到私人网盘"
-                                    else
-                                        "关闭：仅本地备份，不推送云端",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (webDavConfig.enabled)
-                                        LightTertiary
-                                    else
-                                        appOnSurfaceVariant()
-                                )
-                            }
-                            Switch(
-                                checked = webDavConfig.enabled,
-                                onCheckedChange = { newVal ->
-                                    // 仅切换启用状态，不传账号密码避免覆盖加密存储中的真实凭证
-                                    vm.setWebDavEnabled(newVal)
-                                }
-                            )
-                        }
-
-                        // 详细配置表单（启用或已配置过时显示）
-                        if (webDavConfig.enabled || webDavConfig.baseUrl.isNotEmpty()) {
-                            // 分隔线
-                            Box(
-                                modifier = Modifier
-                                    .padding(start = 60.dp)
-                                    .fillMaxWidth()
-                                    .height(0.5.dp)
-                                    .background(appDividerColor())
-                            )
-
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = Spacing.md, vertical = Spacing.sm),
-                                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
-                            ) {
-                                var baseUrl by remember(webDavConfig.baseUrl) {
-                                    mutableStateOf(webDavConfig.baseUrl)
-                                }
-                                var remoteDir by remember(webDavConfig.remoteDir) {
-                                    mutableStateOf(webDavConfig.remoteDir)
-                                }
-                                var username by remember(webDavConfig.username) {
-                                    mutableStateOf(webDavConfig.username)
-                                }
-                                // 密码字段不回显（安全考虑），用户重新输入后才提交
-                                var password by remember { mutableStateOf("") }
-                                var passwordVisible by remember { mutableStateOf(false) }
-
-                                OutlinedTextField(
-                                    value = baseUrl,
-                                    onValueChange = { baseUrl = it },
-                                    label = { Text("WebDAV 服务器地址") },
-                                    placeholder = { Text("https://dav.jianguoyun.com/dav/") },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    leadingIcon = {
-                                        Icon(Icons.Outlined.Cloud, contentDescription = null)
-                                    },
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        cursorColor = MaterialTheme.colorScheme.primary,
-                                        focusedBorderColor = MaterialTheme.colorScheme.primary
-                                    )
-                                )
-                                OutlinedTextField(
-                                    value = remoteDir,
-                                    onValueChange = { remoteDir = it },
-                                    label = { Text("远程存放目录") },
-                                    placeholder = { Text("shangmentiyu/backup") },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    leadingIcon = {
-                                        Icon(Icons.Outlined.FolderOpen, contentDescription = null)
-                                    },
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        cursorColor = MaterialTheme.colorScheme.primary,
-                                        focusedBorderColor = MaterialTheme.colorScheme.primary
-                                    )
-                                )
-                                OutlinedTextField(
-                                    value = username,
-                                    onValueChange = { username = it },
-                                    label = { Text("账号 / 应用专用密码") },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    leadingIcon = {
-                                        Icon(Icons.Outlined.Person, contentDescription = null)
-                                    },
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        cursorColor = MaterialTheme.colorScheme.primary,
-                                        focusedBorderColor = MaterialTheme.colorScheme.primary
-                                    )
-                                )
-                                OutlinedTextField(
-                                    value = password,
-                                    onValueChange = { password = it },
-                                    label = { Text("密码（应用级专用密码）") },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    leadingIcon = {
-                                        Icon(Icons.Outlined.Lock, contentDescription = null)
-                                    },
-                                    visualTransformation = if (passwordVisible)
-                                        VisualTransformation.None
-                                    else
-                                        PasswordVisualTransformation(),
-                                    trailingIcon = {
-                                        IconButton(onClick = {
-                                            passwordVisible = !passwordVisible
-                                        }) {
-                                            Icon(
-                                                if (passwordVisible)
-                                                    Icons.Outlined.VisibilityOff
-                                                else
-                                                    Icons.Outlined.Visibility,
-                                                contentDescription = if (passwordVisible)
-                                                    "隐藏密码"
-                                                else
-                                                    "显示密码"
-                                            )
-                                        }
-                                    },
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        cursorColor = MaterialTheme.colorScheme.primary,
-                                        focusedBorderColor = MaterialTheme.colorScheme.primary
-                                    )
-                                )
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-                                ) {
-                                    Button(
-                                        onClick = {
-                                            vm.testWebDavConnection(
-                                                baseUrl, remoteDir, username, password
-                                            )
-                                        },
-                                        enabled = !webDavTesting &&
-                                            baseUrl.isNotBlank() &&
-                                            username.isNotBlank(),
-                                        modifier = Modifier.weight(1f)
-                                    ) {
-                                        if (webDavTesting) {
-                                            CircularProgressIndicator(
-                                                modifier = Modifier.size(16.dp),
-                                                strokeWidth = 2.dp,
-                                                color = MaterialTheme.colorScheme.onPrimary
-                                            )
-                                        } else {
-                                            Text("测试连接")
-                                        }
-                                    }
-                                    Button(
-                                        onClick = {
-                                            vm.saveWebDavConfig(
-                                                enabled = true,
-                                                baseUrl = baseUrl,
-                                                remoteDir = remoteDir,
-                                                username = username,
-                                                password = password
-                                            )
-                                        },
-                                        modifier = Modifier.weight(1f)
-                                    ) {
-                                        Text("保存配置")
-                                    }
-                                }
-
-                                TextButton(
-                                    onClick = { vm.clearWebDavConfig() },
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text(
-                                        "清除配置",
-                                        color = MaterialTheme.colorScheme.error
-                                    )
-                                }
-                            }
                         }
                     }
                 }
@@ -1375,6 +873,21 @@ fun SettingsScreen() {
                     }
                 }
 
+                // 分组 6.5：工具（独立计算器，不依赖学员数据）
+                IosSectionWrapper(text = "工具") {
+                    IosGroupedListCard {
+                        SettingsActionRow(
+                            icon = Icons.Outlined.Calculate,
+                            iconBgColor = LightPrimary,
+                            iconContentDescription = "BMI 计算器",
+                            title = "BMI 计算器",
+                            subtitle = "输入身高体重快速计算 BMI",
+                            showTopDivider = false,
+                            onClick = { onNavigate(Routes.BMI_CALCULATOR) }
+                        )
+                    }
+                }
+
                 // 分组 7：关于
                 IosSectionWrapper(text = "关于") {
                     IosGroupedListCard {
@@ -1442,7 +955,8 @@ fun SettingsScreen() {
                     }
                 }
 
-                Spacer(Modifier.height(Spacing.xxl))
+                // === 底部避让：140dp 防止悬浮导航胶囊遮挡最后一项 ===
+                Spacer(Modifier.height(140.dp))
             }
 
             // 状态消息 Snackbar
@@ -1680,7 +1194,7 @@ fun SettingsScreen() {
 }
 
 /**
- * iOS 分组包装：Section Header（活力蓝紫）+ 单张卡片。
+ * iOS 分组包装：Section Header（珊瑚橙）+ 单张卡片。
  */
 @Composable
 private fun IosSectionWrapper(
@@ -1697,7 +1211,7 @@ private fun IosSectionWrapper(
             text = text.uppercase(),
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.primary,  // 活力蓝紫
+            color = appPrimary(),  // v45 统一：活力蓝紫 → 珊瑚橙 #FF6B47
             modifier = Modifier.padding(horizontal = 4.dp, vertical = Spacing.xs)
         )
         content()
@@ -1705,7 +1219,12 @@ private fun IosSectionWrapper(
 }
 
 /**
- * iOS Inset Grouped 卡片：纯白 + 10pt 圆角 + 1.5dp 活力蓝紫渐变全包裹边框 + 顶部 4dp 装饰条。
+ * iOS Inset Grouped 卡片：纯白 + 24dp 大圆角 + iOS 风格柔和弥散阴影。
+ *
+ * 设计要点（参考 123.txt 第 3 段 + Dribbble 现代卡片）：
+ * - 圆角统一 24dp，与全局卡片令牌一致
+ * - 阴影使用极低 alpha（ambient 0.04 / spot 0.06），模拟 iOS 柔和弥散投影
+ * - 禁用实线边框，层级完全依赖阴影区分
  */
 @Composable
 private fun IosGroupedListCard(content: @Composable () -> Unit) {
@@ -1713,30 +1232,22 @@ private fun IosGroupedListCard(content: @Composable () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .shadow(
-                elevation = 4.dp,
-                shape = RoundedCornerShape(10.dp),
-                ambientColor = Color(0x1A000000),
-                spotColor = Color(0x1A000000)
+                elevation = 6.dp,
+                shape = RoundedCornerShape(24.dp),
+                ambientColor = Color.Black.copy(alpha = 0.04f),
+                spotColor = Color.Black.copy(alpha = 0.06f)
             )
-            .background(Color.White, RoundedCornerShape(10.dp))
+            .background(Color.White, RoundedCornerShape(24.dp))
     ) {
-        // 顶部 4dp 渐变装饰条（活力蓝紫）
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(4.dp)
-                .background(
-                    brush = Brush.linearGradient(
-                        colors = listOf(BrandGradientStart, BrandGradientEnd)
-                    )
-                )
-        )
+        // v45：移除顶部 4dp 渐变装饰条，保持卡片简洁统一
         content()
     }
 }
 
 /**
  * iOS Settings 风格图标徽章：36×36 圆角方形彩色背景 + 白色图标。
+ *
+ * 圆角 12dp（参考 123.txt 第 3 段"圆角 12.dp"）。
  */
 @Composable
 private fun IosIconBadge(
@@ -1747,7 +1258,7 @@ private fun IosIconBadge(
     Box(
         modifier = Modifier
             .size(36.dp)
-            .background(iconBgColor, RoundedCornerShape(8.dp)),
+            .background(iconBgColor, RoundedCornerShape(12.dp)),
         contentAlignment = Alignment.Center
     ) {
         Icon(

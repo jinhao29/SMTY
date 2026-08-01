@@ -1,5 +1,6 @@
 package com.shangmentiyu.sportscoach.ui.home
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +12,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -19,6 +22,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.EventRepeat
 import androidx.compose.material.icons.outlined.Remove
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import androidx.compose.material3.Button
@@ -30,21 +34,25 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shangmentiyu.sportscoach.data.model.LessonPackage
 import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
 import com.shangmentiyu.sportscoach.ui.operation.OperationViewModel
+import com.shangmentiyu.sportscoach.ui.schedule.AutoScheduleFromPackageDialog
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
+import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 
 /**
  * 课时管理 Tab：展示所有学员的课时包余额，支持增添/减少/赠送。
@@ -62,51 +70,71 @@ fun LessonManageTab(vm: HomeViewModel) {
         factory = AppViewModelFactory(context.applicationContext as android.app.Application)
     )
 
-    val packages by opVm.packages.collectAsState()
+    val packages by opVm.packages.collectAsStateWithLifecycle()
 
     var adjustingPkg by remember { mutableStateOf<LessonPackage?>(null) }
     var adjustMode by remember { mutableStateOf("") } // "add" / "reduce" / "gift"
     var renamingStudent by remember { mutableStateOf<String?>(null) }
     var editingPkg by remember { mutableStateOf<LessonPackage?>(null) }
     var deletingPkg by remember { mutableStateOf<LessonPackage?>(null) }
+    // === 一键排课：从课时包管理页直接进入自动排课对话框（预选中该课时包） ===
+    var autoSchedulePkg by remember { mutableStateOf<LessonPackage?>(null) }
 
-    Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+    // === 性能优化 H2+M5：改用 LazyColumn + remember 缓存排序 ===
+    // 原 Column + verticalScroll + forEach 一次性把所有 PackageCard 组合进树，
+    // 学员数几十到上百时主线程组合开销极高；且 sortedBy 每次重组都生成新 List。
+    // 现在 LazyColumn 只组合屏幕可见的卡片，未可见的由 Compose 自动回收。
+    // 排序结果用 remember(packages) 缓存，仅在 packages 变化时重排。
+    val sortedPackages = remember(packages) { packages.sortedBy { it.studentName } }
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
             .padding(horizontal = Spacing.screenH, vertical = Spacing.screenV),
+        // 悬浮底栏避让：底部留出 160dp，确保最后一张学员卡片的操作按钮不被胶囊导航遮挡
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 160.dp),
         verticalArrangement = Arrangement.spacedBy(Spacing.md)
     ) {
         // 概览
-        IosCard {
-            Column(modifier = Modifier.padding(Spacing.md)) {
-                Text("课时包概览", style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(Spacing.sm))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    StatItem(label = "课时包数", value = "${packages.size}")
-                    val totalRemain = packages.sumOf { it.remainingLessons }
-                    StatItem(label = "剩余总数", value = "$totalRemain")
-                    val totalUsed = packages.sumOf { it.totalLessons - it.remainingLessons }
-                    StatItem(label = "已用总数", value = "$totalUsed")
+        item(key = "overview") {
+            IosCard {
+                Column(modifier = Modifier.padding(Spacing.md)) {
+                    Text("课时包概览", style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(Spacing.sm))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        StatItem(label = "课时包数", value = "${packages.size}")
+                        val totalRemain = packages.sumOf { it.remainingLessons }
+                        StatItem(label = "剩余总数", value = "$totalRemain")
+                        val totalUsed = packages.sumOf { it.totalLessons - it.remainingLessons }
+                        StatItem(label = "已用总数", value = "$totalUsed")
+                    }
                 }
             }
         }
 
-        IosSectionHeader("学员课时余额")
+        item(key = "header") {
+            IosSectionHeader("学员课时余额")
+        }
 
         if (packages.isEmpty()) {
-            IosCard {
-                Box(
-                    modifier = Modifier.fillMaxWidth().height(120.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("暂无课时包", color = MaterialTheme.colorScheme.outline)
+            item(key = "empty") {
+                IosCard {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(120.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("暂无课时包", color = MaterialTheme.colorScheme.outline)
+                    }
                 }
             }
         } else {
-            packages.sortedBy { it.studentName }.forEach { pkg ->
+            items(
+                items = sortedPackages,
+                key = { pkg -> pkg.id }
+            ) { pkg ->
                 PackageCard(
                     pkg = pkg,
                     onAdd = { adjustingPkg = pkg; adjustMode = "add" },
@@ -114,7 +142,8 @@ fun LessonManageTab(vm: HomeViewModel) {
                     onGift = { adjustingPkg = pkg; adjustMode = "gift" },
                     onRename = { renamingStudent = pkg.studentName },
                     onEdit = { editingPkg = pkg },
-                    onDelete = { deletingPkg = pkg }
+                    onDelete = { deletingPkg = pkg },
+                    onAutoSchedule = { autoSchedulePkg = pkg }
                 )
             }
         }
@@ -205,6 +234,15 @@ fun LessonManageTab(vm: HomeViewModel) {
             dismissButton = { TextButton(onClick = { deletingPkg = null }) { Text("取消") } }
         )
     }
+
+    // === 一键排课对话框：预选中当前课时包 ===
+    autoSchedulePkg?.let { pkg ->
+        AutoScheduleFromPackageDialog(
+            vm = opVm,
+            preselectedPackageId = pkg.id,
+            onDismiss = { autoSchedulePkg = null }
+        )
+    }
 }
 
 @Composable
@@ -215,7 +253,8 @@ private fun PackageCard(
     onGift: () -> Unit,
     onRename: () -> Unit,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onAutoSchedule: () -> Unit
 ) {
     IosCard {
         Column(modifier = Modifier.padding(Spacing.md)) {
@@ -226,28 +265,28 @@ private fun PackageCard(
                 Text(pkg.studentName, style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
-                IconButton(onClick = onRename, modifier = Modifier.size(28.dp)) {
-                    Icon(
-                        Icons.Outlined.Edit,
-                        contentDescription = "改名",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
+                // 操作按钮：纯文字样式，珊瑚橙主色，水平排列
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text(
+                        "改名",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 14.sp,
+                        modifier = Modifier.clickable(onClick = onRename)
                     )
-                }
-                IconButton(onClick = onEdit, modifier = Modifier.size(28.dp)) {
-                    Icon(
-                        Icons.Outlined.ChevronRight,
-                        contentDescription = "编辑课时包",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
+                    Text(
+                        "详情",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 14.sp,
+                        modifier = Modifier.clickable(onClick = onEdit)
                     )
-                }
-                IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
-                    Icon(
-                        Icons.Outlined.Delete,
-                        contentDescription = "删除课时包",
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(16.dp)
+                    Text(
+                        "删除",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 14.sp,
+                        modifier = Modifier.clickable(onClick = onDelete)
                     )
                 }
                 Spacer(Modifier.width(4.dp))
@@ -310,6 +349,26 @@ private fun PackageCard(
                     Icon(Icons.Outlined.ChevronRight, contentDescription = null, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(4.dp))
                     Text("赠送", style = MaterialTheme.typography.labelMedium)
+                }
+            }
+
+            // === 一键排课：关联课时包自动排课到课时上完那一周 ===
+            // 珊瑚橙主色按钮，作为卡片的主要操作（每卡片仅 1 个主操作按钮）
+            // 仅在课时包有剩余课时且状态为活跃时显示
+            if (pkg.remainingLessons > 0 && pkg.status == "活跃") {
+                Spacer(Modifier.height(Spacing.sm))
+                Button(
+                    onClick = onAutoSchedule,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = appPrimary(),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Icon(Icons.Outlined.EventRepeat, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("一键排课", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                 }
             }
         }

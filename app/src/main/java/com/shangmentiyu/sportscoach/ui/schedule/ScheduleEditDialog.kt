@@ -65,7 +65,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -81,7 +81,6 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.shangmentiyu.sportscoach.data.model.ExerciseItem
 import com.shangmentiyu.sportscoach.data.repo.CoachConflictException
-import com.shangmentiyu.sportscoach.data.repo.WebDavCredentialsStore
 import com.shangmentiyu.sportscoach.ui.operation.OperationViewModel
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import com.shangmentiyu.sportscoach.ui.theme.IOSCard
@@ -140,13 +139,13 @@ fun ScheduleEditDialog(
     onDismiss: () -> Unit,
     onSaved: () -> Unit
 ) {
-    val students by vm.students.collectAsState()
-    val editing by vm.editingSchedule.collectAsState()
+    val students by vm.students.collectAsStateWithLifecycle()
+    val editing by vm.editingSchedule.collectAsStateWithLifecycle()
     // 排课记忆：时间/地点历史下拉
-    val timeMemories by vm.timeMemories.collectAsState()
-    val locationMemories by vm.locationMemories.collectAsState()
+    val timeMemories by vm.timeMemories.collectAsStateWithLifecycle()
+    val locationMemories by vm.locationMemories.collectAsStateWithLifecycle()
     // === v24 优化6：最近操作的上课周几记忆（新建模式默认选中） ===
-    val dayOfWeekMemories by vm.dayOfWeekMemories.collectAsState()
+    val dayOfWeekMemories by vm.dayOfWeekMemories.collectAsStateWithLifecycle()
     // === 焦点管理器：从下拉菜单选择项目后立即清除焦点，关闭软键盘 ===
     // 用户痛点：从历史记录选择学员/上课地点后，OutlinedTextField 仍保持焦点，
     // 导致系统自动弹出软键盘遮挡视线。选择后 clearFocus() 即可关闭键盘。
@@ -712,20 +711,6 @@ fun ScheduleEditDialog(
                 item {
                     IOSSectionHeader("训练内容")
                     IOSCard {
-                        // === v32 优化2：常用训练动作积木胶囊按钮 ===
-                        // - 数据源：WebDavCredentialsStore.getExerciseBlocks()
-                        // - 首次返回预置 15 个动作，用户在设置页自定义后返回持久化列表
-                        // - 点击胶囊：将动作名追加为新 ExerciseItem（默认 3 组 × 10 次）
-                        ExerciseBlocksRow(
-                            onAppendBlock = { blockName ->
-                                content = content + ExerciseItem(
-                                    name = blockName,
-                                    sets = 3,
-                                    reps = "10",
-                                    intensity = ""
-                                )
-                            }
-                        )
                         Spacer(Modifier.height(Spacing.md))
                         if (content.isEmpty()) {
                             Text(
@@ -1189,79 +1174,5 @@ private fun loadImageBitmapFromFile(path: String): androidx.compose.ui.graphics.
         }
     } catch (e: Exception) {
         androidx.compose.ui.graphics.ImageBitmap(1, 1)
-    }
-}
-
-/**
- * 常用训练动作积木胶囊按钮（v32 优化2 新增）。
- *
- * - 数据源：[WebDavCredentialsStore.getExerciseBlocks]
- * - 首次返回预置 15 个动作（高抬腿/深蹲/折返跑/跳绳等）
- * - 用户在设置页自定义后，列表持久化到 SharedPreferences
- * - 点击胶囊：调用 [onAppendBlock] 将动作名追加到训练内容
- *
- * 视觉规格：
- * - 浅灰小标题"常用动作" + FlowRow 横排胶囊按钮
- * - 胶囊：appPrimary 半透明背景 + 12dp 圆角 + 中等字号
- * - 自适应换行，支持任意数量动作
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun ExerciseBlocksRow(
-    onAppendBlock: (String) -> Unit
-) {
-    val context = LocalContext.current
-    // WebDavCredentialsStore 同时承载训练动作积木库（与 WebDAV 凭证分区存储）
-    val store = remember { WebDavCredentialsStore(context) }
-    var blocks by remember { mutableStateOf<List<String>>(emptyList()) }
-
-    // 首次进入页面加载积木库（每次打开 Dialog 都重新读取，确保设置页修改后立即生效）
-    LaunchedEffect(Unit) {
-        blocks = store.getExerciseBlocks()
-    }
-
-    if (blocks.isEmpty()) return
-
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Icon(
-            Icons.Outlined.Add,
-            contentDescription = null,
-            tint = appOutline(),
-            modifier = Modifier.size(14.dp)
-        )
-        Spacer(Modifier.width(Spacing.xs))
-        Text(
-            "常用动作",
-            style = MaterialTheme.typography.labelSmall,
-            color = appOutline(),
-            fontWeight = FontWeight.Medium
-        )
-    }
-    Spacer(Modifier.height(Spacing.sm))
-    FlowRow(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
-        verticalArrangement = Arrangement.spacedBy(Spacing.xs)
-    ) {
-        blocks.forEach { name ->
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(appPrimary().copy(alpha = 0.08f))
-                    .clickable { onAppendBlock(name) }
-                    .padding(horizontal = Spacing.sm, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    name,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = appPrimary(),
-                    fontWeight = FontWeight.Medium
-                )
-            }
-        }
     }
 }

@@ -26,7 +26,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,11 +53,11 @@ fun StageSummaryScreen(onBack: () -> Unit) {
         factory = AppViewModelFactory(context.applicationContext as android.app.Application)
     )
 
-    val students by vm.students.collectAsState()
-    val selectedStudent by vm.selectedStudent.collectAsState()
-    val rangeOption by vm.rangeOption.collectAsState()
-    val summary by vm.summary.collectAsState()
-    val loading by vm.loading.collectAsState()
+    val students by vm.students.collectAsStateWithLifecycle()
+    val selectedStudent by vm.selectedStudent.collectAsStateWithLifecycle()
+    val rangeOption by vm.rangeOption.collectAsStateWithLifecycle()
+    val summary by vm.summary.collectAsStateWithLifecycle()
+    val loading by vm.loading.collectAsStateWithLifecycle()
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,

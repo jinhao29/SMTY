@@ -42,6 +42,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -53,7 +54,7 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -76,6 +77,7 @@ import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
 import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
 import com.shangmentiyu.sportscoach.ui.theme.PrimaryButton
 import com.shangmentiyu.sportscoach.ui.theme.OutlinedDatePickerField
+import com.shangmentiyu.sportscoach.ui.theme.FloatingSnackbarHost
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
 import java.util.Locale
@@ -97,17 +99,20 @@ fun OperationScreen(
 
     var tabIndex by remember { mutableStateOf(0) }
     val snackbarHost = remember { SnackbarHostState() }
-    val toast by vm.toast.collectAsState()
+    val toast by vm.toast.collectAsStateWithLifecycle()
     LaunchedEffect(toast) {
         toast?.let { msg ->
-            snackbarHost.showSnackbar(msg)
+            snackbarHost.showSnackbar(
+                message = msg,
+                duration = SnackbarDuration.Short
+            )
             vm.clearToast()
         }
     }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        snackbarHost = { SnackbarHost(snackbarHost) },
+        snackbarHost = { FloatingSnackbarHost(snackbarHost) },
         topBar = {
             TopAppBar(
                 title = { Text("运营管理") },
@@ -147,10 +152,10 @@ fun OperationScreen(
 
 @Composable
 private fun ScheduleTab(vm: OperationViewModel) {
-    val schedules by vm.schedules.collectAsState()
-    val selectedDay by vm.selectedDay.collectAsState()
-    val weekStart by vm.weekStart.collectAsState()
-    val editing by vm.editingSchedule.collectAsState()
+    val schedules by vm.schedules.collectAsStateWithLifecycle()
+    val selectedDay by vm.selectedDay.collectAsStateWithLifecycle()
+    val weekStart by vm.weekStart.collectAsStateWithLifecycle()
+    val editing by vm.editingSchedule.collectAsStateWithLifecycle()
     // showEditDialog 控制对话框显示；isCreate 标记是新建还是编辑
     var showEditDialog by remember { mutableStateOf(false) }
     var isCreate by remember { mutableStateOf(true) }
@@ -290,8 +295,11 @@ private fun ScheduleCard(
                     )
                 }
             }
-            IconButton(onClick = onEdit) {
-                Icon(Icons.Outlined.Edit, contentDescription = "编辑", tint = MaterialTheme.colorScheme.primary)
+            TextButton(
+                onClick = onEdit,
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+            ) {
+                Text("编辑", style = MaterialTheme.typography.labelMedium, color = LightPrimary)
             }
             IconButton(onClick = onToggleActive) {
                 Icon(
@@ -300,8 +308,11 @@ private fun ScheduleCard(
                     tint = if (s.isActive) MaterialTheme.colorScheme.outline else LightPrimary
                 )
             }
-            IconButton(onClick = onDelete) {
-                Icon(Icons.Outlined.Delete, contentDescription = "删除", tint = MaterialTheme.colorScheme.error)
+            TextButton(
+                onClick = onDelete,
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+            ) {
+                Text("删除", style = MaterialTheme.typography.labelMedium, color = LightPrimary)
             }
         }
     }
@@ -311,9 +322,9 @@ private fun ScheduleCard(
 
 @Composable
 private fun PackageTab(vm: OperationViewModel) {
-    val packages by vm.packages.collectAsState()
-    val renewalAlerts by vm.renewalAlerts.collectAsState()
-    val students by vm.students.collectAsState()
+    val packages by vm.packages.collectAsStateWithLifecycle()
+    val renewalAlerts by vm.renewalAlerts.collectAsStateWithLifecycle()
+    val students by vm.students.collectAsStateWithLifecycle()
     var showAddDialog by remember { mutableStateOf(false) }
     var editingPkg by remember { mutableStateOf<LessonPackage?>(null) }
 
@@ -478,11 +489,17 @@ private fun PackageCard(
                     ) {}
                 }
             }
-            IconButton(onClick = onEdit) {
-                Icon(Icons.Outlined.Edit, contentDescription = "编辑", tint = MaterialTheme.colorScheme.primary)
+            TextButton(
+                onClick = onEdit,
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+            ) {
+                Text("编辑", style = MaterialTheme.typography.labelMedium, color = LightPrimary)
             }
-            IconButton(onClick = onDelete) {
-                Icon(Icons.Outlined.Delete, contentDescription = "删除", tint = MaterialTheme.colorScheme.error)
+            TextButton(
+                onClick = onDelete,
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+            ) {
+                Text("删除", style = MaterialTheme.typography.labelMedium, color = LightPrimary)
             }
         }
     }
@@ -678,7 +695,7 @@ private fun EditPackageDialog(
 
 @Composable
 private fun CoachTab(vm: OperationViewModel) {
-    val coaches by vm.coaches.collectAsState()
+    val coaches by vm.coaches.collectAsStateWithLifecycle()
     var showAddDialog by remember { mutableStateOf(false) }
 
     LazyColumn(
@@ -734,8 +751,11 @@ private fun CoachCard(c: Coach, vm: OperationViewModel) {
                     )
                 }
             }
-            IconButton(onClick = { vm.deleteCoach(c.name) }) {
-                Icon(Icons.Outlined.Delete, contentDescription = "删除", tint = MaterialTheme.colorScheme.error)
+            TextButton(
+                onClick = { vm.deleteCoach(c.name) },
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+            ) {
+                Text("删除", style = MaterialTheme.typography.labelMedium, color = LightPrimary)
             }
         }
     }
@@ -783,10 +803,10 @@ private fun DailyPlanTab(
         factory = AppViewModelFactory(context.applicationContext as android.app.Application)
     )
 
-    val selectedDate by vm.selectedDate.collectAsState()
-    val schedules by vm.schedules.collectAsState()
-    val lessons by vm.lessons.collectAsState()
-    val dayOfWeek by vm.dayOfWeek.collectAsState()
+    val selectedDate by vm.selectedDate.collectAsStateWithLifecycle()
+    val schedules by vm.schedules.collectAsStateWithLifecycle()
+    val lessons by vm.lessons.collectAsStateWithLifecycle()
+    val dayOfWeek by vm.dayOfWeek.collectAsStateWithLifecycle()
 
     val dayNames = mapOf(
         1 to "周一", 2 to "周二", 3 to "周三", 4 to "周四",

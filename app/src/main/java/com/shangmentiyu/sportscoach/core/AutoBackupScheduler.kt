@@ -229,31 +229,13 @@ object AutoBackupScheduler {
                 val backupFile = File(backupDir, fileName)
 
                 // 3.2 调用 BackupRepository 执行实际打包
-                // v32 优化1：注入 WebDavManager，备份成功后自动静默推送到教练私人网盘
-                // 凭证通过 EncryptedSharedPreferences 加密存储，无明文落盘风险
-                val webDavStore = com.shangmentiyu.sportscoach.data.repo.WebDavCredentialsStore(context)
-                val webDavManager = WebDavManager(context, webDavStore)
-                val backupRepo = BackupRepository(context, syncManager = null, webDavManager = webDavManager)
+                val backupRepo = BackupRepository(context)
                 val result = backupRepo.backupToCache(backupFile)
 
                 if (result.success) {
                     lastBackupAtMs = System.currentTimeMillis()
                     Log.i(TAG, "自动备份成功：${backupFile.name}（${backupFile.length() / 1024} KB）")
-                    // 3.3 v32 优化1：静默推送到 WebDAV 云盘（失败不影响主流程）
-                    // 用户在设置页配置好 WebDAV 后，每次自动备份都会同步一份到教练私人网盘
-                    // 实现"手机摔坏/电脑硬盘报废"场景下的终极异地灾备
-                    try {
-                        val pushResult = webDavManager.pushBackup(backupFile)
-                        if (pushResult.success) {
-                            Log.i(TAG, "WebDAV 云盘推送成功：${pushResult.remotePath}")
-                        } else if (pushResult.message != "WebDAV 未启用") {
-                            // 仅在已启用但失败时记录警告（未启用属于正常情况）
-                            Log.w(TAG, "WebDAV 云盘推送跳过/失败：${pushResult.message}")
-                        }
-                    } catch (e: Exception) {
-                        Log.w(TAG, "WebDAV 云盘推送异常：${e.message}")
-                    }
-                    // 3.4 清理旧备份
+                    // 3.3 清理旧备份
                     cleanupOldBackups(backupDir)
                 } else {
                     // 备份失败：删除可能生成的不完整文件

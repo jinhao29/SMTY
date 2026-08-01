@@ -49,12 +49,6 @@ class SettingsRepository(private val context: Context) {
         // 默认开启：用户在设置页可手动关闭
         // 关闭后 AutoBackupScheduler 不会触发任何自动备份，已 pending 的防抖任务会被取消
         private val KEY_AUTO_BACKUP_ENABLED = booleanPreferencesKey("auto_backup_enabled")
-
-        // === 离线语音播报开关（v31 优化3 新增） ===
-        // 默认关闭：教练在学员列表 Tab 顶部手动开启
-        // 开启后 sign() 签到时通过 VoiceAnnouncer 播报"学员 X 已签到，剩余 Y 节课"
-        // 减轻户外上课时教练眼睛负担
-        private val KEY_VOICE_MODE_ENABLED = booleanPreferencesKey("voice_mode_enabled")
     }
 
     val coach: Flow<String> = context.dataStore.data.map { it[KEY_COACH] ?: "" }
@@ -152,28 +146,6 @@ class SettingsRepository(private val context: Context) {
      */
     suspend fun setAutoBackupEnabled(value: Boolean) {
         context.dataStore.edit { it[KEY_AUTO_BACKUP_ENABLED] = value }
-    }
-
-    // === 离线语音播报开关（v31 优化3 新增） ===
-
-    /**
-     * 语音播报模式开关（Flow 形式）。
-     *
-     * - 默认关闭：DataStore 中未配置时返回 false
-     * - 开启后 [com.shangmentiyu.sportscoach.ui.home.HomeViewModel.sign]
-     *   会在签到成功时通过 VoiceAnnouncer 播报学员姓名与剩余课时
-     * - 持久化到 DataStore，应用重启后保持上次设置
-     */
-    val voiceModeEnabled: Flow<Boolean> =
-        context.dataStore.data.map { it[KEY_VOICE_MODE_ENABLED] ?: false }
-
-    /** 同步读取语音模式开关（供 HomeViewModel 初始化时使用） */
-    suspend fun getVoiceModeEnabled(): Boolean =
-        context.dataStore.data.map { it[KEY_VOICE_MODE_ENABLED] ?: false }.first()
-
-    /** 设置语音模式开关，持久化到 DataStore */
-    suspend fun setVoiceModeEnabled(value: Boolean) {
-        context.dataStore.edit { it[KEY_VOICE_MODE_ENABLED] = value }
     }
 }
 

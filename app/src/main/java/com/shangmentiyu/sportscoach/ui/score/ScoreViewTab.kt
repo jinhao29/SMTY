@@ -33,7 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -79,11 +79,11 @@ fun ScoreViewTab(onEditScore: (String) -> Unit = {}) {
         )
     )
 
-    val loading by vm.loading.collectAsState()
-    val students by vm.students.collectAsState()
-    val selectedStudent by vm.selectedStudent.collectAsState()
-    val recordsByProject by vm.recordsByProject.collectAsState()
-    val overview by vm.overview.collectAsState()
+    val loading by vm.loading.collectAsStateWithLifecycle()
+    val students by vm.students.collectAsStateWithLifecycle()
+    val selectedStudent by vm.selectedStudent.collectAsStateWithLifecycle()
+    val recordsByProject by vm.recordsByProject.collectAsStateWithLifecycle()
+    val overview by vm.overview.collectAsStateWithLifecycle()
     var pickerOpen by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<Pair<String, String>?>(null) } // (lessonId, projectName)
 
@@ -96,6 +96,8 @@ fun ScoreViewTab(onEditScore: (String) -> Unit = {}) {
         }
         return
     }
+
+    val studentNames = remember(students) { students.map { it.name } }
 
     LazyColumn(
         modifier = Modifier.fillMaxWidth(),
@@ -116,7 +118,7 @@ fun ScoreViewTab(onEditScore: (String) -> Unit = {}) {
         // 学员选择器
         item {
             StudentPicker(
-                students = students.map { it.name },
+                students = studentNames,
                 selected = selectedStudent,
                 expanded = pickerOpen,
                 onToggle = { pickerOpen = !pickerOpen },

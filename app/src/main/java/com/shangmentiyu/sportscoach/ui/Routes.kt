@@ -28,6 +28,9 @@ object Routes {
     const val BODY_METRIC = "body_metric"
     const val COACH_REPORT = "coach_report"
 
+    // === 工具类 ===
+    const val BMI_CALCULATOR = "bmi_calculator"
+
     // === 运营/排课（保留为二级页面，供主页课前准备 Tab 调用） ===
     const val OPERATION = "operation"
     const val LESSON_CHECKIN = "lesson_checkin"

@@ -175,7 +175,13 @@ class StudentRepository(
     suspend fun deleteStudent(name: String) {
         // v26 优化1：记录删除前数据用于日志
         val before = auditLog?.let { dao.getByName(name) }
-        dao.softDeleteByName(name)
+        // v44：软删除学员时，同步物理删除该学员的所有排课记录
+        // 原因：学员不再上课时，排课表里的周期性排课应同步清除，
+        // 否则今日排课数 / 未签到数角标仍会统计到该学员，造成误导
+        db?.withTransaction {
+            dao.softDeleteByName(name)
+            db.scheduleDao().deleteByStudent(name)
+        } ?: dao.softDeleteByName(name)
         // v26 优化1：记录操作日志（软删除）
         auditLog?.log(
             action = "删除学员",
@@ -186,7 +192,7 @@ class StudentRepository(
                     "weightKg" to it.weightKg, "isActive" to it.isActive
                 )
             },
-            summary = "软删除学员「$name」（数据保留可恢复）"
+            summary = "软删除学员「$name」（数据保留可恢复，排课已清除）"
         )
         // v30：删除学员属于核心数据变更，触发自动备份防抖
         AutoBackupScheduler.notifyDataChange()

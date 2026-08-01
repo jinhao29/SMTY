@@ -32,7 +32,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,11 +67,11 @@ fun TrainingPlanScreen(
         factory = AppViewModelFactory(context.applicationContext as android.app.Application)
     )
 
-    val student by vm.student.collectAsState()
-    val radar by vm.radar.collectAsState()
-    val plan by vm.plan.collectAsState()
-    val applying by vm.applying.collectAsState()
-    val appliedLessonId by vm.appliedLessonId.collectAsState()
+    val student by vm.student.collectAsStateWithLifecycle()
+    val radar by vm.radar.collectAsStateWithLifecycle()
+    val plan by vm.plan.collectAsStateWithLifecycle()
+    val applying by vm.applying.collectAsStateWithLifecycle()
+    val appliedLessonId by vm.appliedLessonId.collectAsStateWithLifecycle()
 
     LaunchedEffect(studentName) {
         vm.loadAndGenerate(studentName)

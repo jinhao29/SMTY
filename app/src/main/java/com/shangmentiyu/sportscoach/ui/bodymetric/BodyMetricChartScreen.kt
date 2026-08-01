@@ -11,9 +11,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Delete
@@ -34,7 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,12 +68,18 @@ fun BodyMetricChartScreen(onBack: () -> Unit) {
         factory = AppViewModelFactory(context.applicationContext as android.app.Application)
     )
 
-    val students by vm.students.collectAsState()
-    val selectedStudent by vm.selectedStudent.collectAsState()
-    val history by vm.history.collectAsState()
-    val delta by vm.delta.collectAsState()
+    val students by vm.students.collectAsStateWithLifecycle()
+    val selectedStudent by vm.selectedStudent.collectAsStateWithLifecycle()
+    val history by vm.history.collectAsStateWithLifecycle()
+    val delta by vm.delta.collectAsStateWithLifecycle()
 
     var showAddDialog by remember { mutableStateOf(false) }
+
+    val bmiValues = remember(history) { history.map { it.bmi } }
+    val weightValues = remember(history) { history.map { it.weightKg } }
+    val heightValues = remember(history) { history.map { it.heightCm.toFloat() } }
+    val historyDates = remember(history) { history.map { it.date } }
+    val reversedHistory = remember(history) { history.reversed() }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -101,100 +107,111 @@ fun BodyMetricChartScreen(onBack: () -> Unit) {
             }
         }
     ) { padding ->
-        Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)
-                .verticalScroll(rememberScrollState()),
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // 学员选择
-            GlassCard {
-                Text("选择学员", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(8.dp))
-                if (students.isEmpty()) {
-                    Text("暂无学员", color = MaterialTheme.colorScheme.outline)
-                } else {
-                    OutlinedTextField(
-                        value = selectedStudent,
-                        onValueChange = { vm.selectStudent(it) },
-                        label = { Text("学员姓名") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                    students.take(8).forEach { name ->
-                        Text("· $name", style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(start = 8.dp, top = 2.dp))
+            item {
+                GlassCard {
+                    Text("选择学员", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    if (students.isEmpty()) {
+                        Text("暂无学员", color = MaterialTheme.colorScheme.outline)
+                    } else {
+                        OutlinedTextField(
+                            value = selectedStudent,
+                            onValueChange = { vm.selectStudent(it) },
+                            label = { Text("学员姓名") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                        students.take(8).forEach { name ->
+                            Text("· $name", style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(start = 8.dp, top = 2.dp))
+                        }
                     }
                 }
             }
 
             if (selectedStudent.isNotBlank()) {
                 // 首末对比卡片
-                if (history.size >= 2 && delta != null) {
-                    DeltaCard(history.first(), history.last(), delta!!)
-                } else if (history.size == 1) {
-                    GlassCard {
-                        Text("当前记录", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        val r = history.first()
-                        Text("身高：${r.heightCm} cm")
-                        Text("体重：${r.weightKg} kg")
-                        Text("BMI：${"%.1f".format(r.bmi)}")
-                        Text("测量日期：${r.date}", style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.outline)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text("再添加一次测量后可查看变化曲线", style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.outline)
-                    }
-                } else {
-                    GlassCard {
-                        Box(modifier = Modifier.fillMaxWidth().height(100.dp),
-                            contentAlignment = Alignment.Center) {
-                            Text("暂无测量记录，点击右下角 + 添加", color = MaterialTheme.colorScheme.outline)
+                item {
+                    if (history.size >= 2 && delta != null) {
+                        DeltaCard(history.first(), history.last(), delta!!)
+                    } else if (history.size == 1) {
+                        GlassCard {
+                            Text("当前记录", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            val r = history.first()
+                            Text("身高：${r.heightCm} cm")
+                            Text("体重：${r.weightKg} kg")
+                            Text("BMI：${"%.1f".format(r.bmi)}")
+                            Text("测量日期：${r.date}", style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.outline)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("再添加一次测量后可查看变化曲线", style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.outline)
+                        }
+                    } else {
+                        GlassCard {
+                            Box(modifier = Modifier.fillMaxWidth().height(100.dp),
+                                contentAlignment = Alignment.Center) {
+                                Text("暂无测量记录，点击右下角 + 添加", color = MaterialTheme.colorScheme.outline)
+                            }
                         }
                     }
                 }
 
                 // BMI 曲线
                 if (history.size >= 2) {
-                    MetricChartCard(history = history, metric = "BMI",
-                        values = history.map { it.bmi },
-                        color = MaterialTheme.colorScheme.primary)
-                    MetricChartCard(history = history, metric = "体重(kg)",
-                        values = history.map { it.weightKg },
-                        color = ScoreFail)
-                    MetricChartCard(history = history, metric = "身高(cm)",
-                        values = history.map { it.heightCm.toFloat() },
-                        color = ScoreExcellent)
+                    item {
+                        MetricChartCard(dates = historyDates, metric = "BMI",
+                            values = bmiValues,
+                            color = MaterialTheme.colorScheme.primary)
+                    }
+                    item {
+                        MetricChartCard(dates = historyDates, metric = "体重(kg)",
+                            values = weightValues,
+                            color = ScoreFail)
+                    }
+                    item {
+                        MetricChartCard(dates = historyDates, metric = "身高(cm)",
+                            values = heightValues,
+                            color = ScoreExcellent)
+                    }
                 }
 
                 // 历史记录列表
                 if (history.isNotEmpty()) {
-                    GlassCard {
-                        Text("历史记录", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        history.reversed().forEach { r ->
-                            Card(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                shape = RoundedCornerShape(8.dp),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    item {
+                        GlassCard {
+                            Text("历史记录", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                    }
+                    items(reversedHistory, key = { it.id }) { r ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(r.date, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                                        Text("身高 ${r.heightCm}cm · 体重 ${r.weightKg}kg · BMI ${"%.1f".format(r.bmi)}",
-                                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
-                                        if (r.note.isNotBlank()) {
-                                            Text(r.note, style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.outline)
-                                        }
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(r.date, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                                    Text("身高 ${r.heightCm}cm · 体重 ${r.weightKg}kg · BMI ${"%.1f".format(r.bmi)}",
+                                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                                    if (r.note.isNotBlank()) {
+                                        Text(r.note, style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.outline)
                                     }
-                                    IconButton(onClick = { vm.deleteRecord(r.id) }) {
-                                        Icon(Icons.Outlined.Delete, contentDescription = "删除",
-                                            tint = MaterialTheme.colorScheme.error)
-                                    }
+                                }
+                                IconButton(onClick = { vm.deleteRecord(r.id) }) {
+                                    Icon(Icons.Outlined.Delete, contentDescription = "删除",
+                                        tint = MaterialTheme.colorScheme.error)
                                 }
                             }
                         }
@@ -259,7 +276,7 @@ private fun DeltaRow(
 
 @Composable
 private fun MetricChartCard(
-    history: List<BodyMetricHistory>,
+    dates: List<String>,
     metric: String,
     values: List<Float>,
     color: Color
@@ -270,13 +287,25 @@ private fun MetricChartCard(
         Box(
             modifier = Modifier.fillMaxWidth().height(160.dp)
         ) {
-            LineChartCanvas(values = values, dates = history.map { it.date }, color = color)
+            LineChartCanvas(values = values, dates = dates, color = color)
         }
     }
 }
 
 @Composable
 private fun LineChartCanvas(values: List<Float>, dates: List<String>, color: Color) {
+    val labelPaint = remember {
+        android.graphics.Paint().apply {
+            this.color = android.graphics.Color.parseColor("#666666")
+            textSize = 24f
+        }
+    }
+    val datePaint = remember {
+        android.graphics.Paint().apply {
+            this.color = android.graphics.Color.parseColor("#999999")
+            textSize = 20f
+        }
+    }
     Canvas(modifier = Modifier.fillMaxSize()) {
         if (values.size < 2) return@Canvas
         val min = values.min()
@@ -306,20 +335,14 @@ private fun LineChartCanvas(values: List<Float>, dates: List<String>, color: Col
             drawContext.canvas.nativeCanvas.drawText(
                 "%.1f".format(v),
                 x - 16f, y - 10f,
-                android.graphics.Paint().apply {
-                    this.color = android.graphics.Color.parseColor("#666666")
-                    textSize = 24f
-                }
+                labelPaint
             )
             // 日期标签（仅首末）
             if (i == 0 || i == values.size - 1) {
                 drawContext.canvas.nativeCanvas.drawText(
                     dates[i].substring(5),  // MM-DD
                     x - 20f, size.height - 4f,
-                    android.graphics.Paint().apply {
-                        this.color = android.graphics.Color.parseColor("#999999")
-                        textSize = 20f
-                    }
+                    datePaint
                 )
             }
         }

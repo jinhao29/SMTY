@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -50,19 +51,7 @@ class HomeViewModel(
      * 由 [com.shangmentiyu.sportscoach.ui.AppViewModelFactory] 注入。
      * null 时调用 [uploadMoment] 直接返回失败，不影响应用启动。
      */
-    private val momentUploader: com.shangmentiyu.sportscoach.core.MomentUploader? = null,
-    /**
-     * === v5 新增：备份仓储（用于"同步横幅"一键同步触发） ===
-     * 由 [com.shangmentiyu.sportscoach.ui.AppViewModelFactory] 注入。
-     * null 时调用 [triggerBackupSync] 直接返回失败，不影响应用启动。
-     */
-    private val backupRepo: com.shangmentiyu.sportscoach.data.repo.BackupRepository? = null,
-    /**
-     * === v5 新增：Application 上下文（用于触发同步时获取 cacheDir） ===
-     * 由 [com.shangmentiyu.sportscoach.ui.AppViewModelFactory] 注入。
-     * 不用于业务逻辑，仅用于生成临时备份文件路径。
-     */
-    private val app: android.app.Application? = null
+    private val momentUploader: com.shangmentiyu.sportscoach.core.MomentUploader? = null
 ) : ViewModel() {
 
     // === 修复：将 _toast 与 appExceptionHandler 提前到 init 块之前 ===
@@ -120,157 +109,6 @@ class HomeViewModel(
                     "自动归档检查失败：${e.message}")
             }
         }
-
-        // === v31 优化3：初始化全局语音播报状态 ===
-        // - 从 DataStore 异步读取上次设置
-        // - 设置到 VoiceAnnouncer 单例，sign() 调用时直接生效
-        // - 失败不影响应用启动
-        if (settingsRepo != null) {
-            safeLaunch {
-                try {
-                    val enabled = settingsRepo.getVoiceModeEnabled()
-                    com.shangmentiyu.sportscoach.util.VoiceAnnouncer.setEnabled(enabled)
-                } catch (e: Exception) {
-                    android.util.Log.w("HomeViewModel",
-                        "语音模式初始化失败：${e.message}")
-                }
-            }
-        }
-
-        // === v5 新增：启动 LAN 同步握手探测 ===
-        // 每 15 秒探测一次 PC 端 HTTP /health 端点
-        // 在线时显示绿色"双端已握手"横幅，离线时隐藏
-        startSyncHandshakeLoop()
-    }
-
-    // ============================================================
-    // === v5 新增：局域网同步握手状态（顶部横幅） ===
-    // ============================================================
-
-    /**
-     * PC 端握手状态枚举。
-     *
-     * - [Unknown]：尚未探测（应用刚启动）
-     * - [Online]：PC 端接收服务在线，可推送备份与精彩瞬间
-     * - [Offline]：PC 端不可达或未配置 IP
-     * - [Syncing]：正在执行备份并推送（短暂状态，结束后回到 [Online] 或 [Offline]）
-     */
-    enum class SyncHandshakeState {
-        Unknown, Online, Offline, Syncing
-    }
-
-    /**
-     * 同步握手状态：HomeScreen 顶部"同步横幅"据此渲染颜色与文案。
-     *
-     * 探测策略：
-     * - 每 15 秒后台调用 [MomentUploader.pingDesktop]
-     * - 失败时自动回退到 [SyncHandshakeState.Offline]
-     * - 不会阻塞 UI；探测仅在 viewModelScope 内执行，ViewModel 销毁时自动取消
-     */
-    private val _syncHandshake = MutableStateFlow(SyncHandshakeState.Unknown)
-    val syncHandshake: StateFlow<SyncHandshakeState> = _syncHandshake.asStateFlow()
-
-    /**
-     * 启动后台握手探测循环（每 15 秒一次）。
-     *
-     * 设计要点：
-     * - 使用 [kotlinx.coroutines.delay] 而非 Thread.sleep，避免阻塞线程
-     * - 单次 ping 超时 2.5 秒（[MomentUploader.pingDesktop] 内部配置）
-     * - 探测失败时设置 [SyncHandshakeState.Offline]，下次循环继续尝试
-     * - 仅当 [momentUploader] 非空时启动，否则保持 [Unknown]
-     */
-    private fun startSyncHandshakeLoop() {
-        val uploader = momentUploader ?: return
-        safeLaunch {
-            while (true) {
-                val online = try {
-                    uploader.pingDesktop()
-                } catch (_: Exception) {
-                    false
-                }
-                // Syncing 状态由 triggerBackupSync 临时设置，结束后会被覆盖
-                if (_syncHandshake.value != SyncHandshakeState.Syncing) {
-                    _syncHandshake.value =
-                        if (online) SyncHandshakeState.Online
-                        else SyncHandshakeState.Offline
-                }
-                kotlinx.coroutines.delay(15_000L)
-            }
-        }
-    }
-
-    /**
-     * 触发"一键同步"：备份到缓存 → 推送到 PC 端。
-     *
-     * 调用时机：HomeScreen 顶部"同步横幅"点击。
-     *
-     * 流程：
-     * 1. 检查 [backupRepo] 是否注入（设置页未注入时返回失败）
-     * 2. 临时设置 [SyncHandshakeState.Syncing]，UI 显示"同步中…"
-     * 3. 调用 [BackupRepository.backupToCache] 在 IO 线程生成 ZIP
-     * 4. 调用 [com.shangmentiyu.sportscoach.core.SyncManager] 推送到 PC 端
-     * 5. 推送完成后立即探测一次，更新握手状态
-     *
-     * 失败场景：
-     * - [backupRepo] 未注入
-     * - 备份失败
-     * - 推送失败（PC 端未启动 / 鉴权失败）
-     */
-    fun triggerBackupSync() {
-        val repo = backupRepo
-        if (repo == null) {
-            _toast.value = "未启用桌面同步，请在设置中配置"
-            return
-        }
-        if (_syncHandshake.value == SyncHandshakeState.Syncing) {
-            _toast.value = "正在同步中，请稍候…"
-            return
-        }
-        _syncHandshake.value = SyncHandshakeState.Syncing
-        safeLaunch {
-            try {
-                // 1. 备份到缓存目录
-                val cacheDir = app?.cacheDir
-                if (cacheDir == null) {
-                    _toast.value = "应用上下文未初始化"
-                    _syncHandshake.value = SyncHandshakeState.Offline
-                    return@safeLaunch
-                }
-                val cacheFile = java.io.File(
-                    cacheDir,
-                    "sync_${System.currentTimeMillis()}.zip"
-                )
-                val backupRes = repo.backupToCache(cacheFile)
-                if (!backupRes.success) {
-                    _toast.value = backupRes.message
-                    _syncHandshake.value = SyncHandshakeState.Offline
-                    return@safeLaunch
-                }
-                // 2. 推送到 PC 端（通过 SyncManager）
-                val pushRes = repo.pushToDesktop(
-                    android.net.Uri.fromFile(cacheFile)
-                )
-                _toast.value = if (pushRes.success) {
-                    "已同步到 PC 端"
-                } else {
-                    "本地备份成功，但推送失败：${pushRes.message}"
-                }
-                // 3. 立即探测一次
-                val online = momentUploader?.pingDesktop() ?: false
-                _syncHandshake.value =
-                    if (online) SyncHandshakeState.Online
-                    else SyncHandshakeState.Offline
-                // 4. 清理临时缓存文件
-                try {
-                    if (cacheFile.exists()) cacheFile.delete()
-                } catch (_: Exception) {
-                    // 清理失败不影响主流程
-                }
-            } catch (e: Exception) {
-                _toast.value = "同步异常：${e.message ?: "未知错误"}"
-                _syncHandshake.value = SyncHandshakeState.Offline
-            }
-        }
     }
 
     /**
@@ -297,45 +135,6 @@ class HomeViewModel(
             "上传异常：${e.message ?: "未知错误"}"
         }
     }
-
-    // ==================== v31 优化3：离线语音播报模式 ====================
-
-    /**
-     * 语音播报模式开关（持久化到 DataStore）。
-     *
-     * - 默认关闭：教练在学员列表 Tab 顶部手动开启
-     * - 开启后 [sign] 方法在签到成功后通过 VoiceAnnouncer 播报：
-     *   "学员 [姓名] 已签到，剩余 [X] 节课"
-     * - 户外场景下教练无需看屏幕即可知道签到结果与剩余课时
-     * - 设置写入 DataStore 后，应用重启自动恢复上次状态
-     */
-    val voiceModeEnabled: StateFlow<Boolean> =
-        (settingsRepo?.voiceModeEnabled ?: kotlinx.coroutines.flow.flowOf(false))
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
-
-    /**
-     * 切换语音播报模式开关。
-     *
-     * - 立即同步到 VoiceAnnouncer 单例（下一次 sign() 即时生效）
-     * - 异步持久化到 DataStore（应用重启后恢复）
-     * - 调用方：StudentListTab 顶部的 FilterChip 开关
-     */
-    fun setVoiceMode(enabled: Boolean) {
-        // 立即生效（避免 UI 点击后到 DataStore 写入完成间的延迟）
-        com.shangmentiyu.sportscoach.util.VoiceAnnouncer.setEnabled(enabled)
-        // 持久化（失败不影响本次切换）
-        if (settingsRepo == null) return
-        safeLaunch {
-            try {
-                settingsRepo.setVoiceModeEnabled(enabled)
-            } catch (e: Exception) {
-                android.util.Log.w("HomeViewModel",
-                    "语音模式持久化失败：${e.message}")
-            }
-        }
-    }
-
-
 
     val students: StateFlow<List<Student>> = studentRepo.getAllStudents()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -397,6 +196,19 @@ class HomeViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /**
+     * === 所有签到签退课时记录（供课后反馈 Tab 按日期/学员展示全部历史） ===
+     *
+     * 数据来源：lessons 表全量，按 date DESC, time DESC 排序（DAO 已保证）。
+     * 用途：课后反馈 Tab 从"仅今日"扩展为"全部历史记录"，
+     * 每条记录对应学员与日期，支持按日期分组、按学员筛选。
+     *
+     * 性能：依赖 Room Flow 自动增量更新，仅数据库变更时回流，
+     * LazyColumn 仅组合可见项，未可见项自动回收。
+     */
+    val allLessons: StateFlow<List<Lesson>> = lessonRepo.getAllLessons()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /**
      * === v28 优化6：今日排课数（用于首页 Tab 红点/数字角标） ===
      *
      * 数据来源：schedules 表中 isActive=1 且 dayOfWeek 等于今日星期几的排课。
@@ -450,6 +262,13 @@ class HomeViewModel(
             lessons.groupBy { it.studentName }
                 .mapNotNull { (name, list) -> list.minByOrNull { "${it.date} ${it.time}" }?.let { name to it } }
                 .toMap()
+        }
+        .distinctUntilChanged { old, new ->
+            if (old.size != new.size) return@distinctUntilChanged false
+            old.entries.all { (k, v) ->
+                val nv = new[k]
+                nv != null && nv.date == v.date && nv.time == v.time && nv.location == v.location
+            }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
@@ -638,20 +457,6 @@ class HomeViewModel(
                     coach = "",
                     packageId = ""  // 签到时不扣减课时包，packageId 留空
                 )
-
-                // === v31 优化3：签到成功后语音播报 ===
-                // - 受 voiceModeEnabled 开关控制
-                // - 文本格式："学员 [姓名] 已签到，剩余 [X] 节课"
-                // - 剩余课时从 remainingMap 读取（已聚合所有未到期课时包）
-                // - 失败静默忽略，不影响签到主流程
-                runCatching {
-                    if (voiceModeEnabled.value) {
-                        val remaining = remainingMap.value[studentName] ?: 0
-                        com.shangmentiyu.sportscoach.util.VoiceAnnouncer.announce(
-                            "学员 $studentName 已签到，剩余 $remaining 节课"
-                        )
-                    }
-                }
 
                 onCreated(
                     SignResult(

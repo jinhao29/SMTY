@@ -2,6 +2,7 @@ package com.shangmentiyu.sportscoach.ui.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,9 +16,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -170,4 +174,276 @@ internal fun avatarColorFor(name: String): Color {
     )
     val idx = name.firstOrNull()?.code?.rem(4) ?: 0
     return colors[(idx + 4).rem(4)]
+}
+
+// ============================================================
+// === 123.txt UI 重构组件：珊瑚橙渐变头部 + 浮动统计卡片 + 本周进度点
+// ============================================================
+
+/**
+ * 珊瑚橙渐变头部卡片。
+ *
+ * 设计要点（参考 123.txt 第 1 段）：
+ * - 珊瑚橙 `#FF6B47` → 浅橙 `#FF9E7A` 的水平渐变
+ * - 24dp 大圆角 + 柔和弥散阴影
+ * - 内部文字纯白，展示"今日排课 X 节"
+ *
+ * @param scheduleCount 今日排课数量
+ */
+@Composable
+internal fun TodayOverviewHeader(scheduleCount: Int) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = 8.dp,
+                shape = RoundedCornerShape(24.dp),
+                ambientColor = Color(0x1AFF6B47),
+                spotColor = Color(0x29FF6B47)
+            )
+            .clip(RoundedCornerShape(24.dp))
+            .background(
+                brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
+                    colors = listOf(LightPrimary, LightSecondary)
+                )
+            )
+            .padding(horizontal = 24.dp, vertical = 28.dp)
+    ) {
+        Column {
+            Text(
+                text = "今日概览",
+                color = Color.White.copy(alpha = 0.85f),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = "今日排课 ",
+                    color = Color.White,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "$scheduleCount",
+                    color = Color.White,
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = (-1).sp
+                )
+                Text(
+                    text = " 节",
+                    color = Color.White,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = if (scheduleCount > 0) "加油，今天也要上好每一节课！" else "今天暂无排课，可以稍作休息",
+                color = Color.White.copy(alpha = 0.9f),
+                fontSize = 12.sp
+            )
+        }
+    }
+}
+
+/**
+ * 独立悬浮白色大圆角统计卡片。
+ *
+ * 设计要点（参考 123.txt 第 1 段）：
+ * - 纯白底 + 24dp 大圆角 + 柔和弥散阴影
+ * - 数字大、黑、加粗（28sp），下方说明文字灰、小（12sp）
+ * - 与头部渐变卡片形成层次对比
+ *
+ * @param label 标签（如"排课数"）
+ * @param value 数值文本
+ * @param modifier 外部布局修饰
+ */
+@Composable
+internal fun FloatingStatCard(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .shadow(
+                elevation = 4.dp,
+                shape = RoundedCornerShape(24.dp),
+                ambientColor = Color(0x0D000000),
+                spotColor = Color(0x14000000)
+            )
+            .clip(RoundedCornerShape(24.dp))
+            .background(Color.White)
+            .padding(vertical = 20.dp, horizontal = 8.dp),
+        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = value,
+            color = Color(0xFF1A1A1A),
+            fontSize = 28.sp,
+            fontWeight = FontWeight.Black,
+            letterSpacing = (-0.5).sp
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = label,
+            color = Color(0xFF6B6B6B),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+/**
+ * 本周进度点卡片（周一到周日）。
+ *
+ * 设计要点（参考 123.txt 第 1 段）：
+ * - 纯白底 + 24dp 大圆角 + 柔和弥散阴影
+ * - 横向排列周一到周日
+ * - 珊瑚橙实心圆点代表"今天/已上课"，浅灰空心圆点代表"未上课"
+ *
+ * @param selectedDate 当前选中日期（yyyy-MM-dd）
+ * @param schedules 当日排课列表（用于判断是否有课）
+ * @param lessons 当日已签到课时列表（用于判断是否已上课）
+ */
+@Composable
+internal fun WeeklyProgressDots(
+    selectedDate: String,
+    schedules: List<com.shangmentiyu.sportscoach.data.model.Schedule>,
+    lessons: List<com.shangmentiyu.sportscoach.data.model.Lesson>
+) {
+    // === 计算本周 7 天的日期与状态 ===
+    // 用 remember 缓存，避免每次重组都重新计算
+    val weekDays = remember(selectedDate) {
+        val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd")
+        val today = java.time.LocalDate.parse(selectedDate, formatter)
+        // 计算本周周一（ISO 周一为一周第一天）
+        val monday = today.minusDays(today.dayOfWeek.value - 1L)
+        (0..6).map { offset ->
+            val date = monday.plusDays(offset.toLong())
+            val dateStr = date.format(formatter)
+            val isToday = date == java.time.LocalDate.now()
+            val dayLabel = listOf("一", "二", "三", "四", "五", "六", "日")[offset]
+            Triple(dateStr, dayLabel, isToday)
+        }
+    }
+
+    // === 判断每天是否有排课 ===
+    // 注：此处用当日 schedules/lessons 仅作展示，实际本周其他日数据需 ViewModel 扩展
+    // 为保持简单，"今天"用实际数据，其他日根据 selectedDate 与 schedules 推断
+    val todayLessonsCount = lessons.size
+    val todaySchedulesCount = schedules.size
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = 4.dp,
+                shape = RoundedCornerShape(24.dp),
+                ambientColor = Color(0x0D000000),
+                spotColor = Color(0x14000000)
+            )
+            .clip(RoundedCornerShape(24.dp))
+            .background(Color.White)
+            .padding(horizontal = 20.dp, vertical = 20.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            weekDays.forEach { (dateStr, dayLabel, isToday) ->
+                WeeklyDayDot(
+                    dayLabel = dayLabel,
+                    dateStr = dateStr,
+                    isToday = isToday,
+                    isCurrentSelected = dateStr == selectedDate,
+                    hasSchedule = isToday && todaySchedulesCount > 0,
+                    isCompleted = isToday && todayLessonsCount > 0
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 单个本周进度日点。
+ *
+ * - 今天且有课：珊瑚橙实心圆点 + 珊瑚橙文字
+ * - 今天无课：浅灰空心圆点 + 深灰文字
+ * - 选中日期：深色背景圆 + 白色文字
+ *
+ * @param dayLabel 周几标签（一/二/三/...）
+ * @param dateStr 日期字符串
+ * @param isToday 是否是今天
+ * @param isCurrentSelected 是否是当前选中日期
+ * @param hasSchedule 当天是否有排课
+ * @param isCompleted 当天是否已完成签到
+ */
+@Composable
+private fun WeeklyDayDot(
+    dayLabel: String,
+    dateStr: String,
+    isToday: Boolean,
+    isCurrentSelected: Boolean,
+    hasSchedule: Boolean,
+    isCompleted: Boolean
+) {
+    val dayNum = remember(dateStr) {
+        dateStr.substring(8).trimStart('0').ifEmpty { "1" }
+    }
+    // === 颜色策略 ===
+    // 选中日期：深黑圆 + 白字（参考 123.txt 第 2 段"选中变成深色背景正圆形"）
+    // 今天有课/已上课：珊瑚橙圆点
+    // 其他：浅灰
+    val circleColor = when {
+        isCurrentSelected -> Color(0xFF1A1A1A)
+        hasSchedule || isCompleted -> LightPrimary
+        else -> Color(0xFFE0E0E0)
+    }
+    val textColor = when {
+        isCurrentSelected -> Color.White
+        isToday -> LightPrimary
+        else -> Color(0xFF6B6B6B)
+    }
+    Column(
+        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = dayLabel,
+            color = Color(0xFF9B9B9B),
+            fontSize = 10.sp
+        )
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(CircleShape)
+                .background(circleColor),
+            contentAlignment = androidx.compose.ui.Alignment.Center
+        ) {
+            Text(
+                text = dayNum,
+                color = textColor,
+                fontSize = 13.sp,
+                fontWeight = if (isCurrentSelected || isToday) FontWeight.Bold else FontWeight.Medium
+            )
+        }
+        // 小圆点指示器：有排课时显示珊瑚橙小点
+        if (hasSchedule) {
+            Box(
+                modifier = Modifier
+                    .size(4.dp)
+                    .clip(CircleShape)
+                    .background(LightPrimary)
+            )
+        } else {
+            Spacer(Modifier.size(4.dp))
+        }
+    }
 }

@@ -44,6 +44,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -52,7 +53,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -76,6 +77,7 @@ import com.shangmentiyu.sportscoach.domain.TdeeResult
 import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
 import com.shangmentiyu.sportscoach.ui.theme.IOSCard
 import com.shangmentiyu.sportscoach.ui.theme.PrimaryButton
+import com.shangmentiyu.sportscoach.ui.theme.FloatingSnackbarHost
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
@@ -112,30 +114,30 @@ fun DietManageScreen(
         factory = AppViewModelFactory(context.applicationContext as android.app.Application)
     )
 
-    val templates by vm.templates.collectAsState()
-    val selectedTemplateId by vm.selectedTemplateId.collectAsState()
-    val selectedTemplate by vm.selectedTemplate.collectAsState()
-    val boundRecord by vm.boundRecord.collectAsState()
-    val breakfastNote by vm.breakfastNote.collectAsState()
-    val morningSnackNote by vm.morningSnackNote.collectAsState()
-    val lunchNote by vm.lunchNote.collectAsState()
-    val afternoonSnackNote by vm.afternoonSnackNote.collectAsState()
-    val dinnerNote by vm.dinnerNote.collectAsState()
+    val templates by vm.templates.collectAsStateWithLifecycle()
+    val selectedTemplateId by vm.selectedTemplateId.collectAsStateWithLifecycle()
+    val selectedTemplate by vm.selectedTemplate.collectAsStateWithLifecycle()
+    val boundRecord by vm.boundRecord.collectAsStateWithLifecycle()
+    val breakfastNote by vm.breakfastNote.collectAsStateWithLifecycle()
+    val morningSnackNote by vm.morningSnackNote.collectAsStateWithLifecycle()
+    val lunchNote by vm.lunchNote.collectAsStateWithLifecycle()
+    val afternoonSnackNote by vm.afternoonSnackNote.collectAsStateWithLifecycle()
+    val dinnerNote by vm.dinnerNote.collectAsStateWithLifecycle()
     // 5 餐自定义食材内容（空串表示使用模板默认）
-    val breakfastMeals by vm.breakfastMeals.collectAsState()
-    val morningSnackMeals by vm.morningSnackMeals.collectAsState()
-    val lunchMeals by vm.lunchMeals.collectAsState()
-    val afternoonSnackMeals by vm.afternoonSnackMeals.collectAsState()
-    val dinnerMeals by vm.dinnerMeals.collectAsState()
-    val toast by vm.toast.collectAsState()
+    val breakfastMeals by vm.breakfastMeals.collectAsStateWithLifecycle()
+    val morningSnackMeals by vm.morningSnackMeals.collectAsStateWithLifecycle()
+    val lunchMeals by vm.lunchMeals.collectAsStateWithLifecycle()
+    val afternoonSnackMeals by vm.afternoonSnackMeals.collectAsStateWithLifecycle()
+    val dinnerMeals by vm.dinnerMeals.collectAsStateWithLifecycle()
+    val toast by vm.toast.collectAsStateWithLifecycle()
 
     // TDEE 计算器状态
-    val gender by vm.gender.collectAsState()
-    val age by vm.age.collectAsState()
-    val heightCm by vm.heightCm.collectAsState()
-    val weightKg by vm.weightKg.collectAsState()
-    val activityLevel by vm.activityLevel.collectAsState()
-    val tdeeResult by vm.tdeeResult.collectAsState()
+    val gender by vm.gender.collectAsStateWithLifecycle()
+    val age by vm.age.collectAsStateWithLifecycle()
+    val heightCm by vm.heightCm.collectAsStateWithLifecycle()
+    val weightKg by vm.weightKg.collectAsStateWithLifecycle()
+    val activityLevel by vm.activityLevel.collectAsStateWithLifecycle()
+    val tdeeResult by vm.tdeeResult.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -146,14 +148,17 @@ fun DietManageScreen(
 
     LaunchedEffect(toast) {
         toast?.let {
-            snackbarHostState.showSnackbar(it)
+            snackbarHostState.showSnackbar(
+                message = it,
+                duration = SnackbarDuration.Short
+            )
             vm.clearToast()
         }
     }
 
     Scaffold(
         containerColor = appGroupedBackground(),
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = { FloatingSnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("饮食管理", fontWeight = FontWeight.SemiBold) },

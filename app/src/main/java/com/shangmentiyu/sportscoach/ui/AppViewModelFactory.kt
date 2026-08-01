@@ -45,8 +45,12 @@ class AppViewModelFactory(private val app: Application) : ViewModelProvider.Fact
         )
     }
     // v21 拆分：课时包与教练从 OperationRepository 独立出来，单一职责
+    // v44：注入 db + scheduleDao，启用删除课时包时级联清理排课
     val pkgRepo: com.shangmentiyu.sportscoach.data.repo.LessonPackageRepository by lazy {
-        com.shangmentiyu.sportscoach.data.repo.LessonPackageRepository(AppDatabase.getDatabase(app).lessonPackageDao())
+        val db = AppDatabase.getDatabase(app)
+        com.shangmentiyu.sportscoach.data.repo.LessonPackageRepository(
+            db.lessonPackageDao(), db, db.scheduleDao()
+        )
     }
     val coachRepo: com.shangmentiyu.sportscoach.data.repo.CoachRepository by lazy {
         com.shangmentiyu.sportscoach.data.repo.CoachRepository(AppDatabase.getDatabase(app).coachDao())
@@ -68,29 +72,13 @@ class AppViewModelFactory(private val app: Application) : ViewModelProvider.Fact
         com.shangmentiyu.sportscoach.data.repo.ScheduleMemoryRepository(AppDatabase.getDatabase(app).scheduleMemoryDao())
     }
     val backupRepo: BackupRepository by lazy {
-        // v21：注入 SyncManager，启用"备份完成自动推送到 PC 端"功能
-        val syncManager = com.shangmentiyu.sportscoach.core.SyncManager(app, settingsRepo)
-        // v32 优化1：注入 WebDavCredentialsStore 与 WebDavManager，启用"备份完成自动推送到云盘"功能
-        // 凭证使用 EncryptedSharedPreferences 加密存储，避免账号密码明文落盘
-        val webDavStore = com.shangmentiyu.sportscoach.data.repo.WebDavCredentialsStore(app)
-        val webDavManager = com.shangmentiyu.sportscoach.core.WebDavManager(app, webDavStore)
-        BackupRepository(app, syncManager, webDavManager)
-    }
-    /**
-     * === v32 优化1 新增：WebDAV 凭证加密存储 ===
-     *
-     * 独立暴露给 SettingsViewModel 等需要直接读写配置的组件。
-     * 业务参数（enabled/baseUrl/remoteDir）走普通 SP，敏感字段（username/password）
-     * 走 EncryptedSharedPreferences（基于 Android Keystore 派生主密钥）。
-     */
-    val webDavStore: com.shangmentiyu.sportscoach.data.repo.WebDavCredentialsStore by lazy {
-        com.shangmentiyu.sportscoach.data.repo.WebDavCredentialsStore(app)
+        BackupRepository(app)
     }
     /**
      * === v5 新增：精彩瞬间上传器（手机→PC 双向传输） ===
      *
-     * 与 [SyncManager] 共用同一组 PC 端 IP/Port/Token 配置，
-     * 调用桌面端 lan_plan_sender.py 的 POST /upload_moment 端点。
+     * 调用桌面端 lan_plan_sender.py 的 POST /upload_moment 端点，
+     * 复用 [settingsRepo] 中的 PC 端 IP/Port/Token 配置。
      */
     val momentUploader: com.shangmentiyu.sportscoach.core.MomentUploader by lazy {
         com.shangmentiyu.sportscoach.core.MomentUploader(app, settingsRepo)
@@ -98,17 +86,12 @@ class AppViewModelFactory(private val app: Application) : ViewModelProvider.Fact
     val dietRepo: com.shangmentiyu.sportscoach.data.repo.DietRepository by lazy {
         com.shangmentiyu.sportscoach.data.repo.DietRepository(AppDatabase.getDatabase(app).dietDao())
     }
-    /** v25 新增：训练计划图片 Repository（电脑端截图同步） */
-    val planImageRepo: com.shangmentiyu.sportscoach.data.repo.PlanImageRepository by lazy {
-        val db = AppDatabase.getDatabase(app)
-        com.shangmentiyu.sportscoach.data.repo.PlanImageRepository(db.planImageDao())
-    }
 
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         return when {
             modelClass.isAssignableFrom(com.shangmentiyu.sportscoach.ui.home.HomeViewModel::class.java) ->
-                com.shangmentiyu.sportscoach.ui.home.HomeViewModel(studentRepo, lessonRepo, opRepo, AppDatabase.getDatabase(app), settingsRepo, momentUploader, backupRepo, app) as T
+                com.shangmentiyu.sportscoach.ui.home.HomeViewModel(studentRepo, lessonRepo, opRepo, AppDatabase.getDatabase(app), settingsRepo, momentUploader) as T
             modelClass.isAssignableFrom(com.shangmentiyu.sportscoach.ui.scoring.ScoringViewModel::class.java) ->
                 com.shangmentiyu.sportscoach.ui.scoring.ScoringViewModel(lessonRepo, studentRepo) as T
             modelClass.isAssignableFrom(com.shangmentiyu.sportscoach.ui.lesson.LessonViewModel::class.java) ->
@@ -116,7 +99,7 @@ class AppViewModelFactory(private val app: Application) : ViewModelProvider.Fact
             modelClass.isAssignableFrom(com.shangmentiyu.sportscoach.ui.summary.SummaryViewModel::class.java) ->
                 com.shangmentiyu.sportscoach.ui.summary.SummaryViewModel(lessonRepo, studentRepo) as T
             modelClass.isAssignableFrom(com.shangmentiyu.sportscoach.ui.settings.SettingsViewModel::class.java) ->
-                com.shangmentiyu.sportscoach.ui.settings.SettingsViewModel(app, lessonRepo, studentRepo, settingsRepo, backupRepo, auditLogRepo, planImageRepo) as T
+                com.shangmentiyu.sportscoach.ui.settings.SettingsViewModel(app, lessonRepo, studentRepo, settingsRepo, backupRepo, auditLogRepo) as T
             modelClass.isAssignableFrom(com.shangmentiyu.sportscoach.ui.growth.GrowthViewModel::class.java) ->
                 com.shangmentiyu.sportscoach.ui.growth.GrowthViewModel(studentRepo, lessonRepo, opRepo, bodyMetricRepo) as T
             modelClass.isAssignableFrom(com.shangmentiyu.sportscoach.ui.training.TrainingPlanViewModel::class.java) ->

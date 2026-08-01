@@ -53,7 +53,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -114,9 +114,9 @@ fun SummaryScreen(
         factory = AppViewModelFactory(context.applicationContext as android.app.Application)
     )
 
-    val lesson by vm.lesson.collectAsState()
-    val student by vm.student.collectAsState()
-    val summary by vm.summary.collectAsState()
+    val lesson by vm.lesson.collectAsStateWithLifecycle()
+    val student by vm.student.collectAsStateWithLifecycle()
+    val summary by vm.summary.collectAsStateWithLifecycle()
     var snackbar by remember { mutableStateOf<String?>(null) }
     var showShareDialog by remember { mutableStateOf(false) }
 

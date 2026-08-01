@@ -34,7 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -172,9 +172,9 @@ fun LessonCheckInScreen(
         factory = AppViewModelFactory(context.applicationContext as Application)
     )
 
-    val students by vm.students.collectAsState()
-    val todayLessons by vm.todayLessons.collectAsState()
-    val remainingMap by vm.remainingMap.collectAsState()
+    val students by vm.students.collectAsStateWithLifecycle()
+    val todayLessons by vm.todayLessons.collectAsStateWithLifecycle()
+    val remainingMap by vm.remainingMap.collectAsStateWithLifecycle()
     var snackbar by remember { mutableStateOf<String?>(null) }
     var snackbarLessonId by remember { mutableStateOf<String?>(null) }
     // 已取消签到后自动跳转拍照：用户需求是正常上课结算即可，不再需要拍照

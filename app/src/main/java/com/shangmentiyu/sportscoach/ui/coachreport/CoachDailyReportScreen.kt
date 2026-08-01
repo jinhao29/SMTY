@@ -32,7 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,11 +65,11 @@ fun CoachDailyReportScreen(
         factory = AppViewModelFactory(context.applicationContext as android.app.Application)
     )
 
-    val selectedDate by vm.selectedDate.collectAsState()
-    val selectedStudent by vm.selectedStudent.collectAsState()
-    val students by vm.students.collectAsState()
-    val lessons by vm.lessons.collectAsState()
-    val stats by vm.stats.collectAsState()
+    val selectedDate by vm.selectedDate.collectAsStateWithLifecycle()
+    val selectedStudent by vm.selectedStudent.collectAsStateWithLifecycle()
+    val students by vm.students.collectAsStateWithLifecycle()
+    val lessons by vm.lessons.collectAsStateWithLifecycle()
+    val stats by vm.stats.collectAsStateWithLifecycle()
     var studentPickerExpanded by remember { mutableStateOf(false) }
 
     Scaffold(

@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- 启动屏底色：明亮模式白色，与 appBackground() 保持一致 -->
-    <color name="launch_background_light">#FFFFFFFF</color>
+    <!-- 启动屏底色：明亮模式暖白，与 appBackground()=#FAFAFA 完全一致 -->
+    <!-- 修复：之前 #FFFFFFFF 纯白与 Scaffold 暖白 #FAFAFA 色差，
+         导致系统导航栏区域露出纯白，与主背景形成"灰色方块"视觉错觉 -->
+    <color name="launch_background_light">#FFFAFAFA</color>
     <!-- 启动屏底色：深色模式纯黑，与 NightBackground 保持一致 -->
     <color name="launch_background_dark">#FF000000</color>
 </resources>

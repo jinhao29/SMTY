@@ -10,7 +10,6 @@ import com.shangmentiyu.sportscoach.core.CrashHandler
 import com.shangmentiyu.sportscoach.core.PreUpdateBackupManager
 import com.shangmentiyu.sportscoach.core.ScheduleReminderManager
 import com.shangmentiyu.sportscoach.core.UdpDesktopDiscoveryService
-import com.shangmentiyu.sportscoach.core.UdpPlanListenerService
 import com.shangmentiyu.sportscoach.data.db.AppDatabase
 import com.shangmentiyu.sportscoach.data.repo.StudentRepository
 import com.shangmentiyu.sportscoach.update.UpdateManager
@@ -66,13 +65,6 @@ class SportsCoachApp : Application() {
         // - ScheduleReminderWorker 启动时检查此标记，未打开则静默成功
         // - 必须在 ScheduleReminderManager.scheduleDailyReminder 之前调用（虽然 Worker 异步执行）
         runCatching { ScheduleReminderManager.markAppOpened(this) }
-
-        // v31 优化3：初始化全局 TTS 引擎（用于学员签到语音播报）
-        // - 主线程轻量初始化：仅创建 TextToSpeech 实例并发起 Service 连接
-        // - 实际 ready 状态由 VoiceAnnouncer 内部 AtomicBoolean 跟踪
-        // - 后续 HomeViewModel.sign() 调用 VoiceAnnouncer.announce() 时
-        //   若尚未 ready 会静默跳过，不影响签到流程
-        runCatching { com.shangmentiyu.sportscoach.util.VoiceAnnouncer.init(this) }
 
         // 关键：使用 ProcessLifecycleOwner 的 lifecycleScope 在应用前台时延迟初始化
         // 避免在 Application.onCreate 主线程同步路径上阻塞首帧渲染

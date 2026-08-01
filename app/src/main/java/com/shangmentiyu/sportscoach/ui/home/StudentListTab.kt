@@ -23,6 +23,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.graphicsLayer
+import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
+import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
+import com.shangmentiyu.sportscoach.ui.theme.appPrimary
+import com.shangmentiyu.sportscoach.ui.theme.appSurface
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -40,10 +45,10 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -53,7 +58,7 @@ import com.shangmentiyu.sportscoach.ui.theme.OutlinedDatePickerField
 import com.shangmentiyu.sportscoach.ui.theme.OutlinedTimePickerField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -93,16 +98,14 @@ fun StudentListTab(
     onHeightPrediction: (String) -> Unit = {},
     onDietManage: (String) -> Unit = {}
 ) {
-    val students by vm.students.collectAsState()
+    val students by vm.students.collectAsStateWithLifecycle()
     // === v24 优化5：使用筛选+排序后的学员列表 ===
-    val filteredStudents by vm.filteredStudents.collectAsState()
-    val remainingMap by vm.remainingMap.collectAsState()
-    val nextLessons by vm.nextLessons.collectAsState()
-    val sortBy by vm.sortBy.collectAsState()
-    val gradeFilter by vm.gradeFilter.collectAsState()
-    val nameQuery by vm.nameQuery.collectAsState()
-    // === v31 优化3：语音播报模式开关状态 ===
-    val voiceMode by vm.voiceModeEnabled.collectAsState()
+    val filteredStudents by vm.filteredStudents.collectAsStateWithLifecycle()
+    val remainingMap by vm.remainingMap.collectAsStateWithLifecycle()
+    val nextLessons by vm.nextLessons.collectAsStateWithLifecycle()
+    val sortBy by vm.sortBy.collectAsStateWithLifecycle()
+    val gradeFilter by vm.gradeFilter.collectAsStateWithLifecycle()
+    val nameQuery by vm.nameQuery.collectAsStateWithLifecycle()
 
     var deleteTarget by remember { mutableStateOf<Student?>(null) }
     // 当前正在编辑的"下一节课"，null 表示未打开修改对话框
@@ -166,9 +169,69 @@ fun StudentListTab(
                 }
             }
 
-            // 筛选栏：带展开/收起动画
+            // === 筛选栏：支持手动折叠/展开 + 滚动自动隐藏 ===
+            // 折叠状态由 filterBarVisible 控制（滚动时自动隐藏，手动按钮可强制展开）
+            // isCollapsed 控制完整筛选栏的折叠（折叠时只显示小标题行 + 展开按钮）
+            var isCollapsed by remember { mutableStateOf(true) } // 默认折叠
+
+            // 小标题行：始终显示（除非 filterBarVisible=false 滚动隐藏）
+            // 右侧折叠/展开按钮：点击切换 isCollapsed
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.screenH, vertical = Spacing.xs),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Outlined.FilterList,
+                        contentDescription = null,
+                        tint = appPrimary(),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.size(6.dp))
+                    Text(
+                        "筛选与排序",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = appOnSurface()
+                    )
+                    // 筛选激活时显示小圆点提示
+                    if (nameQuery.isNotBlank() || gradeFilter != null || sortBy != StudentSortBy.Default) {
+                        Spacer(Modifier.size(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(appPrimary())
+                        )
+                    }
+                }
+                // 折叠/展开切换按钮
+                IconButton(
+                    onClick = {
+                        isCollapsed = !isCollapsed
+                        // 手动展开时强制显示筛选栏（覆盖滚动隐藏状态）
+                        if (!isCollapsed && !filterBarVisible) filterBarVisible = true
+                    },
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        Icons.Outlined.ArrowDropDown,
+                        contentDescription = if (isCollapsed) "展开筛选栏" else "折叠筛选栏",
+                        tint = appOnSurfaceVariant(),
+                        modifier = Modifier
+                            .size(20.dp)
+                            // 展开时图标朝上，折叠时朝下
+                            .graphicsLayer(rotationZ = if (isCollapsed) 0f else 180f)
+                    )
+                }
+            }
+
+            // 完整筛选栏：折叠时隐藏，展开时带动画显示
             AnimatedVisibility(
-                visible = filterBarVisible,
+                visible = filterBarVisible && !isCollapsed,
                 enter = slideInVertically() + expandVertically(),
                 exit = slideOutVertically() + shrinkVertically()
             ) {
@@ -209,73 +272,65 @@ fun StudentListTab(
                     }
                 }
             } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    state = listState,
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                        horizontal = Spacing.screenH,
-                        vertical = Spacing.screenV
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(Spacing.sm)
-                ) {
-                    item {
-                        IosSectionHeader("学员列表（${filteredStudents.size}/${students.size}）")
-                    }
-                    // === v31 优化3：语音播报模式开关（户外签到语音播报） ===
-                    // - 默认关闭，教练在学员列表顶部手动开启
-                    // - 开启后 sign() 签到时通过 VoiceAnnouncer 播报"学员 X 已签到，剩余 Y 节课"
-                    // - 选中态使用主题色（珊瑚橙），未选中态浅灰，符合 iOS 风格
-                    item {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = Spacing.screenH, vertical = Spacing.xs),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                // === 痛点二 方案A：iOS 风格分组列表 ===
+                // 学员卡片在纯白 Surface 分组卡片内
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // 标题（在分组卡片外，iOS 风格珊瑚橙大写小标题）
+                    IosSectionHeader("学员列表（${filteredStudents.size}/${students.size}）")
+                    // === 学员卡片分组容器（纯白 + 16dp 圆角 + 极小阴影）===
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = Spacing.screenH),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        shadowElevation = 2.dp,
+                        tonalElevation = 0.dp
+                    ) {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            state = listState,
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                                start = 0.dp,
+                                end = 0.dp,
+                                top = Spacing.sm,
+                                bottom = 100.dp // 为悬浮胶囊导航留出空间，避免最后一张卡片被遮挡
+                            ),
+                            // 学员卡片之间无间距，由 0.5dp 细灰分割线分隔（iOS Grouped List 风格）
+                            verticalArrangement = Arrangement.spacedBy(0.dp)
                         ) {
-                            Text(
-                                "语音模式",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant()
-                            )
-                            FilterChip(
-                                selected = voiceMode,
-                                onClick = { vm.setVoiceMode(!voiceMode) },
-                                label = { Text(if (voiceMode) "已开启" else "已关闭") }
-                            )
+                            itemsIndexed(filteredStudents, key = { _, s -> s.name }) { idx, student ->
+                                val remaining = remainingMap[student.name] ?: -1
+                                val nextLesson = nextLessons[student.name]
+                                StudentListItem(
+                                    student = student,
+                                    remaining = remaining,
+                                    nextLesson = nextLesson,
+                                    showTopDivider = idx > 0,
+                                    onSign = {
+                                        vm.sign(student.name) { result ->
+                                            if (result.lessonId.isNotBlank()) {
+                                                onSign(result.lessonId)
+                                            }
+                                        }
+                                    },
+                                    onGrowth = { onGrowth(student.name) },
+                                    onEdit = { onEditStudent(student) },
+                                    onDelete = { deleteTarget = student },
+                                    onEditNextLesson = { editLessonTarget = nextLesson },
+                                    onHeightPrediction = { onHeightPrediction(student.name) },
+                                    onDietManage = { onDietManage(student.name) }
+                                )
+                            }
+                            // v37 修复：列表末尾追加底部安全间距
+                            item {
+                                Spacer(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(Spacing.screenV + 80.dp)
+                                )
+                            }
                         }
-                    }
-                    itemsIndexed(filteredStudents, key = { _, s -> s.name }) { idx, student ->
-                        val remaining = remainingMap[student.name] ?: -1
-                        val nextLesson = nextLessons[student.name]
-                        StudentListItem(
-                            student = student,
-                            remaining = remaining,
-                            nextLesson = nextLesson,
-                            showTopDivider = idx > 0,
-                            onSign = {
-                                vm.sign(student.name) { result ->
-                                    if (result.lessonId.isNotBlank()) {
-                                        onSign(result.lessonId)
-                                    }
-                                }
-                            },
-                            onGrowth = { onGrowth(student.name) },
-                            onEdit = { onEditStudent(student) },
-                            onDelete = { deleteTarget = student },
-                            onEditNextLesson = { editLessonTarget = nextLesson },
-                            onHeightPrediction = { onHeightPrediction(student.name) },
-                            onDietManage = { onDietManage(student.name) }
-                        )
-                    }
-                    // v37 修复：列表末尾追加底部安全间距
-                    // 防止最后一张学员卡片被底部导航栏遮挡，确保末项完整可见
-                    item {
-                        Spacer(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(Spacing.screenV + 80.dp)
-                        )
                     }
                 }
             }
@@ -366,258 +421,8 @@ private fun EditNextLessonDialog(
     )
 }
 
-@Composable
-private fun StudentListItem(
-    student: Student,
-    remaining: Int,
-    nextLesson: Lesson?,
-    showTopDivider: Boolean,
-    onSign: () -> Unit,
-    onGrowth: () -> Unit,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit,
-    onEditNextLesson: () -> Unit,
-    onHeightPrediction: () -> Unit = {},
-    onDietManage: () -> Unit = {}
-) {
-    // === v40 重构：独立卡片（圆角 16dp，纯白背景，柔和阴影，无边框，无 divider）===
-    // 参考 Plan 页课程卡片风格：头像 + 姓名/信息 + 课时徽章 + 底部三按钮对齐
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(
-                elevation = 4.dp,
-                shape = RoundedCornerShape(16.dp),
-                ambientColor = Color.Black.copy(alpha = 0.04f),
-                spotColor = Color.Black.copy(alpha = 0.08f)
-            )
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .clickable(onClick = onGrowth)
-            .padding(Spacing.md)
-    ) {
-        // === 第一行：头像 + 姓名 + 剩余课时徽章 ===
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // 头像（圆形，珊瑚橙暖色系背景）
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(avatarColorFor(student.name)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    student.name.firstOrNull()?.toString() ?: "?",
-                    color = Color.White,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            Spacer(Modifier.size(12.dp))
-
-            // 姓名（加粗黑色）
-            Text(
-                student.name,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = com.shangmentiyu.sportscoach.ui.theme.appOnSurface(),
-                modifier = Modifier.weight(1f, fill = false)
-            )
-
-            // 剩余课时胶囊徽章（右侧）
-            RemainingBadge(remaining)
-        }
-
-        // === 第二行：学校 · 年龄 · 性别 · 年级（灰色，略小）===
-        val gradeLabel = com.shangmentiyu.sportscoach.core.Standards.gradeLabel(student.grade)
-        val basicInfo = buildString {
-            if (student.school.isNotBlank()) {
-                append(student.school)
-            }
-            if (student.age > 0) {
-                if (isNotEmpty()) append(" · ")
-                append("${student.age}岁")
-            }
-            if (student.gender.isNotBlank()) {
-                if (isNotEmpty()) append(" · ")
-                append(student.gender)
-            }
-            if (gradeLabel.isNotEmpty()) {
-                if (isNotEmpty()) append(" · ")
-                append(gradeLabel)
-            }
-        }
-        if (basicInfo.isNotBlank()) {
-            Spacer(Modifier.height(6.dp))
-            Text(
-                basicInfo,
-                style = MaterialTheme.typography.bodySmall,
-                color = com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant(),
-                maxLines = 1,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-            )
-        }
-
-        // === 第三行：下一节课信息（日期时间 + 地点 + 修改入口）===
-        if (nextLesson != null) {
-            Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.Schedule, contentDescription = null,
-                    tint = com.shangmentiyu.sportscoach.ui.theme.appPrimary(),
-                    modifier = Modifier.size(14.dp))
-                Spacer(Modifier.size(4.dp))
-                Text("下一节：${nextLesson.date} ${nextLesson.time}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = com.shangmentiyu.sportscoach.ui.theme.appPrimary())
-                if (!nextLesson.location.isNullOrBlank()) {
-                    Spacer(Modifier.size(8.dp))
-                    Icon(Icons.Outlined.LocationOn, contentDescription = null,
-                        tint = com.shangmentiyu.sportscoach.ui.theme.appPrimary(),
-                        modifier = Modifier.size(14.dp))
-                    Spacer(Modifier.size(2.dp))
-                    Text(nextLesson.location,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = com.shangmentiyu.sportscoach.ui.theme.appPrimary(),
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false))
-                }
-                Spacer(Modifier.weight(1f))
-                // 修改下一节课时间入口（加大点击区到 28dp）
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(com.shangmentiyu.sportscoach.ui.theme.appPrimary().copy(alpha = 0.12f))
-                        .clickable(onClick = onEditNextLesson),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Outlined.Edit, contentDescription = "修改下一节课",
-                        tint = com.shangmentiyu.sportscoach.ui.theme.appPrimary(),
-                        modifier = Modifier.size(16.dp))
-                }
-            }
-        }
-
-        // === 第四行：身高体重BMI chips ===
-        if (student.heightCm > 0 || student.weightKg > 0f || student.bmi > 0f) {
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (student.heightCm > 0) {
-                    MetricChip("${student.heightCm}cm",
-                        com.shangmentiyu.sportscoach.ui.theme.LightPrimary)
-                }
-                if (student.weightKg > 0f) {
-                    MetricChip("${student.weightKg}kg",
-                        com.shangmentiyu.sportscoach.ui.theme.LightPrimary)
-                }
-                val bmi = if (student.bmi > 0f) student.bmi
-                          else if (student.heightCm > 0 && student.weightKg > 0f)
-                              student.weightKg / ((student.heightCm / 100f) * (student.heightCm / 100f))
-                          else 0f
-                if (bmi > 0f) {
-                    MetricChip("BMI ${"%.1f".format(bmi)}",
-                        com.shangmentiyu.sportscoach.ui.theme.LightPrimary)
-                }
-            }
-        }
-
-        // === 第五行：底部操作按钮组（编辑 / 删除 / 签到）
-        // v40 重构：三个按钮统一为"纯白底色 + 浅珊瑚橙边框 + 珊瑚橙文字"
-        // 删除按钮保持红色边框+红色文字以传达危险操作语义
-        // 按钮等宽排列在卡片底部，与其他学员卡片对齐
-        Spacer(Modifier.height(12.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // 编辑
-            CardActionButton(
-                text = "编辑",
-                onClick = onEdit,
-                modifier = Modifier.weight(1f),
-                type = CardActionType.NEUTRAL
-            )
-            // 删除
-            CardActionButton(
-                text = "删除",
-                onClick = onDelete,
-                modifier = Modifier.weight(1f),
-                type = CardActionType.DANGER
-            )
-            // 签到
-            CardActionButton(
-                text = "签到",
-                onClick = onSign,
-                modifier = Modifier.weight(1f),
-                type = CardActionType.PRIMARY
-            )
-        }
-    }
-}
-
-/**
- * 卡片底部按钮样式类型。
- * - [PRIMARY]：白底 + 浅珊瑚橙边框 + 珊瑚橙文字（主操作：签到）
- * - [NEUTRAL]：白底 + 浅灰边框 + 次级文字（中性操作：编辑）
- * - [DANGER]：白底 + 浅红边框 + 红色文字（危险操作：删除）
- */
-enum class CardActionType { PRIMARY, NEUTRAL, DANGER }
-
-/**
- * 卡片底部按钮：纯白底色 + 边框 + 文字，等宽排列。
- *
- * 设计要点：
- * - 纯白背景（无填充色），1dp 边框，圆角 10dp
- * - 充足的垂直 padding（10dp）保证 44dp 触控区
- * - 文字居中，FontWeight.Medium
- * - 与 Plan 页卡片底部按钮风格一致
- *
- * @param text 按钮文字
- * @param onClick 点击回调
- * @param type 按钮视觉类型
- * @param modifier 布局修饰符（用于 weight）
- */
-@Composable
-private fun CardActionButton(
-    text: String,
-    onClick: () -> Unit,
-    type: CardActionType,
-    modifier: Modifier = Modifier
-) {
-    val borderColor = when (type) {
-        CardActionType.PRIMARY -> com.shangmentiyu.sportscoach.ui.theme.appPrimary().copy(alpha = 0.4f)
-        CardActionType.NEUTRAL -> com.shangmentiyu.sportscoach.ui.theme.appOutline().copy(alpha = 0.5f)
-        CardActionType.DANGER -> MaterialTheme.colorScheme.error.copy(alpha = 0.4f)
-    }
-    val textColor = when (type) {
-        CardActionType.PRIMARY -> com.shangmentiyu.sportscoach.ui.theme.appPrimary()
-        CardActionType.NEUTRAL -> com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant()
-        CardActionType.DANGER -> MaterialTheme.colorScheme.error
-    }
-
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(Color.White)
-            .border(width = 1.dp, color = borderColor, shape = RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick)
-            .padding(vertical = 10.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelLarge,
-            color = textColor,
-            fontWeight = FontWeight.Medium
-        )
-    }
-}
+// === 性能优化4：StudentListItem / CardActionButton / CardActionType 已提取到独立文件 StudentListItem.kt ===
+// 拆分目的：切断重绘传播，主文件重组时学员卡片可被 Compose 编译器跳过（参数未变则不重组）
 
 // ==================== v24 优化5：学员列表筛选与排序条 ====================
 
@@ -681,58 +486,13 @@ internal fun StudentFilterBar(
             .background(MaterialTheme.colorScheme.surface)
             .padding(Spacing.md)
     ) {
-        // 第一行：筛选标题 + 计数 + 重置按钮
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                Icons.Outlined.FilterList,
-                contentDescription = null,
-                tint = com.shangmentiyu.sportscoach.ui.theme.appPrimary(),
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(Modifier.width(Spacing.sm))
-            Text(
-                text = "筛选与排序",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = com.shangmentiyu.sportscoach.ui.theme.appOnSurface()
-            )
-            Spacer(Modifier.width(Spacing.sm))
-            // 计数徽标（筛选后/总数）
-            Text(
-                text = "$filteredCount/$totalCount",
-                style = MaterialTheme.typography.labelMedium,
-                color = com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant()
-            )
-            Spacer(Modifier.weight(1f))
-            // 重置按钮（仅在有激活筛选时显示）
-            if (hasActiveFilter) {
-                TextButton(
-                    onClick = onReset,
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                        horizontal = 8.dp,
-                        vertical = 0.dp
-                    )
-                ) {
-                    Icon(
-                        Icons.Outlined.Close,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(Modifier.width(2.dp))
-                    Text(
-                        "重置",
-                        style = MaterialTheme.typography.labelMedium
-                    )
-                }
-            }
-        }
+        // === 筛选面板内容 ===
+        // 原第一行（筛选与排序标题 + 计数 + 重置）已删除：
+        // 标题已由外层折叠头统一显示，此处不再重复
+        // 计数已由下方"学员列表（x/x）"显示
+        // 重置按钮移至搜索栏行末（与 + 按钮并排）
 
-        Spacer(Modifier.height(Spacing.sm))
-
-        // 第二行：排序下拉 + 年级下拉（各占 1/2 宽度）
+        // 第一行：排序下拉 + 年级下拉（各占 1/2 宽度）
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
@@ -830,11 +590,12 @@ internal fun StudentFilterBar(
             OutlinedTextField(
                 value = nameQuery,
                 onValueChange = onNameQueryChanged,
-                label = { Text("搜索姓名") },
+                placeholder = { Text("搜索姓名", color = appOnSurfaceVariant()) },
                 leadingIcon = {
                     Icon(
                         Icons.Outlined.Search,
                         contentDescription = null,
+                        tint = appOnSurfaceVariant(),
                         modifier = Modifier.size(18.dp)
                     )
                 },
@@ -847,18 +608,52 @@ internal fun StudentFilterBar(
                             Icon(
                                 Icons.Outlined.Close,
                                 contentDescription = "清空",
+                                tint = appOnSurfaceVariant(),
                                 modifier = Modifier.size(16.dp)
                             )
                         }
                     }
                 },
                 singleLine = true,
+                shape = RoundedCornerShape(50),
+                colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = appSurface(),
+                    unfocusedContainerColor = appSurface(),
+                    focusedBorderColor = Color.Transparent,
+                    unfocusedBorderColor = Color.Transparent,
+                    cursorColor = appPrimary()
+                ),
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Text,
                     imeAction = ImeAction.Search
                 ),
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .shadow(
+                        elevation = 4.dp,
+                        shape = RoundedCornerShape(50),
+                        ambientColor = Color.Black.copy(alpha = 0.04f),
+                        spotColor = Color.Black.copy(alpha = 0.06f)
+                    )
             )
+            // 重置按钮（仅在有激活筛选时显示）：移至此处与 + 按钮并排
+            if (hasActiveFilter) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .clickable(onClick = onReset),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Outlined.Close,
+                        contentDescription = "重置筛选",
+                        tint = com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant(),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
             // 醒目实心圆形 + 按钮：主题色 #FF6B47 填充背景 + 白色图标
             // - 圆形 40dp，与搜索框等高，实心背景确保在浅色主题下清晰可见
             // - 图标 22dp，白色，视觉重量足够，用户一眼就能找到添加入口

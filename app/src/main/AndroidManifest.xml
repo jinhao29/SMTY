@@ -61,14 +61,6 @@
                 android:resource="@xml/provider_paths" />
         </provider>
 
-        <!-- v25 新增：局域网训练计划截图 UDP 监听 Service -->
-        <!-- 前台 Service，长期监听电脑端 lan_plan_sender.py 发送的 UDP 广播 -->
-        <!-- 收到广播后弹出系统通知，提示用户在设置页点击"同步电脑端截图"按钮 -->
-        <service
-            android:name=".core.UdpPlanListenerService"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
-
         <!-- v32 优化3 新增：UDP 局域网设备自动发现 Service -->
         <!-- 前台 Service，长期监听桌面端 desktop_beacon.py 发送的"在线心跳"广播 -->
         <!-- 收到广播后写入 SharedPreferences，UI 顶部状态栏显示绿色"已连接"指示灯 -->

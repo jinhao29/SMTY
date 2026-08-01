@@ -15,6 +15,10 @@ import com.shangmentiyu.sportscoach.data.model.DietTemplateEntity
 import com.shangmentiyu.sportscoach.data.model.Lesson
 import com.shangmentiyu.sportscoach.data.model.LessonPackage
 import com.shangmentiyu.sportscoach.data.model.ParentReport
+// TODO: 待确认，可能是死代码。PlanImage 实体与 PlanImageDao 已无业务调用方
+// （PlanImageRepository 已删除，LanImageReceiver 已删除）。
+// 仅为避免 Room Schema 变更导致升级用户崩溃而保留。
+// 后续若编写 Migration 删除 plan_images 表，可同步移除此 import 与 entities 中的 PlanImage::class。
 import com.shangmentiyu.sportscoach.data.model.PlanImage
 import com.shangmentiyu.sportscoach.data.model.Schedule
 import com.shangmentiyu.sportscoach.data.model.ScheduleMemory
@@ -46,6 +50,8 @@ abstract class AppDatabase : RoomDatabase() {
     /** v26 优化1 新增：操作日志 DAO（审计溯源） */
     abstract fun auditLogDao(): AuditLogDao
     /** v25 新增：训练计划图片 DAO（电脑端截图推送） */
+    // TODO: 待确认，可能是死代码。PlanImageDao 的所有方法已无业务调用方。
+    // 仅为 Room Schema 兼容保留，后续若删除 plan_images 表可同步移除。
     abstract fun planImageDao(): PlanImageDao
 
     companion object {

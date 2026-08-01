@@ -31,6 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -38,7 +39,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -56,6 +57,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shangmentiyu.sportscoach.data.model.Student
 import com.shangmentiyu.sportscoach.domain.HeightPredictionResult
 import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
+import com.shangmentiyu.sportscoach.ui.theme.FloatingSnackbarHost
 import com.shangmentiyu.sportscoach.ui.theme.BrandGradientStart
 import com.shangmentiyu.sportscoach.ui.theme.IOSCard
 import com.shangmentiyu.sportscoach.ui.theme.PrimaryButton
@@ -98,14 +100,14 @@ fun HeightPredictionScreen(
         factory = AppViewModelFactory(context.applicationContext as android.app.Application)
     )
 
-    val student by vm.studentInfo.collectAsState()
-    val fatherHeight by vm.fatherHeight.collectAsState()
-    val motherHeight by vm.motherHeight.collectAsState()
-    val avgSleepHours by vm.avgSleepHours.collectAsState()
-    val nutritionScore by vm.nutritionScore.collectAsState()
-    val sportsMinsPerWeek by vm.sportsMinsPerWeek.collectAsState()
-    val result by vm.result.collectAsState()
-    val toast by vm.toast.collectAsState()
+    val student by vm.studentInfo.collectAsStateWithLifecycle()
+    val fatherHeight by vm.fatherHeight.collectAsStateWithLifecycle()
+    val motherHeight by vm.motherHeight.collectAsStateWithLifecycle()
+    val avgSleepHours by vm.avgSleepHours.collectAsStateWithLifecycle()
+    val nutritionScore by vm.nutritionScore.collectAsStateWithLifecycle()
+    val sportsMinsPerWeek by vm.sportsMinsPerWeek.collectAsStateWithLifecycle()
+    val result by vm.result.collectAsStateWithLifecycle()
+    val toast by vm.toast.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -116,14 +118,17 @@ fun HeightPredictionScreen(
 
     LaunchedEffect(toast) {
         toast?.let {
-            snackbarHostState.showSnackbar(it)
+            snackbarHostState.showSnackbar(
+                message = it,
+                duration = SnackbarDuration.Short
+            )
             vm.clearToast()
         }
     }
 
     Scaffold(
         containerColor = appGroupedBackground(),
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = { FloatingSnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("身高预测", fontWeight = FontWeight.SemiBold) },

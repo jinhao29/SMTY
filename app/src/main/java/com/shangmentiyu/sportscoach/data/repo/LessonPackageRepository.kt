@@ -1,6 +1,10 @@
 package com.shangmentiyu.sportscoach.data.repo
 
+import androidx.room.withTransaction
+import com.shangmentiyu.sportscoach.core.AutoBackupScheduler
+import com.shangmentiyu.sportscoach.data.db.AppDatabase
 import com.shangmentiyu.sportscoach.data.db.LessonPackageDao
+import com.shangmentiyu.sportscoach.data.db.ScheduleDao
 import com.shangmentiyu.sportscoach.data.model.LessonPackage
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -25,7 +29,13 @@ import kotlinx.coroutines.sync.withLock
  * - "有效课时包"按日期过滤：purchaseDate <= dateStr <= expireDate，
  *   修复了"7.24 买的课被排到 7.20"的数据流错误。
  */
-class LessonPackageRepository(private val pkgDao: LessonPackageDao) {
+class LessonPackageRepository(
+    private val pkgDao: LessonPackageDao,
+    // v44：可选注入 db 与 scheduleDao，启用删除课时包时级联清理排课
+    // 未注入时（兼容旧调用方）仅删除课时包本身，不清理排课
+    private val db: AppDatabase? = null,
+    private val scheduleDao: ScheduleDao? = null
+) {
 
     /**
      * 消课结果：携带扣减的课时包信息，供上层记录到 Lesson 表与 UI 反馈。
@@ -72,7 +82,42 @@ class LessonPackageRepository(private val pkgDao: LessonPackageDao) {
     suspend fun getPkgById(id: String): LessonPackage? = pkgDao.getById(id)
     suspend fun addPackage(pkg: LessonPackage) = pkgDao.insert(pkg)
     suspend fun updatePackage(pkg: LessonPackage) = pkgDao.update(pkg)
-    suspend fun deletePackage(id: String) = pkgDao.deleteById(id)
+
+    /**
+     * 删除课时包：事务级联清理该学员名下所有排课记录。
+     *
+     * v44 修复：原实现仅删除课时包本身，导致学员"不上课了"后排课表仍有残留，
+     * 今日排课数 / 未签到角标仍会统计到该学员。
+     *
+     * 级联策略：
+     * 1. 先查询课时包拿到 studentName（删除后无法再查）
+     * 2. 在单事务内删除课时包 + 按 studentName 物理删除排课
+     * 3. 未注入 db/scheduleDao 时降级为仅删除课时包（兼容旧调用方）
+     *
+     * 注意：这里删除的是该学员所有排课，而非仅与该课时包关联的排课。
+     * 原因：Schedule 表与 LessonPackage 是软关联（无外键），
+     * 一个学员通常只有一个活跃课时包，删包即代表该学员不再上课。
+     */
+    suspend fun deletePackage(id: String) {
+        // 先查到 studentName 用于级联清理（删后无法再查）
+        val pkg = pkgDao.getById(id)
+        val database = db
+        val scheduleDaoLocal = scheduleDao
+        if (database == null || scheduleDaoLocal == null) {
+            // 兼容旧调用方：仅删除课时包本身
+            pkgDao.deleteById(id)
+            AutoBackupScheduler.notifyDataChange()
+            return
+        }
+        database.withTransaction {
+            pkgDao.deleteById(id)
+            // 仅当能查到学员姓名时才级联清理，避免空删除
+            pkg?.studentName?.takeIf { it.isNotBlank() }?.let { studentName ->
+                scheduleDaoLocal.deleteByStudent(studentName)
+            }
+        }
+        AutoBackupScheduler.notifyDataChange()
+    }
 
     /**
      * 消耗一次课时：找到该学员最早购买且仍有余额的活跃课程包，usedLessons + 1。

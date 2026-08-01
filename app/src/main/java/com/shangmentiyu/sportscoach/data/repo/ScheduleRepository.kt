@@ -132,7 +132,9 @@ class ScheduleRepository(
         contentImages: List<String> = emptyList(),
         color: String = "blue",
         note: String = "",
-        equipment: List<String> = emptyList()
+        equipment: List<String> = emptyList(),
+        endDate: String = "",
+        startDate: String = ""
     ): String {
         // 冲突检测：新建场景无需排除自身
         checkCoachConflict(coachName, dayOfWeek, startTime, excludeScheduleId = null)
@@ -145,7 +147,10 @@ class ScheduleRepository(
             durationMinutes = durationMinutes,
             location = location,
             lessonType = lessonType,
-            startDate = todayDateStr(),
+            // startDate：优先使用传入值（按课时包排课传购买日），
+            // 未传时回退到今天（手动排课原行为）
+            startDate = startDate.ifBlank { todayDateStr() },
+            endDate = endDate,
             isLongTerm = isLongTerm,
             content = contentToJson(content),
             contentImages = imagesToJson(contentImages),
@@ -296,6 +301,60 @@ class ScheduleRepository(
         dao.deleteById(id)
         // v30：删除排课属于核心数据变更，触发自动备份防抖
         AutoBackupScheduler.notifyDataChange()
+    }
+
+    /**
+     * 批量删除多条排课（多选模式批量删除使用）。
+     *
+     * 使用 [ScheduleDao.deleteByIds] 单条 SQL 删除，避免循环调用 [deleteSchedule]
+     * 产生多次数据库往返与多次自动备份触发。
+     *
+     * 空列表保护：[ScheduleDao.deleteByIds] 的 IN 子句在空列表时会被 Room
+     * 编译为 `IN ()` 导致语法错误，这里在 Repository 层提前拦截。
+     *
+     * @param ids 待删除的排课 ID 列表
+     * @return 实际删除的记录数（用于 UI 反馈）
+     */
+    suspend fun deleteSchedules(ids: List<String>): Int {
+        if (ids.isEmpty()) return 0
+        dao.deleteByIds(ids)
+        // v30：批量删除属于核心数据变更，触发一次自动备份防抖
+        AutoBackupScheduler.notifyDataChange()
+        return ids.size
+    }
+
+    /**
+     * === 按课时包排课：清理购买日之前的排课记录 ===
+     *
+     * 删除该学员 startDate < purchaseDate 的排课记录。
+     * 用于 [OperationViewModel.autoScheduleFromPackage] 调用时自动对齐数据：
+     * 课时包 7.24 购买，则 7.24 之前的排课视为无效，自动清理。
+     *
+     * @param studentName 学员姓名
+     * @param purchaseDate 购买日（yyyy-MM-dd）
+     * @return 实际删除的记录数
+     */
+    suspend fun deleteSchedulesBeforeDate(studentName: String, purchaseDate: String): Int {
+        val deleted = dao.deleteSchedulesBeforeDate(studentName, purchaseDate)
+        if (deleted > 0) {
+            AutoBackupScheduler.notifyDataChange()
+        }
+        return deleted
+    }
+
+    /**
+     * 按学员删除所有排课记录（不影响课时包数据）。
+     * 用于周课表页面快速清理某学员的所有排课。
+     *
+     * @param studentName 学员姓名
+     * @return 实际删除的记录数
+     */
+    suspend fun deleteAllSchedulesByStudent(studentName: String): Int {
+        val deleted = dao.deleteByStudent(studentName)
+        if (deleted > 0) {
+            AutoBackupScheduler.notifyDataChange()
+        }
+        return deleted
     }
 
     /**

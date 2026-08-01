@@ -27,6 +27,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -34,7 +35,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,6 +50,7 @@ import com.shangmentiyu.sportscoach.data.model.ParentReport
 import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
 import com.shangmentiyu.sportscoach.ui.theme.GlassCard
 import com.shangmentiyu.sportscoach.ui.theme.GlassSectionTitle
+import com.shangmentiyu.sportscoach.ui.theme.FloatingSnackbarHost
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
 
@@ -61,16 +63,19 @@ fun ParentReportScreen(onBack: () -> Unit) {
     val vm: ParentReportViewModel = viewModel(
         factory = AppViewModelFactory(LocalContextProvider())
     )
-    val students by vm.students.collectAsState()
-    val reports by vm.reports.collectAsState()
-    val selectedStudent by vm.selectedStudent.collectAsState()
-    val viewingReport by vm.viewingReport.collectAsState()
-    val toast by vm.toast.collectAsState()
+    val students by vm.students.collectAsStateWithLifecycle()
+    val reports by vm.reports.collectAsStateWithLifecycle()
+    val selectedStudent by vm.selectedStudent.collectAsStateWithLifecycle()
+    val viewingReport by vm.viewingReport.collectAsStateWithLifecycle()
+    val toast by vm.toast.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(toast) {
         toast?.let {
-            snackbarHostState.showSnackbar(it)
+            snackbarHostState.showSnackbar(
+                message = it,
+                duration = SnackbarDuration.Short
+            )
             vm.consumeToast()
         }
     }
@@ -79,7 +84,7 @@ fun ParentReportScreen(onBack: () -> Unit) {
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = { FloatingSnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("家长服务", fontWeight = FontWeight.Bold) },

@@ -26,7 +26,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,6 +44,7 @@ import com.shangmentiyu.sportscoach.core.Std
 import com.shangmentiyu.sportscoach.core.Standards
 import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
 import com.shangmentiyu.sportscoach.ui.scoring.ScoringViewModel
+import com.shangmentiyu.sportscoach.ui.theme.FloatingSnackbarHost
 import com.shangmentiyu.sportscoach.ui.theme.GlassCard
 import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
 import com.shangmentiyu.sportscoach.ui.theme.ScoreFail
@@ -65,11 +66,11 @@ fun ScoreInputTab() {
         factory = AppViewModelFactory(context.applicationContext as android.app.Application)
     )
 
-    val students by vm.students.collectAsState()
-    val selectedStudent by vm.selectedStudent.collectAsState()
-    val standards by vm.standards.collectAsState()
-    val scoreInputs by vm.scoreInputs.collectAsState()
-    val scoreResults by vm.scoreResults.collectAsState()
+    val students by vm.students.collectAsStateWithLifecycle()
+    val selectedStudent by vm.selectedStudent.collectAsStateWithLifecycle()
+    val standards by vm.standards.collectAsStateWithLifecycle()
+    val scoreInputs by vm.scoreInputs.collectAsStateWithLifecycle()
+    val scoreResults by vm.scoreResults.collectAsStateWithLifecycle()
     var studentExpanded by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -153,7 +154,7 @@ fun ScoreInputTab() {
                 }
             }
         }
-        SnackbarHost(
+        FloatingSnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier.align(Alignment.BottomCenter)
         )

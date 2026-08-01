@@ -558,12 +558,46 @@ class OperationViewModel(
                     longTerm.filter { it.dayOfWeek == dayOfWeek }.forEach { sched ->
                         if (!sched.isLongTerm) return@forEach  // Bug 2 核心修复点
 
+                        // === endDate 边界检查（按课时包排课的终止日期）===
+                        // AutoScheduleFromPackage 创建的 Schedule 携带 endDate 字段，
+                        // 表示"排到课时上完那一周为止"。超过 endDate 后必须停止生成新课时，
+                        // 否则课时包已用尽但排课无限继续（用户报告的"排课依旧无限次数"Bug）。
+                        // endDate 为空表示永久长期排课（原行为，不受影响）。
+                        if (sched.endDate.isNotBlank() && dateStr > sched.endDate) {
+                            return@forEach
+                        }
+
+                        // === startDate 购买日检查（购买当日之前不允许排课）===
+                        // AutoScheduleFromPackage 创建的 Schedule 携带 startDate 字段（=购买日），
+                        // 购买日之前的日期不生成 Lesson，确保"购买当日之前所有日期不允许排课"。
+                        // startDate 为空表示旧数据或手动排课，不受此约束（向后兼容）。
+                        if (sched.startDate.isNotBlank() && dateStr < sched.startDate) {
+                            return@forEach
+                        }
+
                         // 查重：同一学员+日期+时间已有记录则跳过
                         if (opRepo.hasLessonForScheduleOnDate(sched.studentName, dateStr, sched.startTime)) {
                             return@forEach
                         }
-                        // === Bug 1 修复（长期排课生成阶段）===
-                        // 余额检查：今天及以后日期必须满足
+
+                        // === 有 endDate 的 Schedule：跳过余额检查，直接生成 ===
+                        // AutoScheduleFromPackage 创建的 Schedule 携带 endDate 字段，
+                        // endDate 已通过 AutoScheduleCalculator 基于剩余课时精确计算，
+                        // endDate 之前生成的 Lesson 数量 = 创建时的 remainingLessons。
+                        // 跳过余额检查的原因：
+                        //   1. 余额检查中的 activePkgs 是缓存值，签退后不更新，
+                        //      可能错误阻止 endDate 之前生成 Lesson
+                        //   2. endDate 已保证数量正确，无需余额检查二次限制
+                        //   3. "每排一天自动少一节课"由 endDate 边界检查实现：
+                        //      超过 endDate 后不再生成 = 课时用完
+                        // 无 endDate 的 Schedule（永久长期排课）继续使用余额检查。
+                        if (sched.endDate.isNotBlank()) {
+                            opRepo.generateLongTermLesson(sched, dateStr)
+                            return@forEach
+                        }
+
+                        // === 无 endDate 的永久长期排课：余额检查 ===
+                        // 今天及以后日期必须满足
                         // 1. 有有效课时包（purchaseDate <= dateStr <= expireDate）
                         //    → 避免学员 7.24 买的课被排到 7.20
                         // 2. 有效课时包剩余 > 从 dateStr 起长期自动未签退的课时数
@@ -715,6 +749,194 @@ class OperationViewModel(
     }
 
     /**
+     * 批量删除多条排课（多选模式批量删除使用）。
+     *
+     * 委托 [ScheduleRepository.deleteSchedules] 在单条 SQL 内完成删除，
+     * 仅触发一次自动备份防抖。删除完成后通过 [_toast] 反馈删除数量。
+     *
+     * @param ids 待删除的排课 ID 列表
+     */
+    fun deleteSchedules(ids: List<String>) {
+        if (ids.isEmpty()) {
+            _toast.value = "未选择任何课程"
+            return
+        }
+        safeLaunch {
+            val count = scheduleRepo.deleteSchedules(ids)
+            _toast.value = "已删除 $count 条排课"
+        }
+    }
+
+    /**
+     * 按学员删除所有排课记录（不影响课时包数据）。
+     * 仅删除 Schedule 表记录，不删除 LessonPackage。
+     *
+     * @param studentName 学员姓名
+     */
+    fun deleteAllSchedulesByStudent(studentName: String) {
+        safeLaunch {
+            try {
+                val deleted = scheduleRepo.deleteAllSchedulesByStudent(studentName)
+                _toast.value = if (deleted > 0) {
+                    "已删除 ${studentName} 的 $deleted 条排课记录"
+                } else {
+                    "学员 ${studentName} 暂无排课记录"
+                }
+            } catch (e: Exception) {
+                _toast.value = "删除排课失败：${e.message ?: e.javaClass.simpleName}"
+            }
+        }
+    }
+
+    /**
+     * 按课时包自动排课：根据课包剩余课时与选中的多个周几，批量创建多条长期排课记录。
+     *
+     * 业务规则：
+     * - 排课起始日期 = max(今天, 课包购买日)（保证不排过去日期，且尊重课包购买时间）
+     * - 每个选中的周几创建一条 Schedule 记录，isLongTerm=true
+     * - 每条 Schedule 的 endDate = 该周几在课时包用完那一周内的最后一次上课日期
+     * - 若课包有 expireDate 且计算出的某 endDate 超过 expireDate，则拒绝本次排课并提示
+     *
+     * 课时消耗机制：
+     * - Schedule.isLongTerm=true 触发 [ensureLongTermLessonsForWeek] 每周自动生成 Lesson
+     * - Lesson 签到时通过 [LessonPackageRepository.consumeLesson] 扣减课时
+     * - 余额耗尽后 [ensureLongTermLessonsForWeek] 自动停止生成（依赖 countLongTermPendingFrom 余额检查）
+     * - endDate 字段作为额外保险，未来可用于 UI 标识"排课结束日期"
+     *
+     * @param packageId 课时包 ID
+     * @param coachName 教练姓名
+     * @param daysOfWeek 选中的周几集合（1=周一 ... 7=周日），不可为空
+     * @param startTime 上课时间 HH:mm
+     * @param durationMinutes 单次时长（分钟）
+     * @param location 上课地点
+     * @param lessonType 课程类型
+     */
+    fun autoScheduleFromPackage(
+        packageId: String,
+        coachName: String,
+        daysOfWeek: Set<Int>,
+        startTime: String,
+        durationMinutes: Int = 60,
+        location: String = "",
+        lessonType: String = "训练课"
+    ) {
+        if (daysOfWeek.isEmpty()) {
+            _toast.value = "请至少选择一个上课日"
+            return
+        }
+        if (startTime.isBlank()) {
+            _toast.value = "请填写上课时间"
+            return
+        }
+        safeLaunch {
+            try {
+                val pkg = withContext(Dispatchers.IO) { pkgRepo.getPkgById(packageId) }
+                if (pkg == null) {
+                    _toast.value = "课时包不存在"
+                    return@safeLaunch
+                }
+                if (pkg.remainingLessons <= 0) {
+                    _toast.value = "课时包已无剩余课时"
+                    return@safeLaunch
+                }
+                if (pkg.status != "活跃") {
+                    _toast.value = "课时包状态为「${pkg.status}」，无法排课"
+                    return@safeLaunch
+                }
+
+                // 排课起始日期：取今天与课包购买日的较大值
+                val today = LocalDate.now()
+                val purchaseDate = try {
+                    LocalDate.parse(pkg.purchaseDate, dateFormatter)
+                } catch (_: Exception) {
+                    today
+                }
+                val startDate = if (today.isAfter(purchaseDate)) today else purchaseDate
+
+                // 课包过期日（可空）
+                val expireDate = if (pkg.expireDate.isNotBlank()) {
+                    try { LocalDate.parse(pkg.expireDate, dateFormatter) } catch (_: Exception) { null }
+                } else null
+                if (expireDate != null && startDate.isAfter(expireDate)) {
+                    _toast.value = "课时包已过期，无法排课"
+                    return@safeLaunch
+                }
+
+                // === 自动对齐数据：清理购买日之前的排课记录 ===
+                // 课时包 7.24 购买，则 7.24 之前的排课视为无效，自动清理。
+                // 这确保"购买当日之前所有日期不允许排课"的约束。
+                val deletedCount = scheduleRepo.deleteSchedulesBeforeDate(
+                    pkg.studentName, purchaseDate.format(dateFormatter)
+                )
+
+                // 调用纯逻辑计算器：计算每个周几的最后一次上课日期
+                val endDates = com.shangmentiyu.sportscoach.core.AutoScheduleCalculator
+                    .calculateEndDates(startDate, pkg.remainingLessons, daysOfWeek)
+
+                if (endDates.isEmpty()) {
+                    _toast.value = "排课计算失败：剩余课时或参数异常"
+                    return@safeLaunch
+                }
+
+                // 过期日校验：任一 endDate 超过 expireDate 则拒绝整批排课（避免课包部分上完后无课可扣）
+                if (expireDate != null) {
+                    val overflow = endDates.values.firstOrNull { it.isAfter(expireDate) }
+                    if (overflow != null) {
+                        _toast.value = "剩余 ${pkg.remainingLessons} 节课时无法在有效期内排完（到期日 ${pkg.expireDate}）"
+                        return@safeLaunch
+                    }
+                }
+
+                // 按周几顺序逐条创建 Schedule 记录
+                // 教练时间冲突由 addSchedule 内部的 checkCoachConflict 检测：
+                // - 同教练 + 同 dayOfWeek + 同 startTime 的旧排课会触发 CoachConflictException
+                // - 多个 dayOfWeek 之间互不冲突（同教练不同时段视为合法）
+                val coachKey = coachName.ifBlank { "默认教练" }
+                memoryRepo.saveMemory(coachKey, "time", startTime.trim())
+                if (location.isNotBlank()) {
+                    memoryRepo.saveMemory(coachKey, "location", location.trim())
+                }
+                daysOfWeek.sorted().forEach { dow ->
+                    memoryRepo.saveMemory(coachKey, "dayOfWeek", dow.toString())
+                }
+
+                var createdCount = 0
+                for (dow in daysOfWeek.sorted()) {
+                    val endDate = endDates[dow] ?: continue
+                    try {
+                        scheduleRepo.addSchedule(
+                            studentName = pkg.studentName,
+                            coachName = coachName,
+                            dayOfWeek = dow,
+                            startTime = startTime,
+                            durationMinutes = durationMinutes,
+                            location = location,
+                            lessonType = lessonType,
+                            isLongTerm = true,
+                            endDate = endDate.format(dateFormatter),
+                            // startDate = 购买日，确保购买日之前不生成 Lesson
+                            startDate = purchaseDate.format(dateFormatter)
+                        )
+                        createdCount++
+                    } catch (e: CoachConflictException) {
+                        // 单个周几冲突时跳过，继续创建其他周几
+                        _toast.value = "周${dow} ${startTime} 教练时段冲突，已跳过"
+                    }
+                }
+
+                _toast.value = if (createdCount == 0) {
+                    "全部周几排课均失败，请检查教练时段冲突"
+                } else {
+                    val cleanHint = if (deletedCount > 0) "，已清理 $deletedCount 条购买日前旧排课" else ""
+                    "已为 ${pkg.studentName} 创建 $createdCount 条排课（共 ${pkg.remainingLessons} 节课时）$cleanHint"
+                }
+            } catch (e: Exception) {
+                _toast.value = "排课失败：${e.message ?: e.javaClass.simpleName}"
+            }
+        }
+    }
+
+    /**
      * 清空所有排课记录（课表管理"清空全部"功能）。
      * 删除 schedules 表全部数据，不影响已签到的课时记录（lessons 表）。
      *
@@ -816,7 +1038,7 @@ class OperationViewModel(
     fun deletePackage(id: String) {
         safeLaunch {
             pkgRepo.deletePackage(id)
-            _toast.value = "已删除"
+            _toast.value = "已删除课时包，关联排课已同步清除"
         }
     }
 

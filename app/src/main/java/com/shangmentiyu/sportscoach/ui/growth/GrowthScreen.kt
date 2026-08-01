@@ -39,7 +39,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -116,23 +116,23 @@ fun GrowthScreen(
         factory = AppViewModelFactory(context.applicationContext as android.app.Application)
     )
 
-    val student by vm.student.collectAsState()
-    val lessons by vm.lessons.collectAsState()
-    val scores by vm.scores.collectAsState()
-    val latestScores by vm.latestScores.collectAsState()
-    val personalBests by vm.personalBests.collectAsState()
-    val stats by vm.stats.collectAsState()
-    val archiveToast by vm.archiveToast.collectAsState()
+    val student by vm.student.collectAsStateWithLifecycle()
+    val lessons by vm.lessons.collectAsStateWithLifecycle()
+    val scores by vm.scores.collectAsStateWithLifecycle()
+    val latestScores by vm.latestScores.collectAsStateWithLifecycle()
+    val personalBests by vm.personalBests.collectAsStateWithLifecycle()
+    val stats by vm.stats.collectAsStateWithLifecycle()
+    val archiveToast by vm.archiveToast.collectAsStateWithLifecycle()
     // === v10 终极架构：5 维能力雷达 ===
-    val radar by vm.radar.collectAsState()
+    val radar by vm.radar.collectAsStateWithLifecycle()
 
     // === v28 优化2：PDF 报告生成状态 ===
-    val isGenerating by vm.isGenerating.collectAsState()
-    val reportUri by vm.reportUri.collectAsState()
-    val reportToast by vm.reportToast.collectAsState()
+    val isGenerating by vm.isGenerating.collectAsStateWithLifecycle()
+    val reportUri by vm.reportUri.collectAsStateWithLifecycle()
+    val reportToast by vm.reportToast.collectAsStateWithLifecycle()
 
     // === v31 优化4：家长端加密 PDF 分享状态 ===
-    val parentShareResult by vm.parentShareResult.collectAsState()
+    val parentShareResult by vm.parentShareResult.collectAsStateWithLifecycle()
     // 家长姓名输入对话框
     var showParentDialog by remember { mutableStateOf(false) }
     // 密码展示 + 一键微信发送对话框
@@ -228,6 +228,8 @@ fun GrowthScreen(
             )
         }
     ) { padding ->
+        val grouped = remember(lessons) { lessons.groupBy { it.date.take(7) }.toSortedMap(reverseOrder()) }
+
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -305,7 +307,6 @@ fun GrowthScreen(
                 item {
                     IosSectionHeader(text = "训练历程")
                 }
-                val grouped = lessons.groupBy { it.date.take(7) }.toSortedMap(reverseOrder())
                 grouped.forEach { (month, lessonsInMonth) ->
                     item(key = "month_header_$month") {
                         Text(
@@ -317,9 +318,9 @@ fun GrowthScreen(
                         )
                     }
                     item(key = "month_group_$month") {
+                        val sortedLessons = remember(lessonsInMonth) { lessonsInMonth.sortedByDescending { it.date } }
                         IosGroupedListCard {
-                            lessonsInMonth
-                                .sortedByDescending { it.date }
+                            sortedLessons
                                 .forEachIndexed { index, lesson ->
                                     HistoryRow(
                                         lesson = lesson,

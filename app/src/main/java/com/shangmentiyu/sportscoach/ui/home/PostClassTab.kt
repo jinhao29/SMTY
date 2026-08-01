@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -51,7 +53,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -84,11 +86,13 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * 课后反馈 Tab：展示今日已签到课时列表，支持查看签到图片、
- * 教练寄语、课堂表现，并支持分享到微信。
+ * 课后反馈 Tab：展示**全部历史签到签退记录**，按日期分组、对应学员对应日期，
+ * 支持查看签到图片、教练寄语、课堂表现，并支持分享到微信。
  *
- * 增强功能：
- * - 学员筛选：顶部 FilterChip 行，点击学员名筛选对应课时
+ * 设计要点（v46：从"仅今日"扩展为"全部历史记录"）：
+ * - 数据源：[HomeViewModel.allLessons]（lessons 表全量，date DESC/time DESC 排序）
+ * - 按日期分组：每个日期作为 SectionHeader，下方罗列当日所有学员的签到签退记录
+ * - 学员筛选：顶部 FilterChip 行，点击学员名筛选对应课时（跨日期）
  * - 内联编辑：每张课时卡片可展开编辑课时详情（类型/教练/时长/地点/出勤）
  *   与课堂反馈（寄语/表现/态度），自动持久化
  * - 删除课时：每张卡片右上角删除按钮，二次确认后删除
@@ -112,7 +116,7 @@ fun PostClassTab(
     onOperation: () -> Unit
 ) {
     val context = LocalContext.current
-    val todayLessons by vm.todayLessons.collectAsState()
+    val allLessons by vm.allLessons.collectAsStateWithLifecycle()
 
     // 学员筛选状态：null=全部，否则按学员名筛选
     var selectedStudent by remember { mutableStateOf<String?>(null) }
@@ -122,111 +126,162 @@ fun PostClassTab(
     var deletingLessonId by remember { mutableStateOf<String?>(null) }
     var deletingLessonName by remember { mutableStateOf("") }
 
-    // 筛选后的课时列表
-    val filteredLessons = remember(todayLessons, selectedStudent) {
-        if (selectedStudent == null) todayLessons
-        else todayLessons.filter { it.studentName == selectedStudent }
+    // 筛选后的课时列表（按学员筛选，保留全部历史日期）
+    val filteredLessons = remember(allLessons, selectedStudent) {
+        if (selectedStudent == null) allLessons
+        else allLessons.filter { it.studentName == selectedStudent }
     }
 
-    // 今日涉及的学员名集合（用于筛选 Chip）
-    val todayStudents = remember(todayLessons) {
-        todayLessons.map { it.studentName }.distinct()
+    // 按日期分组：日期降序（最近在前），同一日期内课时已按 time DESC 排序
+    // 每条记录对应"学员+日期"，通过日期 SectionHeader 体现"对应日期"
+    val groupedByDate: List<Pair<String, List<Lesson>>> = remember(filteredLessons) {
+        filteredLessons
+            .groupBy { it.date }
+            .toList()
+            .sortedByDescending { it.first }
     }
 
-    Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+    // 全部历史涉及的学员名集合（用于筛选 Chip，跨日期）
+    val allStudents = remember(allLessons) {
+        allLessons.map { it.studentName }.distinct()
+    }
+
+    // 日期格式化：YYYY-MM-DD → yyyy年MM月dd日 周X
+    val dateFmt = remember {
+        java.time.format.DateTimeFormatter.ofPattern("yyyy年MM月dd日", java.util.Locale.getDefault())
+    }
+    val weekDayNames = remember {
+        listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
+    }
+
+    // 缓存概览统计数据，避免 allLessons 变化时重复 4 次 O(n) 遍历
+    val totalRecords = remember(allLessons) { allLessons.size }
+    val signedOutCount = remember(allLessons) { allLessons.count { it.signOutTime.isNotBlank() } }
+    val withNoteCount = remember(allLessons) { allLessons.count { it.coachComment.isNotBlank() } }
+    val withContentCount = remember(allLessons) { allLessons.count { it.content.isNotBlank() && it.content != "[]" } }
+
+    // === 性能优化 H3+M5：改用 LazyColumn ===
+    // 原 Column + verticalScroll + forEach 一次性把所有 PostClassLessonCard 组合进树，
+    // 每张卡片展开后含 10+ OutlinedTextField、多个 ExposedDropdownMenuBox、Slider，
+    // 课时数多时组合开销极大。LazyColumn 仅组合屏幕可见卡片，未可见的自动回收。
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
             .padding(horizontal = Spacing.screenH, vertical = Spacing.screenV),
+        // 悬浮底栏避让
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 160.dp),
         verticalArrangement = Arrangement.spacedBy(Spacing.md)
     ) {
-        // 今日概览
-        IosCard {
-            Column(modifier = Modifier.padding(Spacing.md)) {
-                Text("今日课后反馈", style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(Spacing.sm))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    StatItem(label = "已签到", value = "${todayLessons.size}")
-                    val signedOut = todayLessons.count { it.signOutTime.isNotBlank() }
-                    StatItem(label = "已签退", value = "$signedOut")
-                    val withNote = todayLessons.count { it.coachComment.isNotBlank() }
-                    StatItem(label = "已写寄语", value = "$withNote")
-                    val withContent = todayLessons.count { it.content.isNotBlank() && it.content != "[]" }
-                    StatItem(label = "有训练图", value = "$withContent")
+        // 全部记录概览
+        item(key = "overview") {
+            IosCard {
+                Column(modifier = Modifier.padding(Spacing.md)) {
+                    Text("课后反馈记录", style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(Spacing.sm))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        StatItem(label = "总记录", value = "$totalRecords")
+                        StatItem(label = "已签退", value = "$signedOutCount")
+                        StatItem(label = "已写寄语", value = "$withNoteCount")
+                        StatItem(label = "有训练图", value = "$withContentCount")
+                    }
                 }
             }
         }
 
         // 学员筛选 Chip 行
-        if (todayStudents.isNotEmpty()) {
-            IosSectionHeader("学员筛选")
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
-            ) {
-                FilterChip(
-                    selected = selectedStudent == null,
-                    onClick = { selectedStudent = null },
-                    label = { Text("全部") }
-                )
-                todayStudents.forEach { name ->
-                    FilterChip(
-                        selected = selectedStudent == name,
-                        onClick = { selectedStudent = name },
-                        label = { Text(name) }
-                    )
+        if (allStudents.isNotEmpty()) {
+            item(key = "filter_chips") {
+                Column {
+                    IosSectionHeader("学员筛选")
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+                    ) {
+                        FilterChip(
+                            selected = selectedStudent == null,
+                            onClick = { selectedStudent = null },
+                            label = { Text("全部") }
+                        )
+                        allStudents.forEach { name ->
+                            FilterChip(
+                                selected = selectedStudent == name,
+                                onClick = { selectedStudent = name },
+                                label = { Text(name) }
+                            )
+                        }
+                    }
                 }
             }
         }
 
-        IosSectionHeader("课时记录")
+        item(key = "header_lessons") {
+            IosSectionHeader("课时记录（按日期分组）")
+        }
 
-        if (filteredLessons.isEmpty()) {
-            IosCard {
-                Box(
-                    modifier = Modifier.fillMaxWidth().height(120.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        if (todayLessons.isEmpty()) "今日暂无签到记录"
-                        else "该学员今日暂无课时",
-                        color = MaterialTheme.colorScheme.outline
-                    )
+        if (groupedByDate.isEmpty()) {
+            item(key = "empty") {
+                IosCard {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(120.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            if (allLessons.isEmpty()) "暂无签到签退记录"
+                            else "该学员暂无课时记录",
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
                 }
             }
         } else {
-            filteredLessons.forEach { lesson ->
-                PostClassLessonCard(
-                    lesson = lesson,
-                    imageList = vm.parseLessonImages(lesson.contentImages),
-                    expanded = expandedLessonId == lesson.id,
-                    onToggleExpand = {
-                        expandedLessonId = if (expandedLessonId == lesson.id) null else lesson.id
-                    },
-                    onOpenLesson = { onSign(lesson.id) },
-                    onShare = { shareLessonToWechatWithImage(context, lesson) },
-                    onUpdateFeedback = { comment, perf, attitude ->
-                        // v27：保存反馈时触发签退消课（事务内扣减课时包 + 更新 status）
-                        vm.saveFeedbackAndCheckOut(lesson.id, comment, perf, attitude)
-                    },
-                    onUpdateDetail = { lessonType, coach, duration, location, attendance ->
-                        vm.updateLessonDetail(lesson.id, lessonType, coach, duration, location, attendance)
-                    },
-                    onUpdateImages = { paths ->
-                        vm.updateLessonImages(lesson.id, paths)
-                    },
-                    onDelete = {
-                        deletingLessonId = lesson.id
-                        deletingLessonName = lesson.studentName
-                    },
-                    // v27：传入自动填充查询回调
-                    onQueryScheduleForAutoFill = {
-                        vm.findScheduleForStudentToday(lesson.studentName)
+            // 按日期分组渲染：每个日期一个 SectionHeader + 当日全部学员的课时卡片
+            groupedByDate.forEach { (date, lessonsOnDate) ->
+                item(key = "date_header_${date}") {
+                    DateSectionHeader(date = date, dateFmt = dateFmt, weekDayNames = weekDayNames,
+                        lessonCount = lessonsOnDate.size)
+                }
+                items(
+                    items = lessonsOnDate,
+                    key = { lesson -> lesson.id }
+                ) { lesson ->
+                    // L3 优化：解析图片 JSON 用 remember 缓存，避免每次重组都重新解析
+                    val imageList = remember(lesson.contentImages) {
+                        vm.parseLessonImages(lesson.contentImages)
                     }
-                )
+                    PostClassLessonCard(
+                        lesson = lesson,
+                        imageList = imageList,
+                        expanded = expandedLessonId == lesson.id,
+                        onToggleExpand = {
+                            expandedLessonId = if (expandedLessonId == lesson.id) null else lesson.id
+                        },
+                        onOpenLesson = { onSign(lesson.id) },
+                        onShare = { shareLessonToWechatWithImage(context, lesson) },
+                        onUpdateFeedback = { comment, perf, attitude ->
+                            // v27：保存反馈时触发签退消课（事务内扣减课时包 + 更新 status）
+                            vm.saveFeedbackAndCheckOut(lesson.id, comment, perf, attitude)
+                        },
+                        onUpdateDetail = { lessonType, coach, duration, location, attendance ->
+                            vm.updateLessonDetail(lesson.id, lessonType, coach, duration, location, attendance)
+                        },
+                        onUpdateImages = { paths ->
+                            vm.updateLessonImages(lesson.id, paths)
+                        },
+                        onDelete = {
+                            deletingLessonId = lesson.id
+                            deletingLessonName = lesson.studentName
+                        },
+                        // v27：传入自动填充查询回调
+                        onQueryScheduleForAutoFill = {
+                            vm.findScheduleForStudentToday(lesson.studentName)
+                        }
+                    )
+                }
             }
         }
     }
@@ -265,6 +320,60 @@ fun PostClassTab(
                 style = MaterialTheme.typography.bodyMedium
             )
         }
+    }
+}
+
+/**
+ * 日期分组小标题：展示"yyyy年MM月dd日 周X · N 条记录"。
+ *
+ * 设计要点：
+ * - 日期文本加粗深色，体现"对应日期"的视觉锚点
+ * - 右侧附带当日记录条数，方便教练快速定位
+ * - 与 [IosSectionHeader] 区分：日期分组带条数徽标，更具体
+ *
+ * @param date 日期字符串 YYYY-MM-DD
+ * @param dateFmt 日期格式化器（线程安全 [java.time.format.DateTimeFormatter]）
+ * @param weekDayNames 周几名称列表（index 0=周一 ... 6=周日）
+ * @param lessonCount 当日课时记录条数
+ */
+@Composable
+private fun DateSectionHeader(
+    date: String,
+    dateFmt: java.time.format.DateTimeFormatter,
+    weekDayNames: List<String>,
+    lessonCount: Int
+) {
+    // 线程安全：java.time.LocalDate.parse + DateTimeFormatter，替代 SimpleDateFormat
+    val displayText = remember(date, dateFmt, weekDayNames) {
+        try {
+            val localDate = java.time.LocalDate.parse(date)
+            val formatted = localDate.format(dateFmt)
+            // ISO 周几：1=周一 ... 7=周日
+            val weekIdx = localDate.dayOfWeek.value - 1
+            val weekLabel = weekDayNames.getOrElse(weekIdx) { "" }
+            "$formatted $weekLabel"
+        } catch (e: Exception) {
+            date
+        }
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = Spacing.sm, end = Spacing.sm, top = Spacing.sm, bottom = Spacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = displayText,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = appPrimary()
+        )
+        Text(
+            text = "$lessonCount 条",
+            style = MaterialTheme.typography.labelSmall,
+            color = appOutline()
+        )
     }
 }
 

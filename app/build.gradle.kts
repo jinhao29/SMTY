@@ -181,6 +181,8 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    // lifecycle-runtime-compose：提供 collectAsStateWithLifecycle，避免 App 后台时仍持续重组
+    implementation(libs.androidx.lifecycle.runtime.compose)
     // lifecycle-process：提供 ProcessLifecycleOwner，用于监听应用前后台生命周期
     // 启动优化时用它把 WorkManager 初始化延迟到应用前台，避免冷启动阻塞首帧
     implementation(libs.androidx.lifecycle.process)

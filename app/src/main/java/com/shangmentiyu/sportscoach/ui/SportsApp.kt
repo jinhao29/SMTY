@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -36,9 +37,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -70,6 +72,7 @@ import com.shangmentiyu.sportscoach.ui.settings.SettingsScreen
 import com.shangmentiyu.sportscoach.ui.settings.SettingsViewModel
 import com.shangmentiyu.sportscoach.ui.summary.SummaryScreen
 import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
+import com.shangmentiyu.sportscoach.ui.theme.appBackground
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
 import com.shangmentiyu.sportscoach.ui.training.TrainingPlanScreen
 import com.shangmentiyu.sportscoach.ui.operation.OperationScreen
@@ -80,7 +83,156 @@ import com.shangmentiyu.sportscoach.update.UpdateProgressBus
 import kotlinx.coroutines.delay
 
 /** 底部导航项 */
+// === 性能优化：@Stable 注解 ===
+// BottomItem 含 ImageVector 接口类型字段，Compose 编译器无法自动推断稳定性，
+// 会默认视为 Unstable，导致 FloatingBottomBar 在 currentRoute 变化时全量重组所有 NavTabItem。
+// 加 @Stable 后，编译器按字段对比，仅在 item 实例真正变化时才重组对应 NavTabItem。
+@androidx.compose.runtime.Stable
 data class BottomItem(val route: String, val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
+
+/**
+ * === 性能优化 H1：更新下载进度浮层独立组件 ===
+ *
+ * 设计原理：
+ * - 在组件内部 `collectAsState` 订阅 [UpdateProgressBus]，把进度变化引起的重组
+ *   完全隔离在 [UpdateProgressOverlay] 内部，外层 [SportsApp] 不会被波及
+ * - 原代码把 `updateProgress` 订阅放在 SportsApp 顶层，每次进度从 1% → 99% 变化时
+ *   都会触发整个 NavHost + FloatingBottomBar 重绘，是主页滑动卡顿的主因之一
+ *
+ * 行为：
+ * - [UpdateProgressBus.UpdateProgress.Downloading]：1~99% 显示进度浮层
+ * - [UpdateProgressBus.UpdateProgress.Done]：触发外层安装确认弹窗 + 重置总线
+ * - [UpdateProgressBus.UpdateProgress.Failed]：短暂提示后重置总线
+ * - [UpdateProgressBus.UpdateProgress.Idle]：不渲染
+ *
+ * @param onDownloadComplete 下载完成回调（用于触发外层 AlertDialog 安装确认弹窗）
+ */
+@Composable
+private fun UpdateProgressOverlay(onDownloadComplete: (version: String) -> Unit) {
+    val p by UpdateProgressBus.progress.collectAsStateWithLifecycle()
+    when (p) {
+        is UpdateProgressBus.UpdateProgress.Downloading -> {
+            val downloading = p as UpdateProgressBus.UpdateProgress.Downloading
+            // 仅在 1~99% 时显示浮层（0% 与 100% 由通知承载，避免闪烁）
+            if (downloading.percent in 1..99) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.35f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = Color.White,
+                        tonalElevation = 6.dp
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            CircularProgressIndicator(
+                                progress = { downloading.percent / 100f },
+                                modifier = Modifier.size(48.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                strokeWidth = 4.dp
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                text = "正在下载新版本 ${downloading.version}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.Black
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = "${downloading.percent}%",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.Black
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        is UpdateProgressBus.UpdateProgress.Done -> {
+            val done = p as UpdateProgressBus.UpdateProgress.Done
+            // 用 LaunchedEffect + key(version) 保证每次新版本下载完成只触发一次
+            LaunchedEffect(done.version) {
+                onDownloadComplete(done.version)
+                UpdateProgressBus.reset()
+            }
+            // 下载完成瞬间短暂浮层提示（主交互由外层 AlertDialog 承载）
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.35f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color.White,
+                    tonalElevation = 6.dp
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Download,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "新版本 ${done.version} 下载完成",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.Black
+                        )
+                    }
+                }
+            }
+        }
+        is UpdateProgressBus.UpdateProgress.Failed -> {
+            val failed = p as UpdateProgressBus.UpdateProgress.Failed
+            // 下载失败：短暂提示后重置总线（不阻塞用户操作）
+            LaunchedEffect(Unit) {
+                kotlinx.coroutines.delay(2500)
+                UpdateProgressBus.reset()
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.35f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color.White,
+                    tonalElevation = 6.dp
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "更新下载失败",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = LightPrimary
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = failed.message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+            }
+        }
+        UpdateProgressBus.UpdateProgress.Idle -> { /* 无更新进行中，不显示浮层 */ }
+    }
+}
 
 /**
  * 桌面端连接状态栏（v32 优化3 新增）。
@@ -148,12 +300,22 @@ fun SportsApp() {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
-    val showBottomBar = currentDestination?.route in setOf(
-        Routes.HOME, Routes.SCORE, Routes.SETTINGS
-    )
+    // === 性能优化：用 derivedStateOf 缓存底部导航相关派生状态 ===
+    // 只有当 currentDestination.route 真正变化时才触发 FloatingBottomBar 重组
+    // 避免其他 State 变化（如 updateProgress）连带触发底部导航重绘
+    val currentRoute by remember(currentDestination) {
+        derivedStateOf { currentDestination?.route }
+    }
+    val showBottomBar by remember(currentRoute) {
+        derivedStateOf {
+            currentRoute in setOf(Routes.HOME, Routes.SCORE, Routes.SETTINGS)
+        }
+    }
 
-    // 更新下载进度订阅：来自 UpdateProgressBus（Worker → UI 跨进程通信）
-    val updateProgress by UpdateProgressBus.progress.collectAsState()
+    // === 性能优化 H1：移除顶层 updateProgress 订阅 ===
+    // 原 collectAsState 在顶层订阅，每次进度变化（1-99%）都会触发整个 SportsApp 重组，
+    // 连带 NavHost + FloatingBottomBar 全部重绘，造成卡顿。
+    // 现在把进度订阅下沉到 UpdateProgressOverlay 内部，重组范围隔离在 Overlay 内。
     val context = LocalContext.current
 
     // === 安装确认弹窗状态（无感下载 + 弹窗安装） ===
@@ -168,15 +330,35 @@ fun SportsApp() {
     val homeVm: HomeViewModel = viewModel(
         factory = AppViewModelFactory(context.applicationContext as android.app.Application)
     )
-    val unsignedTodayCount by homeVm.unsignedTodayCount.collectAsState()
-    val hasTodayScheduleBadge by homeVm.hasTodayScheduleBadge.collectAsState()
+    val unsignedTodayCount by homeVm.unsignedTodayCount.collectAsStateWithLifecycle()
+    val hasTodayScheduleBadge by homeVm.hasTodayScheduleBadge.collectAsStateWithLifecycle()
+
+    // === 终极修复：全局 SnackbarHostState + toast 订阅 ===
+    // 业务背景：HomeScreen 在 NavHost 内部，其 Scaffold/Box 的 z-axis 始终低于
+    // SportsApp 外层 Box 中的 FloatingBottomBar，导致 Snackbar 被悬浮导航遮挡。
+    // 解决方案：
+    // - snackbarHostState 定义在 SportsApp 顶层（全局唯一）
+    // - 订阅 homeVm.toast（HomeViewModel 的全局 toast StateFlow）
+    // - FloatingSnackbarHost 放在外层 Box 末尾（与 FloatingBottomBar 同级），z-axis 最顶层
+    // - showSnackbar 强制带 SnackbarDuration.Short（约 2 秒自动消失，无需手动关闭）
+    val appSnackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
+    val appToast by homeVm.toast.collectAsStateWithLifecycle()
+    LaunchedEffect(appToast) {
+        appToast?.let { msg ->
+            appSnackbarHostState.showSnackbar(
+                message = msg,
+                duration = androidx.compose.material3.SnackbarDuration.Short
+            )
+            homeVm.clearToast()
+        }
+    }
 
     // === v32 优化3：桌面端连接状态订阅（绿色指示灯）===
     // 5 秒轮询一次 SharedPreferences，让 UI 与 UdpDesktopDiscoveryService 接收线程保持同步
     val settingsVm: SettingsViewModel = viewModel(
         factory = AppViewModelFactory(context.applicationContext as android.app.Application)
     )
-    val desktopConnection by settingsVm.desktopConnection.collectAsState()
+    val desktopConnection by settingsVm.desktopConnection.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) {
         while (true) {
             settingsVm.refreshDesktopConnection()
@@ -226,81 +408,26 @@ fun SportsApp() {
         pendingNavigateTarget = null
     }
 
+    // === 终极重构：彻底放弃 Scaffold 的 bottomBar，改用 Box 覆盖法 ===
+    // 之前 Scaffold 的 bottomBar slot 即使内部 Box 透明，slot 容器本身仍会
+    // 在系统导航栏区域露出 containerColor，导致胶囊两侧出现灰白方块。
+    // 现在把悬浮导航作为独立元素摆在外层 Box 底部，完全脱离 Scaffold，
+    // 胶囊两侧直接透出主页面底色（appBackground #FAFAFA），真正"无影悬浮"。
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
-        containerColor = appGroupedBackground(),
-        topBar = {
-            // v32 优化3：桌面端连接状态栏（仅在线时显示绿色指示灯）
-            DesktopConnectionBanner(desktopConnection)
-        },
-        bottomBar = {
-            if (showBottomBar) {
-                // === v40 重构：胶囊式悬浮底部导航栏 + 中央凸出 FAB ===
-                // - 30dp 大圆角纯白面板 + 柔和阴影 + 12dp 底部留白
-                // - 选中珊瑚橙 #FF6B47，未选中浅灰 #A6A8AB
-                // - 中央 FAB（珊瑚橙圆形 + 白加号）凸出 20dp，点击添加学员
-                FloatingBottomBar(
-                    items = bottomItems,
-                    currentRoute = currentDestination?.route,
-                    onNavigate = { route ->
-                        navController.navigate(route) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
-                    onFabClick = {
-                        // FAB 触发核心操作：添加学员
-                        navController.navigate(Routes.ADD_STUDENT)
-                    },
-                    // 主页 Tab 动态角标：
-                    // - 未签到数 > 0：数字角标（强提示今日有课未签到）
-                    // - 仅有今日排课但已全部签到：小圆点
-                    // - 无今日排课：不显示
-                    // v40 任务2b：角标统一珊瑚橙 #FF6B47
-                    badgeForRoute = { route ->
-                        if (route == Routes.HOME) {
-                            when {
-                                unsignedTodayCount > 0 -> {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(16.dp)
-                                            .clip(RoundedCornerShape(50))
-                                            .background(LightPrimary)
-                                            .border(1.dp, Color.White, RoundedCornerShape(50)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = unsignedTodayCount.coerceAtMost(99).toString(),
-                                            color = Color.White,
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-                                hasTodayScheduleBadge -> {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .clip(RoundedCornerShape(50))
-                                            .background(LightPrimary)
-                                            .border(1.dp, Color.White, RoundedCornerShape(50))
-                                    )
-                                }
-                            }
-                        }
-                    }
-                )
+            containerColor = appBackground(),
+            topBar = {
+                // v32 优化3：桌面端连接状态栏（仅在线时显示绿色指示灯）
+                DesktopConnectionBanner(desktopConnection)
             }
-        }
-    ) { innerPadding ->
-        NavHost(
-            navController = navController,
-            startDestination = Routes.HOME,
-            modifier = Modifier.padding(innerPadding)
-        ) {
+            // === 坚决不写 bottomBar = { ... } 参数！ ===
+            // 底部导航作为独立悬浮元素放在外层 Box 底部，彻底脱离 Scaffold 容器
+        ) { innerPadding ->
+            NavHost(
+                navController = navController,
+                startDestination = Routes.HOME,
+                modifier = Modifier.padding(innerPadding)
+            ) {
             // === 底部 Tab ===
             composable(Routes.HOME) {
                 HomeScreen(
@@ -323,7 +450,9 @@ fun SportsApp() {
                 )
             }
             composable(Routes.SETTINGS) {
-                SettingsScreen()
+                SettingsScreen(
+                    onNavigate = { route -> navController.navigate(route) }
+                )
             }
 
             // === 学员管理 ===
@@ -339,7 +468,7 @@ fun SportsApp() {
                 val homeVm: HomeViewModel = viewModel(
                     factory = AppViewModelFactory(context.applicationContext as android.app.Application)
                 )
-                val students by homeVm.students.collectAsState()
+                val students by homeVm.students.collectAsStateWithLifecycle()
                 val target = students.firstOrNull { it.name == studentName }
                 when {
                     target != null -> AddStudentScreen(
@@ -476,133 +605,101 @@ fun SportsApp() {
                     onOpenLesson = { lessonId -> navController.navigate(Routes.lesson(lessonId)) }
                 )
             }
+            composable(Routes.BMI_CALCULATOR) {
+                com.shangmentiyu.sportscoach.ui.tools.BmiCalculatorScreen(
+                    onBack = { navController.popBackStack() }
+                )
+            }
         }
     }
 
-        // === 更新下载进度浮层 ===
-        // 订阅 UpdateProgressBus，前台时实时展示下载进度/完成/失败
-        when (val p = updateProgress) {
-            is UpdateProgressBus.UpdateProgress.Downloading -> {
-                // 仅在 1~99% 时显示浮层（0% 与 100% 由通知承载，避免闪烁）
-                if (p.percent in 1..99) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.35f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = Color.White,
-                            tonalElevation = 6.dp
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(24.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                CircularProgressIndicator(
-                                    progress = { p.percent / 100f },
-                                    modifier = Modifier.size(48.dp),
-                                    color = MaterialTheme.colorScheme.primary,
-                                    strokeWidth = 4.dp
-                                )
-                                Spacer(Modifier.height(12.dp))
-                                Text(
-                                    text = "正在下载新版本 ${p.version}",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Color.Black
-                                )
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    text = "${p.percent}%",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Color.Black
-                                )
+        // === 终极悬浮导航：独立于 Scaffold 的 Box 覆盖法 ===
+        // 放在外层 Box 底部，align(BottomCenter)，背景强制透明
+        // 胶囊左右两侧直接透出主页面底色（appBackground #FAFAFA），无任何灰框
+        // FloatingBottomBar 内部已有 Surface(纯白+30dp圆角+阴影)，无需再包一层
+        if (showBottomBar) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .background(Color.Transparent)
+                    .navigationBarsPadding()
+                    .padding(bottom = 12.dp)
+            ) {
+                FloatingBottomBar(
+                    items = bottomItems,
+                    currentRoute = currentRoute,
+                    onNavigate = { route ->
+                        navController.navigate(route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onFabClick = {
+                        // FAB 触发核心操作：添加学员
+                        navController.navigate(Routes.ADD_STUDENT)
+                    },
+                    // 主页 Tab 动态角标（珊瑚橙 #FF6B47）
+                    badgeForRoute = { route ->
+                        if (route == Routes.HOME) {
+                            when {
+                                unsignedTodayCount > 0 -> {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(16.dp)
+                                            .clip(RoundedCornerShape(50))
+                                            .background(LightPrimary)
+                                            .border(1.dp, Color.White, RoundedCornerShape(50)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = unsignedTodayCount.coerceAtMost(99).toString(),
+                                            color = Color.White,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                                hasTodayScheduleBadge -> {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(RoundedCornerShape(50))
+                                            .background(LightPrimary)
+                                            .border(1.dp, Color.White, RoundedCornerShape(50))
+                                    )
+                                }
                             }
                         }
                     }
-                }
+                )
             }
-            is UpdateProgressBus.UpdateProgress.Done -> {
-                // 下载完成：不直接跳转安装器，改为触发 AlertDialog 让用户确认安装
-                // 用 LaunchedEffect + key(p.version) 保证每次新版本下载完成只触发一次
-                LaunchedEffect(p.version) {
-                    pendingInstallVersion = p.version
-                    showInstallDialog = true
-                    // 重置进度总线，避免 Done 状态持续触发弹窗
-                    UpdateProgressBus.reset()
-                }
-                // 下载完成瞬间短暂浮层提示（主交互由 AlertDialog 承载）
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.35f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = Color.White,
-                        tonalElevation = 6.dp
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.Download,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                text = "新版本 ${p.version} 下载完成",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.Black
-                            )
-                        }
-                    }
-                }
-            }
-            is UpdateProgressBus.UpdateProgress.Failed -> {
-                // 下载失败：短暂提示后重置总线（不阻塞用户操作）
-                LaunchedEffect(Unit) {
-                    kotlinx.coroutines.delay(2500)
-                    UpdateProgressBus.reset()
-                }
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.35f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = Color.White,
-                        tonalElevation = 6.dp
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = "更新下载失败",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = LightPrimary
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                text = p.message,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                            )
-                        }
-                    }
-                }
-            }
-            UpdateProgressBus.UpdateProgress.Idle -> { /* 无更新进行中，不显示浮层 */ }
         }
+
+        // === 终极修复：全局 FloatingSnackbarHost（z-axis 最顶层） ===
+        // 放在外层 Box 末尾（FloatingBottomBar 之后、UpdateProgressOverlay 之前），
+        // 确保 z-axis 最顶层，彻底不被 FloatingBottomBar 遮挡。
+        // - align(BottomCenter)：定位到屏幕底部中央
+        // - bottomPadding = 160.dp：避开悬浮导航栏（总高约 130dp = 70dp 导航 + 48dp 系统 + 12dp 间距）
+        // - duration = SnackbarDuration.Short：在上方 LaunchedEffect 中已设置，2 秒自动消失
+        com.shangmentiyu.sportscoach.ui.theme.FloatingSnackbarHost(
+            hostState = appSnackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter),
+            bottomPadding = 160.dp
+        )
+
+        // === 性能优化 H1：把进度浮层抽到独立 Composable ===
+        // 原代码内联在 SportsApp 顶层 Box 中，每次进度变化触发整树重组
+        // 现在 UpdateProgressOverlay 内部独立 collectAsState，重组范围被隔离
+        UpdateProgressOverlay(
+            onDownloadComplete = { version ->
+                pendingInstallVersion = version
+                showInstallDialog = true
+            }
+        )
 
         // === 安装确认弹窗（无感下载 + 弹窗安装） ===
         // 下载完成后弹出，让用户决定是否立即安装

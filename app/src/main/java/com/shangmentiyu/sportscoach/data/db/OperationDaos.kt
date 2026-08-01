@@ -120,6 +120,17 @@ interface ScheduleDao {
     @Query("DELETE FROM schedules WHERE id = :id")
     suspend fun deleteById(id: String)
 
+    /**
+     * 批量删除排课（多选模式批量删除使用）。
+     *
+     * 使用 IN 子句一次性删除多条记录，避免循环调用 [deleteById] 产生多次 SQL 执行。
+     * Room 会将 List 参数绑定为 SQL 的 IN (?, ?, ...) 形式。
+     *
+     * @param ids 待删除的排课 ID 列表，空列表时本方法不执行任何删除
+     */
+    @Query("DELETE FROM schedules WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<String>)
+
     /** 清空所有排课记录（课表管理"清空全部"功能） */
     @Query("DELETE FROM schedules")
     suspend fun deleteAll()
@@ -143,5 +154,21 @@ interface ScheduleDao {
 
     /** 删除学员的所有排课（删除学员时级联调用） */
     @Query("DELETE FROM schedules WHERE studentName = :name")
-    suspend fun deleteByStudent(name: String)
+    suspend fun deleteByStudent(name: String): Int
+
+    /**
+     * === 按课时包排课：清理购买日之前的排课记录 ===
+     *
+     * 删除该学员 startDate < dateStr 的排课记录（isActive=1）。
+     * 用于 autoScheduleFromPackage 调用时自动对齐数据：
+     * 课时包 7.24 购买，则 7.24 之前的排课视为无效，自动清理。
+     *
+     * 仅删除 isActive=1 的记录（已逻辑删除的不重复操作）。
+     *
+     * @param name 学员姓名
+     * @param dateStr 购买日（yyyy-MM-dd），删除 startDate < dateStr 的记录
+     * @return 受影响行数
+     */
+    @Query("DELETE FROM schedules WHERE studentName = :name AND startDate < :dateStr AND isActive = 1")
+    suspend fun deleteSchedulesBeforeDate(name: String, dateStr: String): Int
 }
