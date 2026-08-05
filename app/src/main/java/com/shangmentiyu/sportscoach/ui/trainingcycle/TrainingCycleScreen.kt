@@ -49,14 +49,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shangmentiyu.sportscoach.data.model.TrainingCycle
 import com.shangmentiyu.sportscoach.data.model.WeeklyPlan
-import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
+import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.theme.GlassCard
 import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
 import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
 import java.util.Locale
+import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
+import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 /**
  * 周期训练计划页面：列出学员的周期、查看周计划、创建新周期。
@@ -64,10 +65,7 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TrainingCycleScreen(onBack: () -> Unit) {
-    val context = LocalContext.current
-    val vm: TrainingCycleViewModel = viewModel(
-        factory = AppViewModelFactory(context.applicationContext as android.app.Application)
-    )
+        val vm: TrainingCycleViewModel = koinViewModel()
 
     val students by vm.students.collectAsStateWithLifecycle()
     val selectedStudent by vm.selectedStudent.collectAsStateWithLifecycle()
@@ -128,8 +126,10 @@ fun TrainingCycleScreen(onBack: () -> Unit) {
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(studentExpanded) },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true)
-                        )
+                                .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true),
+
+                         shape = AppTextFieldShape,
+                         colors = appTextFieldColors(),)
                         DropdownMenu(
                             expanded = studentExpanded,
                             onDismissRequest = { studentExpanded = false }
@@ -312,22 +312,28 @@ private fun WeeklyPlanEditor(
                 value = title, onValueChange = { title = it },
                 label = { Text("第${plan.weekIndex}周 标题") },
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
+                singleLine = true,
+
+             shape = AppTextFieldShape,
+             colors = appTextFieldColors(),)
             Spacer(modifier = Modifier.height(6.dp))
             OutlinedTextField(
                 value = goal, onValueChange = { goal = it },
                 label = { Text("本周目标") },
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
+                singleLine = true,
+
+             shape = AppTextFieldShape,
+             colors = appTextFieldColors(),)
             Spacer(modifier = Modifier.height(6.dp))
             OutlinedTextField(
                 value = focus, onValueChange = { focus = it },
                 label = { Text("训练重点") },
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
+                singleLine = true,
+
+             shape = AppTextFieldShape,
+             colors = appTextFieldColors(),)
             Spacer(modifier = Modifier.height(6.dp))
             TextButton(onClick = { onUpdate(plan.weekIndex, title, goal, focus) }) {
                 Text("保存本周修改")
@@ -360,27 +366,35 @@ private fun CreateCycleDialog(
                 OutlinedTextField(
                     value = name, onValueChange = { name = it },
                     label = { Text("周期名称（如：暑期4周体能强化）") },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true
-                )
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+
+                 shape = AppTextFieldShape,
+                 colors = appTextFieldColors(),)
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = goal, onValueChange = { goal = it },
                     label = { Text("周期目标") },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true
-                )
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+
+                 shape = AppTextFieldShape,
+                 colors = appTextFieldColors(),)
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = weeks, onValueChange = { weeks = it.filter { c -> c.isDigit() } },
                         label = { Text("总周数") },
-                        modifier = Modifier.weight(1f), singleLine = true
-                    )
+                        modifier = Modifier.weight(1f), singleLine = true,
+
+                     shape = AppTextFieldShape,
+                     colors = appTextFieldColors(),)
                     OutlinedTextField(
                         value = startDate, onValueChange = { startDate = it },
                         label = { Text("开始日期") },
-                        modifier = Modifier.weight(1f), singleLine = true
-                    )
+                        modifier = Modifier.weight(1f), singleLine = true,
+
+                     shape = AppTextFieldShape,
+                     colors = appTextFieldColors(),)
                 }
             }
         },

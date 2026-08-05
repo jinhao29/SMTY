@@ -78,7 +78,9 @@ import com.shangmentiyu.sportscoach.data.model.Lesson
 import com.shangmentiyu.sportscoach.data.model.Student
 import com.shangmentiyu.sportscoach.ui.home.HomeViewModel.GradeFilter
 import com.shangmentiyu.sportscoach.ui.home.HomeViewModel.StudentSortBy
+import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
+import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 /**
  * 学员列表 Tab：展示所有学员，每项显示课时余额、下一节课信息、身高体重BMI。
@@ -517,6 +519,8 @@ internal fun StudentFilterBar(
                     },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(sortExpanded) },
                     singleLine = true,
+                    shape = AppTextFieldShape,
+                    colors = appTextFieldColors(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true)
@@ -557,6 +561,8 @@ internal fun StudentFilterBar(
                     },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(gradeExpanded) },
                     singleLine = true,
+                    shape = AppTextFieldShape,
+                    colors = appTextFieldColors(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true)

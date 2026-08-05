@@ -32,6 +32,11 @@ class CoachDailyReportViewModel(
     private val studentRepo: StudentRepository
 ) : ViewModel() {
 
+    private val _toast = MutableStateFlow<String?>(null)
+    val toast: StateFlow<String?> = _toast.asStateFlow()
+    private val appExceptionHandler =
+        com.shangmentiyu.sportscoach.core.CoroutineExt.createAppExceptionHandler(_toast, "CoachDailyReportViewModel")
+
     private val _selectedDate = MutableStateFlow(today())
     val selectedDate: StateFlow<String> = _selectedDate.asStateFlow()
 
@@ -51,12 +56,12 @@ class CoachDailyReportViewModel(
     val stats: StateFlow<DailyStats> = _stats.asStateFlow()
 
     init {
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             _selectedDate.collect { date ->
                 loadStats(date, _selectedStudent.value)
             }
         }
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             _selectedStudent.collect { name ->
                 loadStats(_selectedDate.value, name)
             }
@@ -64,7 +69,7 @@ class CoachDailyReportViewModel(
     }
 
     private fun loadStats(date: String, studentName: String?) {
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             lessonRepo.getAllLessons().collect { all ->
                 val todayLessons = all
                     .filter { it.date == date }

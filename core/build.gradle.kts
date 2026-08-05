@@ -13,7 +13,7 @@
 //           迁移后 app 模块的 import 路径无需修改。
 // ============================================================================
 plugins {
-    id("org.jetbrains.kotlin.jvm")
+    alias(libs.plugins.kotlin.jvm)
 }
 
 java {

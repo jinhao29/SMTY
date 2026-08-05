@@ -48,7 +48,7 @@ class HomeViewModel(
     private val settingsRepo: SettingsRepository? = null,
     /**
      * === v5 新增：精彩瞬间上传器（手机→PC 双向传输） ===
-     * 由 [com.shangmentiyu.sportscoach.ui.AppViewModelFactory] 注入。
+     * 由 Koin 依赖注入（di/AppModule）提供。
      * null 时调用 [uploadMoment] 直接返回失败，不影响应用启动。
      */
     private val momentUploader: com.shangmentiyu.sportscoach.core.MomentUploader? = null

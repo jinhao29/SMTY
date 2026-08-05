@@ -64,11 +64,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shangmentiyu.sportscoach.data.model.Coach
 import com.shangmentiyu.sportscoach.data.model.LessonPackage
 import com.shangmentiyu.sportscoach.data.model.Schedule
-import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
+import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.schedule.ScheduleEditDialog
 import com.shangmentiyu.sportscoach.ui.dailyplan.DailyPlanViewModel
 import com.shangmentiyu.sportscoach.ui.theme.GlassCard
@@ -81,6 +80,8 @@ import com.shangmentiyu.sportscoach.ui.theme.FloatingSnackbarHost
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
 import java.util.Locale
+import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
+import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 /**
  * 运营管理主页：排课日历 / 课时余额 / 教练管理 三标签页。
@@ -92,10 +93,7 @@ fun OperationScreen(
     onSign: (String) -> Unit = {},
     onOpenLesson: (String) -> Unit = {}
 ) {
-    val context = LocalContext.current
-    val vm: OperationViewModel = viewModel(
-        factory = AppViewModelFactory(context.applicationContext as android.app.Application)
-    )
+        val vm: OperationViewModel = koinViewModel()
 
     var tabIndex by remember { mutableStateOf(0) }
     val snackbarHost = remember { SnackbarHostState() }
@@ -563,11 +561,19 @@ private fun AddPackageDialog(
         title = "新增课时包",
         content = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = student, onValueChange = { student = it }, label = { Text("学员姓名") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("套餐名称") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = student, onValueChange = { student = it }, label = { Text("学员姓名") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                 shape = AppTextFieldShape,
+                 colors = appTextFieldColors(),)
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("套餐名称") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                 shape = AppTextFieldShape,
+                 colors = appTextFieldColors(),)
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = total, onValueChange = { total = it.filter { c -> c.isDigit() } }, label = { Text("总次数") }, singleLine = true, modifier = Modifier.weight(1f))
-                    OutlinedTextField(value = price, onValueChange = { price = it.filter { c -> c.isDigit() } }, label = { Text("价格(元)") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(value = total, onValueChange = { total = it.filter { c -> c.isDigit() } }, label = { Text("总次数") }, singleLine = true, modifier = Modifier.weight(1f),
+                     shape = AppTextFieldShape,
+                     colors = appTextFieldColors(),)
+                    OutlinedTextField(value = price, onValueChange = { price = it.filter { c -> c.isDigit() } }, label = { Text("价格(元)") }, singleLine = true, modifier = Modifier.weight(1f),
+                     shape = AppTextFieldShape,
+                     colors = appTextFieldColors(),)
                 }
                 OutlinedDatePickerField(value = purchaseDate, onValueChange = { purchaseDate = it }, label = "购买日期")
                 OutlinedDatePickerField(value = expireDate, onValueChange = { expireDate = it }, label = "到期日期(可选)")
@@ -616,30 +622,38 @@ private fun EditPackageDialog(
                     onValueChange = { student = it },
                     label = { Text("学员姓名") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                    modifier = Modifier.fillMaxWidth(),
+
+                 shape = AppTextFieldShape,
+                 colors = appTextFieldColors(),)
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text("套餐名称") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                    modifier = Modifier.fillMaxWidth(),
+
+                 shape = AppTextFieldShape,
+                 colors = appTextFieldColors(),)
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = total,
                         onValueChange = { total = it.filter { c -> c.isDigit() } },
                         label = { Text("总次数") },
                         singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
+                        modifier = Modifier.weight(1f),
+
+                     shape = AppTextFieldShape,
+                     colors = appTextFieldColors(),)
                     OutlinedTextField(
                         value = used,
                         onValueChange = { used = it.filter { c -> c.isDigit() } },
                         label = { Text("已用次数") },
                         singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
+                        modifier = Modifier.weight(1f),
+
+                     shape = AppTextFieldShape,
+                     colors = appTextFieldColors(),)
                 }
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
@@ -647,16 +661,20 @@ private fun EditPackageDialog(
                         onValueChange = { price = it.filter { c -> c.isDigit() } },
                         label = { Text("价格(元)") },
                         singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
+                        modifier = Modifier.weight(1f),
+
+                     shape = AppTextFieldShape,
+                     colors = appTextFieldColors(),)
                     // 状态选择
                     OutlinedTextField(
                         value = status,
                         onValueChange = { status = it },
                         label = { Text("状态") },
                         singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
+                        modifier = Modifier.weight(1f),
+
+                     shape = AppTextFieldShape,
+                     colors = appTextFieldColors(),)
                 }
                 OutlinedDatePickerField(value = purchaseDate, onValueChange = { purchaseDate = it }, label = "购买日期")
                 OutlinedDatePickerField(value = expireDate, onValueChange = { expireDate = it }, label = "到期日期(可选)")
@@ -664,8 +682,10 @@ private fun EditPackageDialog(
                     value = note,
                     onValueChange = { note = it },
                     label = { Text("备注") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                    modifier = Modifier.fillMaxWidth(),
+
+                 shape = AppTextFieldShape,
+                 colors = appTextFieldColors(),)
             }
         },
         confirmButton = {
@@ -775,9 +795,15 @@ private fun AddCoachDialog(
         title = "新增教练",
         content = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("姓名") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("电话") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = specialty, onValueChange = { specialty = it }, label = { Text("专长（如田径、球类）") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("姓名") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                 shape = AppTextFieldShape,
+                 colors = appTextFieldColors(),)
+                OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("电话") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                 shape = AppTextFieldShape,
+                 colors = appTextFieldColors(),)
+                OutlinedTextField(value = specialty, onValueChange = { specialty = it }, label = { Text("专长（如田径、球类）") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                 shape = AppTextFieldShape,
+                 colors = appTextFieldColors(),)
             }
         },
         confirmButton = {
@@ -798,10 +824,7 @@ private fun DailyPlanTab(
     onSign: (String) -> Unit,
     onOpenLesson: (String) -> Unit
 ) {
-    val context = LocalContext.current
-    val vm: DailyPlanViewModel = viewModel(
-        factory = AppViewModelFactory(context.applicationContext as android.app.Application)
-    )
+        val vm: DailyPlanViewModel = koinViewModel()
 
     val selectedDate by vm.selectedDate.collectAsStateWithLifecycle()
     val schedules by vm.schedules.collectAsStateWithLifecycle()

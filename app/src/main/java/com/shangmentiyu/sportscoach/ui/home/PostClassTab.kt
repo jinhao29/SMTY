@@ -84,6 +84,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
+import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 /**
  * 课后反馈 Tab：展示**全部历史签到签退记录**，按日期分组、对应学员对应日期，
@@ -664,8 +666,10 @@ private fun PostClassLessonCard(
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(typeExpanded) },
                         modifier = Modifier.fillMaxWidth()
                             .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true),
-                        singleLine = true
-                    )
+                        singleLine = true,
+
+                     shape = AppTextFieldShape,
+                     colors = appTextFieldColors(),)
                     ExposedDropdownMenu(
                         expanded = typeExpanded,
                         onDismissRequest = { typeExpanded = false }
@@ -693,8 +697,10 @@ private fun PostClassLessonCard(
                         onValueChange = { editCoach = it },
                         label = { Text("教练") },
                         singleLine = true,
-                        modifier = Modifier.weight(1.5f)
-                    )
+                        modifier = Modifier.weight(1.5f),
+
+                     shape = AppTextFieldShape,
+                     colors = appTextFieldColors(),)
                     OutlinedTextField(
                         value = editDuration,
                         onValueChange = { editDuration = it.filter { c -> c.isDigit() } },
@@ -703,8 +709,10 @@ private fun PostClassLessonCard(
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                             keyboardType = KeyboardType.Number
                         ),
-                        modifier = Modifier.weight(1f)
-                    )
+                        modifier = Modifier.weight(1f),
+
+                     shape = AppTextFieldShape,
+                     colors = appTextFieldColors(),)
                 }
                 Spacer(Modifier.height(8.dp))
 
@@ -714,8 +722,10 @@ private fun PostClassLessonCard(
                     onValueChange = { editLocation = it },
                     label = { Text("上课地点") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                    modifier = Modifier.fillMaxWidth(),
+
+                 shape = AppTextFieldShape,
+                 colors = appTextFieldColors(),)
                 Spacer(Modifier.height(8.dp))
 
                 // 出勤状态（下拉建议 + 自定义）
@@ -733,8 +743,10 @@ private fun PostClassLessonCard(
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(attExpanded) },
                         modifier = Modifier.fillMaxWidth()
                             .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true),
-                        singleLine = true
-                    )
+                        singleLine = true,
+
+                     shape = AppTextFieldShape,
+                     colors = appTextFieldColors(),)
                     ExposedDropdownMenu(
                         expanded = attExpanded,
                         onDismissRequest = { attExpanded = false }
@@ -809,8 +821,10 @@ private fun PostClassLessonCard(
                     label = { Text("教练寄语（给家长）") },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 3,
-                    maxLines = 6
-                )
+                    maxLines = 6,
+
+                 shape = AppTextFieldShape,
+                 colors = appTextFieldColors(),)
                 Spacer(Modifier.height(8.dp))
 
                 // 保存反馈按钮

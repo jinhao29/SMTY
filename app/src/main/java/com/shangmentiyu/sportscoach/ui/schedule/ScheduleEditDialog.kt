@@ -1,5 +1,7 @@
 package com.shangmentiyu.sportscoach.ui.schedule
 
+import android.util.Log
+
 import android.content.Context
 import android.net.Uri
 import androidx.compose.foundation.background
@@ -57,8 +59,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextFieldColors
 import androidx.compose.material3.TopAppBar
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -73,6 +77,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -98,6 +103,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
+import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 /**
  * 添加/编辑课程对话框（iOS 分组风格 / Inset Grouped Form）。
@@ -140,6 +147,8 @@ fun ScheduleEditDialog(
     onSaved: () -> Unit
 ) {
     val students by vm.students.collectAsStateWithLifecycle()
+    // === v46 数据流诊断：Logcat 过滤 DataFlow 查看学员列表是否加载成功 ===
+    Log.d("DataFlow", "下拉列表加载到的学员数量: ${students.size}")
     val editing by vm.editingSchedule.collectAsStateWithLifecycle()
     // 排课记忆：时间/地点历史下拉
     val timeMemories by vm.timeMemories.collectAsStateWithLifecycle()
@@ -161,6 +170,8 @@ fun ScheduleEditDialog(
 
     // === 表单状态 ===
     var studentName by remember { mutableStateOf("") }
+    // v46：选中学员的唯一 ID（软关联，保存排课时传递；旧数据/手输为 null）
+    var selectedStudentId by remember { mutableStateOf<String?>(null) }
     // 教练默认为"李"（用户要求）
     var coachName by remember { mutableStateOf("李") }
     // 新建模式下：优先使用调用方传入的 prefillDayOfWeek；
@@ -225,6 +236,7 @@ fun ScheduleEditDialog(
     val buildForm: () -> ScheduleForm = {
         ScheduleForm(
             studentName = studentName,
+            studentId = selectedStudentId,
             coachName = coachName,
             dayOfWeek = dayOfWeek,
             daysOfWeek = if (isCreate) selectedDays else emptySet(),
@@ -326,8 +338,10 @@ fun ScheduleEditDialog(
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(studentExpanded) },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true)
-                            )
+                                    .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true),
+
+                             shape = AppTextFieldShape,
+                             colors = editDialogFieldColors(),)
                             DropdownMenu(
                                 expanded = studentExpanded,
                                 onDismissRequest = { studentExpanded = false }
@@ -337,6 +351,8 @@ fun ScheduleEditDialog(
                                         text = { Text("${s.name} (${s.gender})") },
                                         onClick = {
                                             studentName = s.name
+                                            // v46：同步记录选中学员的 studentId（软关联精确匹配）
+                                            selectedStudentId = s.studentId
                                             studentExpanded = false
                                             // 选择学员后立即清除焦点，关闭软键盘
                                             focusManager.clearFocus()
@@ -374,8 +390,10 @@ fun ScheduleEditDialog(
                             label = { Text("教练") },
                             leadingIcon = { Icon(Icons.Outlined.Person, contentDescription = null) },
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                            modifier = Modifier.fillMaxWidth(),
+
+                         shape = AppTextFieldShape,
+                         colors = editDialogFieldColors(),)
                     }
                 }
 
@@ -390,14 +408,14 @@ fun ScheduleEditDialog(
                                 Icon(
                                     Icons.Outlined.CalendarToday,
                                     contentDescription = null,
-                                    tint = appOutline(),
+                                    tint = Color(0xFF6B6B6B),
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Spacer(Modifier.width(Spacing.sm))
                                 Text(
                                     "选择周几",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = appOutline()
+                                    color = Color(0xFF1A1A1A)
                                 )
                             }
                             Spacer(Modifier.height(Spacing.sm))
@@ -453,8 +471,10 @@ fun ScheduleEditDialog(
                                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(dayExpanded) },
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true)
-                                )
+                                        .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true),
+
+                                 shape = AppTextFieldShape,
+                                 colors = editDialogFieldColors(),)
                                 DropdownMenu(
                                     expanded = dayExpanded,
                                     onDismissRequest = { dayExpanded = false }
@@ -499,8 +519,10 @@ fun ScheduleEditDialog(
                                     singleLine = true,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true)
-                                )
+                                        .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true),
+
+                                 shape = AppTextFieldShape,
+                                 colors = editDialogFieldColors(),)
                                 DropdownMenu(
                                     expanded = timeExpanded,
                                     onDismissRequest = { timeExpanded = false }
@@ -532,8 +554,10 @@ fun ScheduleEditDialog(
                                 leadingIcon = { Icon(Icons.Outlined.Timer, contentDescription = null) },
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                modifier = Modifier.weight(1f)
-                            )
+                                modifier = Modifier.weight(1f),
+
+                             shape = AppTextFieldShape,
+                             colors = editDialogFieldColors(),)
                         }
                         Spacer(Modifier.height(Spacing.md))
                         // 长期排课勾选：勾选后每周自动生成对应时间的课表
@@ -584,8 +608,10 @@ fun ScheduleEditDialog(
                                 singleLine = true,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true)
-                            )
+                                    .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true),
+
+                             shape = AppTextFieldShape,
+                             colors = editDialogFieldColors(),)
                             DropdownMenu(
                                 expanded = locExpanded,
                                 onDismissRequest = { locExpanded = false }
@@ -627,8 +653,10 @@ fun ScheduleEditDialog(
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(typeExpanded) },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true)
-                            )
+                                    .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true),
+
+                             shape = AppTextFieldShape,
+                             colors = editDialogFieldColors(),)
                             DropdownMenu(
                                 expanded = typeExpanded,
                                 onDismissRequest = { typeExpanded = false }
@@ -651,7 +679,7 @@ fun ScheduleEditDialog(
                         Text(
                             "卡片颜色",
                             style = MaterialTheme.typography.labelMedium,
-                            color = appOnSurface().copy(alpha = 0.6f)
+                            color = Color(0xFF1A1A1A)
                         )
                         Spacer(Modifier.height(Spacing.sm))
                         IOSColorPillSelector(
@@ -831,8 +859,10 @@ fun ScheduleEditDialog(
                             label = { Text("备注信息") },
                             leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Notes, contentDescription = null) },
                             modifier = Modifier.fillMaxWidth(),
-                            minLines = 2
-                        )
+                            minLines = 2,
+
+                         shape = AppTextFieldShape,
+                         colors = editDialogFieldColors(),)
                     }
                 }
 
@@ -963,8 +993,10 @@ private fun ExerciseEditCard(
                 onValueChange = { onUpdate(item.copy(name = it)) },
                 label = { Text("动作") },
                 singleLine = true,
-                modifier = Modifier.weight(1.5f)
-            )
+                modifier = Modifier.weight(1.5f),
+
+             shape = AppTextFieldShape,
+             colors = editDialogFieldColors(),)
             IconButton(onClick = onDelete) {
                 Icon(
                     Icons.Outlined.Delete,
@@ -989,22 +1021,28 @@ private fun ExerciseEditCard(
                 label = { Text("组数") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f)
-            )
+                modifier = Modifier.weight(1f),
+
+             shape = AppTextFieldShape,
+             colors = editDialogFieldColors(),)
             OutlinedTextField(
                 value = item.reps,
                 onValueChange = { onUpdate(item.copy(reps = it)) },
                 label = { Text("次数") },
                 singleLine = true,
-                modifier = Modifier.weight(1f)
-            )
+                modifier = Modifier.weight(1f),
+
+             shape = AppTextFieldShape,
+             colors = editDialogFieldColors(),)
             OutlinedTextField(
                 value = item.intensity,
                 onValueChange = { onUpdate(item.copy(intensity = it)) },
                 label = { Text("强度") },
                 singleLine = true,
-                modifier = Modifier.weight(1f)
-            )
+                modifier = Modifier.weight(1f),
+
+             shape = AppTextFieldShape,
+             colors = editDialogFieldColors(),)
         }
     }
 }
@@ -1175,4 +1213,35 @@ private fun loadImageBitmapFromFile(path: String): androidx.compose.ui.graphics.
     } catch (e: Exception) {
         androidx.compose.ui.graphics.ImageBitmap(1, 1)
     }
+}
+
+/**
+ * 新增/编辑课程弹窗专用输入框配色（UI 一致性修复）。
+ *
+ * 视觉规格：
+ * - 浅灰 #F0F0F0 圆角底色（与全局 appTextFieldColors 一致，融入白色卡片，消除"白底块补丁感"）
+ * - 边框全透明
+ * - 标签文字对比度修复：未聚焦深黑 #1A1A1A / 聚焦珊瑚橙 #FF6B47
+ *   （绝对禁止 #B0B0B0 及更浅的灰色作为表单标签颜色）
+ * - 光标/错误态珊瑚橙
+ */
+@Composable
+private fun editDialogFieldColors(): TextFieldColors {
+    val container = Color(0xFFF0F0F0)
+    val labelDark = Color(0xFF1A1A1A)
+    val accent = Color(0xFFFF6B47)
+    return OutlinedTextFieldDefaults.colors(
+        focusedContainerColor = container,
+        unfocusedContainerColor = container,
+        disabledContainerColor = container.copy(alpha = 0.5f),
+        focusedBorderColor = Color.Transparent,
+        unfocusedBorderColor = Color.Transparent,
+        disabledBorderColor = Color.Transparent,
+        errorBorderColor = accent.copy(alpha = 0.9f),
+        focusedLabelColor = accent,
+        unfocusedLabelColor = labelDark,
+        disabledLabelColor = labelDark.copy(alpha = 0.5f),
+        errorLabelColor = accent,
+        cursorColor = accent,
+    )
 }

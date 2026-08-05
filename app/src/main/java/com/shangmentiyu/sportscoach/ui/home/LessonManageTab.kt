@@ -46,13 +46,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shangmentiyu.sportscoach.data.model.LessonPackage
-import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
+import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.operation.OperationViewModel
 import com.shangmentiyu.sportscoach.ui.schedule.AutoScheduleFromPackageDialog
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
+import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
+import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 /**
  * 课时管理 Tab：展示所有学员的课时包余额，支持增添/减少/赠送。
@@ -65,10 +66,7 @@ import com.shangmentiyu.sportscoach.ui.theme.appPrimary
  */
 @Composable
 fun LessonManageTab(vm: HomeViewModel) {
-    val context = LocalContext.current
-    val opVm: OperationViewModel = viewModel(
-        factory = AppViewModelFactory(context.applicationContext as android.app.Application)
-    )
+        val opVm: OperationViewModel = koinViewModel()
 
     val packages by opVm.packages.collectAsStateWithLifecycle()
 
@@ -401,7 +399,9 @@ private fun RenameStudentDialog(
                     onValueChange = { newName = it },
                     label = { Text("新姓名") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                shape = AppTextFieldShape,
+                colors = appTextFieldColors(),
                 )
             }
         },
@@ -450,7 +450,9 @@ private fun AdjustDialog(
                     value = countText,
                     onValueChange = { countText = it.filter { c -> c.isDigit() } },
                     label = { Text(hint) },
-                    singleLine = true
+                    singleLine = true,
+                shape = AppTextFieldShape,
+                colors = appTextFieldColors(),
                 )
             }
         },
@@ -501,21 +503,27 @@ private fun EditPackageDialog(
                     onValueChange = { purchaseDate = it },
                     label = { Text("购买日期 (YYYY-MM-DD)") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                shape = AppTextFieldShape,
+                colors = appTextFieldColors(),
                 )
                 OutlinedTextField(
                     value = expireDate,
                     onValueChange = { expireDate = it },
                     label = { Text("过期日期 (留空=永不过期)") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                shape = AppTextFieldShape,
+                colors = appTextFieldColors(),
                 )
                 OutlinedTextField(
                     value = usedText,
                     onValueChange = { usedText = it.filter { c -> c.isDigit() } },
                     label = { Text("已用课时 (0-${pkg.totalLessons})") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                shape = AppTextFieldShape,
+                colors = appTextFieldColors(),
                 )
 
                 // 直接消课按钮

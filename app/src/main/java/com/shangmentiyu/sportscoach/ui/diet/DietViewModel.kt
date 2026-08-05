@@ -105,6 +105,8 @@ class DietViewModel(
 
     private val _toast = MutableStateFlow<String?>(null)
     val toast: StateFlow<String?> = _toast.asStateFlow()
+    private val appExceptionHandler =
+        com.shangmentiyu.sportscoach.core.CoroutineExt.createAppExceptionHandler(_toast, "DietViewModel")
 
     /** 当前操作的学员姓名 */
     private var currentStudentName: String = ""
@@ -117,7 +119,7 @@ class DietViewModel(
      */
     fun load(studentName: String) {
         currentStudentName = studentName
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             // 1. 加载所有模板
             val tpls = dietRepo.getAllTemplates()
             _templates.value = tpls
@@ -273,7 +275,7 @@ class DietViewModel(
             onDone(false)
             return
         }
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             try {
                 dietRepo.applyTemplate(
                     studentName = currentStudentName,

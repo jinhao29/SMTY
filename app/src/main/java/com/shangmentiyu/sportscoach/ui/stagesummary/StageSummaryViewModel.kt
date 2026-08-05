@@ -26,6 +26,11 @@ class StageSummaryViewModel(
     private val opRepo: OperationRepository
 ) : ViewModel() {
 
+    private val _toast = MutableStateFlow<String?>(null)
+    val toast: StateFlow<String?> = _toast.asStateFlow()
+    private val appExceptionHandler =
+        com.shangmentiyu.sportscoach.core.CoroutineExt.createAppExceptionHandler(_toast, "StageSummaryViewModel")
+
     private val _students = MutableStateFlow<List<String>>(emptyList())
     val students: StateFlow<List<String>> = _students.asStateFlow()
 
@@ -43,7 +48,7 @@ class StageSummaryViewModel(
     val loading: StateFlow<Boolean> = _loading.asStateFlow()
 
     init {
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             _students.value = studentRepo.getAllStudents().first().map { it.name }
         }
     }
@@ -63,12 +68,14 @@ class StageSummaryViewModel(
         val student = _selectedStudent.value
         if (student.isBlank()) return
         _loading.value = true
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             try {
                 val all = lessonRepo.getByStudentOnce(student)
                 val (start, end) = computeRange(_rangeOption.value, all)
                 val result = opRepo.computeStageSummary(student, start, end, all)
                 _summary.value = result
+            } catch (e: Exception) {
+                throw e
             } finally {
                 _loading.value = false
             }

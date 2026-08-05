@@ -51,7 +51,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import org.koin.androidx.compose.koinViewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -327,9 +327,7 @@ fun SportsApp() {
 
     // === v28 优化6：订阅首页未签到数与今日排课红点状态 ===
     // 用于底部导航栏主页 Tab 显示数字角标（未签到数）或红点（仅有排课）
-    val homeVm: HomeViewModel = viewModel(
-        factory = AppViewModelFactory(context.applicationContext as android.app.Application)
-    )
+    val homeVm: HomeViewModel = koinViewModel()
     val unsignedTodayCount by homeVm.unsignedTodayCount.collectAsStateWithLifecycle()
     val hasTodayScheduleBadge by homeVm.hasTodayScheduleBadge.collectAsStateWithLifecycle()
 
@@ -355,9 +353,7 @@ fun SportsApp() {
 
     // === v32 优化3：桌面端连接状态订阅（绿色指示灯）===
     // 5 秒轮询一次 SharedPreferences，让 UI 与 UdpDesktopDiscoveryService 接收线程保持同步
-    val settingsVm: SettingsViewModel = viewModel(
-        factory = AppViewModelFactory(context.applicationContext as android.app.Application)
-    )
+    val settingsVm: SettingsViewModel = koinViewModel()
     val desktopConnection by settingsVm.desktopConnection.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) {
         while (true) {
@@ -457,23 +453,22 @@ fun SportsApp() {
 
             // === 学员管理 ===
             composable(Routes.ADD_STUDENT) {
-                AddStudentScreen(onBack = { navController.popBackStack() })
+                // v46：传 Activity 级 homeVm，保证 addStudent 写入协程不被 pop 取消
+                AddStudentScreen(onBack = { navController.popBackStack() }, vm = homeVm)
             }
             composable(
                 route = Routes.EDIT_STUDENT,
                 arguments = listOf(navArgument("studentName") { type = NavType.StringType })
             ) { backStackEntry ->
                 val studentName = backStackEntry.arguments?.getString("studentName") ?: ""
-                val context = LocalContext.current
-                val homeVm: HomeViewModel = viewModel(
-                    factory = AppViewModelFactory(context.applicationContext as android.app.Application)
-                )
+                // v46：复用 SportsApp 顶层 Activity 级 homeVm（原局部 koinViewModel 绑定 entry，pop 即取消）
                 val students by homeVm.students.collectAsStateWithLifecycle()
                 val target = students.firstOrNull { it.name == studentName }
                 when {
                     target != null -> AddStudentScreen(
                         onBack = { navController.popBackStack() },
-                        student = target
+                        student = target,
+                        vm = homeVm
                     )
                     students.isEmpty() -> {
                         Box(
@@ -607,6 +602,26 @@ fun SportsApp() {
             }
             composable(Routes.BMI_CALCULATOR) {
                 com.shangmentiyu.sportscoach.ui.tools.BmiCalculatorScreen(
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
+            // === 话术管理 ===
+            composable(Routes.SCRIPT_LIST) {
+                com.shangmentiyu.sportscoach.ui.script.ScriptListScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpen = { id -> navController.navigate(Routes.scriptDetail(id)) },
+                    onAdd = { navController.navigate(Routes.scriptDetail(null)) }
+                )
+            }
+            composable(
+                route = Routes.SCRIPT_DETAIL,
+                arguments = listOf(navArgument("scriptId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val rawId = backStackEntry.arguments?.getString("scriptId") ?: "new"
+                val scriptId = if (rawId == "new") null else rawId
+                com.shangmentiyu.sportscoach.ui.script.ScriptDetailScreen(
+                    scriptId = scriptId,
                     onBack = { navController.popBackStack() }
                 )
             }

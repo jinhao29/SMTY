@@ -66,6 +66,8 @@ fun GlassAlertDialog(
     title: String,
     confirmButton: @Composable () -> Unit,
     dismissButton: (@Composable () -> Unit)? = null,
+    // v46 修复：允许调用方禁用系统返回键关闭（用于"恢复成功必须重启"等不可跳过场景）
+    dismissOnBackPress: Boolean = true,
     content: @Composable () -> Unit
 ) {
     val containerColor = appSurface()
@@ -76,7 +78,8 @@ fun GlassAlertDialog(
         onDismissRequest = onDismissRequest,
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false
+            decorFitsSystemWindows = false,
+            dismissOnBackPress = dismissOnBackPress
         )
     ) {
         Surface(

@@ -32,6 +32,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -39,10 +40,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shangmentiyu.sportscoach.core.TrainingPlanGenerator
 import com.shangmentiyu.sportscoach.core.TrainingPlanGenerator.RecommendedExercise
-import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
+import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.growth.RadarChart
 import com.shangmentiyu.sportscoach.ui.theme.GlassCard
 import com.shangmentiyu.sportscoach.ui.theme.GlassSectionTitle
@@ -62,10 +62,7 @@ fun TrainingPlanScreen(
     onBack: () -> Unit,
     onApplied: (String) -> Unit
 ) {
-    val context = LocalContext.current
-    val vm: TrainingPlanViewModel = viewModel(
-        factory = AppViewModelFactory(context.applicationContext as android.app.Application)
-    )
+        val vm: TrainingPlanViewModel = koinViewModel()
 
     val student by vm.student.collectAsStateWithLifecycle()
     val radar by vm.radar.collectAsStateWithLifecycle()
@@ -122,6 +119,8 @@ fun TrainingPlanScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // 预计算五维数值（供均分显示与雷达图复用，避免每帧重复 toList）
+            val radarValues = remember(radar) { radar.toList() }
             // === 学员信息 + 五维均分 ===
             GlassCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -131,7 +130,7 @@ fun TrainingPlanScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.width(12.dp))
-                    val avg = radar.toList().average()
+                    val avg = remember(radarValues) { radarValues.average() }
                     Text(
                         String.format("整体均分 %.1f", avg),
                         style = MaterialTheme.typography.bodySmall,
@@ -178,7 +177,7 @@ fun TrainingPlanScreen(
                 Text("能力雷达", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(8.dp))
                 Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    RadarChart(values = radar.toList())
+                    RadarChart(values = radarValues)
                 }
             }
 

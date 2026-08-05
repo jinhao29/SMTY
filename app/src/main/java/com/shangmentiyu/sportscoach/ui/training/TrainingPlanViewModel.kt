@@ -27,6 +27,11 @@ class TrainingPlanViewModel(
     private val lessonRepo: LessonRepository
 ) : ViewModel() {
 
+    private val _toast = MutableStateFlow<String?>(null)
+    val toast: StateFlow<String?> = _toast.asStateFlow()
+    private val appExceptionHandler =
+        com.shangmentiyu.sportscoach.core.CoroutineExt.createAppExceptionHandler(_toast, "TrainingPlanViewModel")
+
     private val _student = MutableStateFlow<Student?>(null)
     val student: StateFlow<Student?> = _student.asStateFlow()
 
@@ -49,7 +54,7 @@ class TrainingPlanViewModel(
      * @param studentName 学员姓名
      */
     fun loadAndGenerate(studentName: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             val s = studentRepo.getByName(studentName)
             _student.value = s
 
@@ -81,9 +86,10 @@ class TrainingPlanViewModel(
         val s = _student.value ?: return
         val plan = _plan.value ?: return
         _applying.value = true
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             try {
-                val lessonId = lessonRepo.createLesson(s.name, coach)
+                // v46 断流修复：训练计划生成的课时同样绑定 studentId，保持软关联通道完整
+                val lessonId = lessonRepo.createLesson(s.name, coach, studentId = s.studentId)
                 lessonRepo.getById(lessonId)?.let { lesson ->
                     val updated = lesson.copy(
                         content = exercisesToJson(plan.exercises),
@@ -93,6 +99,8 @@ class TrainingPlanViewModel(
                     lessonRepo.updateLesson(updated)
                 }
                 _appliedLessonId.value = lessonId
+            } catch (e: Exception) {
+                throw e
             } finally {
                 _applying.value = false
             }

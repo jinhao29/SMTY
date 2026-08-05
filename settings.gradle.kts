@@ -48,6 +48,6 @@ rootProject.name = "SportsCoach"
 // 4. Phase 4（待执行）：app/build.gradle.kts 添加 implementation(project(":core")) / (":data")
 // ============================================================================
 include(":app")
-// 模块化预备：以下模块在 Phase 2/3 启用，先注释保留入口，避免破坏现有构建
-// include(":core")
-// include(":data")
+// 模块化预备：全部模块已启用（v46 Phase 2/3 完成）
+include(":core")
+include(":data")

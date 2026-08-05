@@ -15,6 +15,8 @@ import com.shangmentiyu.sportscoach.data.repo.OperationRepository
 import com.shangmentiyu.sportscoach.data.repo.ScheduleMemoryRepository
 import com.shangmentiyu.sportscoach.data.repo.ScheduleRepository
 import com.shangmentiyu.sportscoach.data.repo.StudentRepository
+import com.shangmentiyu.sportscoach.domain.scheduling.CanScheduleLessonsUseCase
+import com.shangmentiyu.sportscoach.domain.scheduling.SchedulingDecision
 import com.shangmentiyu.sportscoach.ui.schedule.ScheduleForm
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -60,7 +62,9 @@ class OperationViewModel(
     private val scheduleRepo: ScheduleRepository,
     private val memoryRepo: ScheduleMemoryRepository,
     private val pkgRepo: LessonPackageRepository,
-    private val coachRepo: CoachRepository
+    private val coachRepo: CoachRepository,
+    // v46 架构层二：排课三段硬决策 UseCase（从 ViewModel 抽离的领域逻辑）
+    private val schedulingDecision: CanScheduleLessonsUseCase
 ) : ViewModel() {
 
     /**
@@ -332,6 +336,15 @@ class OperationViewModel(
                         _toast.value = "排课生效日期不能早于今天，请在未来的日期排课。"
                         return@safeLaunch
                     }
+                    // === v46 综合整治：购买日期前置拦截 ===
+                    // 排课日期早于学员最早购买课时包日期 → 直接中断保存，绝不入库
+                    val earliestPurchase = withContext(Dispatchers.IO) {
+                        opRepo.earliestPurchaseDateOf(form.studentName)
+                    }
+                    if (earliestPurchase != null && dateStr < earliestPurchase) {
+                        _toast.value = "无法排课：该日期早于购买日期"
+                        return@safeLaunch
+                    }
                     val effectiveRemaining = withContext(Dispatchers.IO) {
                         pkgRepo.getEffectiveRemainingLessons(form.studentName, dateStr)
                     }
@@ -368,6 +381,7 @@ class OperationViewModel(
                             // v25 优化5：强制替换分支——先删除冲突排课再写入
                             scheduleRepo.addScheduleForce(
                                 studentName = form.studentName,
+                                studentId = form.studentId,
                                 coachName = form.coachName,
                                 dayOfWeek = dayOfWeek,
                                 startTime = form.startTime,
@@ -384,6 +398,7 @@ class OperationViewModel(
                         } else {
                             scheduleRepo.addSchedule(
                                 studentName = form.studentName,
+                                studentId = form.studentId,
                                 coachName = form.coachName,
                                 dayOfWeek = dayOfWeek,
                                 startTime = form.startTime,
@@ -417,6 +432,8 @@ class OperationViewModel(
                     val updated = editing.copy(
                         id = effectiveId,
                         studentName = form.studentName,
+                        // v46：编辑模式未重选学员时保留原 studentId，避免被 null 覆盖清空
+                        studentId = form.studentId ?: editing.studentId,
                         coachName = form.coachName,
                         dayOfWeek = form.dayOfWeek,
                         startTime = form.startTime,
@@ -450,6 +467,15 @@ class OperationViewModel(
                                         "contentLen=${updated.content.length}")
                                 return@safeLaunch
                             }
+                        } catch (e: IllegalArgumentException) {
+                            // === Bug 1 修复：排课日期早于购买日期的业务校验异常 ===
+                            // opRepo.saveSchedule 在事务前抛出，异常消息即用户可读文案，
+                            // 直接展示，避免被"保存失败："前缀污染
+                            android.util.Log.w("DataFlow",
+                                "saveSchedule 业务校验拦截：id=${updated.id}, " +
+                                    "student=${updated.studentName}, ${e.message}")
+                            _toast.value = e.message ?: "无法排课：日期校验失败"
+                            return@safeLaunch
                         } catch (e: Exception) {
                             // 二次防护：opRepo.saveSchedule 内部已 try-catch 返回 false，
                             // 但仍兜底捕获以防 NPE / IllegalState 等 RuntimeException 逃逸
@@ -531,9 +557,10 @@ class OperationViewModel(
                 // 周几中文映射，用于生成可读警告文案
                 val dayNames = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
 
-                // 学员活跃课时包缓存：一次性查出，避免在循环内重复查库
-                // key = 学员姓名，value = 该学员所有活跃课时包列表（已按 purchaseDate 升序）
-                val activePackagesCache = mutableMapOf<String, List<com.shangmentiyu.sportscoach.data.model.LessonPackage>>()
+                // === v46 综合整治：三段绝对硬逻辑（余额 / 额度封顶 / 购买日前置） ===
+                // 每步实时查询（studentId 双通道），不再依赖跨周累计缓存：
+                // - 有 endDate 的排课由 endDate 边界控制，不参与额度跟踪
+                // - 无 endDate 的永久长期排课走下方三段硬校验，杜绝超额排课
 
                 // 遍历本周 7 天
                 for (offset in 0..6) {
@@ -596,38 +623,20 @@ class OperationViewModel(
                             return@forEach
                         }
 
-                        // === 无 endDate 的永久长期排课：余额检查 ===
-                        // 今天及以后日期必须满足
-                        // 1. 有有效课时包（purchaseDate <= dateStr <= expireDate）
-                        //    → 避免学员 7.24 买的课被排到 7.20
-                        // 2. 有效课时包剩余 > 从 dateStr 起长期自动未签退的课时数
-                        val activePkgs = activePackagesCache.getOrPut(sched.studentName) {
-                            pkgRepo.getActivePackagesByStudent(sched.studentName)
+                        // === 无 endDate 的永久长期排课：领域 UseCase 三段决策（v46 架构层二）===
+                        // 三段硬逻辑已抽离到 domain/scheduling/CanScheduleLessonsUseCase，
+                        // ViewModel 只依据决策结果生成课时或提示文案，不再持有计算细节
+                        val dayLabel = dayNames.getOrElse(dayOfWeek - 1) { "周$dayOfWeek" }
+                        when (val decision = schedulingDecision.invoke(sched.studentName, dateStr, todayStr)) {
+                            is SchedulingDecision.Allowed ->
+                                opRepo.generateLongTermLesson(sched, dateStr)
+                            is SchedulingDecision.NoPackage ->
+                                if (dateStr >= todayStr) warnings.add("${sched.studentName} $dayLabel 无有效课时包")
+                            is SchedulingDecision.QuotaExhausted ->
+                                if (dateStr >= todayStr) warnings.add("${sched.studentName} $dayLabel 余额不足（剩余${decision.totalRemaining} 节）")
+                            is SchedulingDecision.BeforePurchase ->
+                                Unit // 购买日前置：静默跳过，不生成
                         }
-                        val effectivePkgs = activePkgs.filter { pkg ->
-                            pkg.purchaseDate <= dateStr &&
-                                (pkg.expireDate.isBlank() || pkg.expireDate >= dateStr)
-                        }
-                        val effectiveRemaining = effectivePkgs.sumOf { it.remainingLessons }
-                        // v27：改用 countLongTermPendingFrom 只统计长期自动未签退课时
-                        // 避免"已签到未签退"的课时被错误计入"未消费"
-                        val pending = opRepo.countLongTermPendingFrom(sched.studentName, dateStr)
-                        val available = effectiveRemaining - pending
-                        if (available <= 0) {
-                            // v24 优化2：不再静默跳过，收集警告供 UI 主动提示教练续费
-                            // 仅对今天及以后的日期生成警告（过去日期不警告）
-                            if (dateStr >= todayStr) {
-                                val dayLabel = dayNames.getOrElse(dayOfWeek - 1) { "周$dayOfWeek" }
-                                val reason = if (effectiveRemaining <= 0) {
-                                    "无有效课时包"
-                                } else {
-                                    "余额不足（剩余$effectiveRemaining 节）"
-                                }
-                                warnings.add("${sched.studentName} $dayLabel $reason")
-                            }
-                            return@forEach
-                        }
-                        opRepo.generateLongTermLesson(sched, dateStr)
                     }
                 }
 

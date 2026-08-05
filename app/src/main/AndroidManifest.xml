@@ -15,6 +15,9 @@
     <!-- v22 新增：排课提醒通知权限（Android 13+ / API 33+ 需运行时申请） -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- 悬浮窗权限：FloatingWindowService 使用 WindowManager 添加悬浮布局 -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
     <!-- v25 新增：局域网训练计划截图同步 -->
     <!-- FOREGROUND_SERVICE：Android 9+ 启动前台 Service（UdpPlanListenerService）必需 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -37,6 +40,8 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:resizeableActivity="true"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout"
             android:theme="@style/Theme.SportsCoach">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -66,6 +71,12 @@
         <!-- 收到广播后写入 SharedPreferences，UI 顶部状态栏显示绿色"已连接"指示灯 -->
         <service
             android:name=".core.UdpDesktopDiscoveryService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- 悬浮窗服务：通过 WindowManager 动态添加圆角悬浮布局，前台保活 -->
+        <service
+            android:name=".service.FloatingWindowService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
     </application>

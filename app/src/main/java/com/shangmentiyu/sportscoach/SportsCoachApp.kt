@@ -12,8 +12,12 @@ import com.shangmentiyu.sportscoach.core.ScheduleReminderManager
 import com.shangmentiyu.sportscoach.core.UdpDesktopDiscoveryService
 import com.shangmentiyu.sportscoach.data.db.AppDatabase
 import com.shangmentiyu.sportscoach.data.repo.StudentRepository
+import com.shangmentiyu.sportscoach.di.appModule
 import com.shangmentiyu.sportscoach.update.UpdateManager
 import kotlinx.coroutines.Dispatchers
+import org.koin.android.ext.koin.androidContext
+import org.koin.android.ext.koin.androidLogger
+import org.koin.core.context.startKoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -51,6 +55,16 @@ class SportsCoachApp : Application() {
         // - 保留最近 3 份，超出自动清理最旧文件夹
         runCatching { PreUpdateBackupManager.backupIfDbExists(this) }
 
+        // === v46 架构层四：Koin 依赖注入容器初始化 ===
+        // 在业务初始化之前启动；失败仅记录日志不阻塞启动（koinViewModel 调用方会有兜底）
+        runCatching {
+            startKoin {
+                androidLogger()
+                androidContext(this@SportsCoachApp)
+                modules(appModule)
+            }
+        }
+
         // 1. 全局崩溃捕获：最早安装，覆盖后续所有线程
         //    - 同步落盘崩溃堆栈到 filesDir/crash_logs/
         //    - 透传给系统默认 Handler，不改变原有崩溃流程
@@ -66,19 +80,19 @@ class SportsCoachApp : Application() {
         // - 必须在 ScheduleReminderManager.scheduleDailyReminder 之前调用（虽然 Worker 异步执行）
         runCatching { ScheduleReminderManager.markAppOpened(this) }
 
+        // === v46 修复：自动备份调度器提前同步初始化 ===
+        // 原实现位于下方 ProcessLifecycleOwner 协程内（IO 线程延迟执行），
+        // 若该协程因时序/异常未执行，notifyDataChange 会全部静默失效 → 自动备份"失效"。
+        // init 仅做轻量赋值（注入 applicationContext + 置位标志），同步执行无性能风险，
+        // 保证任何 Repository 首次数据变更前调度器必然已就绪。
+        runCatching { AutoBackupScheduler.init(this) }
+
         // 关键：使用 ProcessLifecycleOwner 的 lifecycleScope 在应用前台时延迟初始化
         // 避免在 Application.onCreate 主线程同步路径上阻塞首帧渲染
         ProcessLifecycleOwner.get().lifecycleScope.launch {
             // 切到 IO 线程初始化 WorkManager（内部 SQLite 初始化不阻塞 UI）
             withContext(Dispatchers.IO) {
-                // v30：初始化全自动无感备份调度器
-                // - 注入应用上下文，等待数据变更触发防抖备份
-                // - 默认开启，可在设置页关闭
-                // - 必须在数据库升级完成前调用 init（init 仅注入上下文，不读 DataStore）
-                //   实际启用状态由首次 notifyDataChange 时通过 readEnabledSetting 读取
-                runCatching {
-                    AutoBackupScheduler.init(this@SportsCoachApp)
-                }
+                // v46：自动备份调度器已在 onCreate 同步初始化（见上），此处不再重复调用
                 runCatching {
                     UpdateManager.schedulePeriodicCheck(this@SportsCoachApp)
                 }

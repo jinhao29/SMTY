@@ -68,13 +68,12 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shangmentiyu.sportscoach.data.model.DietTemplateEntity
 import com.shangmentiyu.sportscoach.data.model.MealItem
 import com.shangmentiyu.sportscoach.data.repo.DietRepository
 import com.shangmentiyu.sportscoach.domain.ActivityLevel
 import com.shangmentiyu.sportscoach.domain.TdeeResult
-import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
+import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.theme.IOSCard
 import com.shangmentiyu.sportscoach.ui.theme.PrimaryButton
 import com.shangmentiyu.sportscoach.ui.theme.FloatingSnackbarHost
@@ -87,6 +86,8 @@ import com.shangmentiyu.sportscoach.ui.theme.appSurface
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.LocalContentColor
+import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
+import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 /**
  * 学员饮食管理页面（3+2 饮食法）。
@@ -109,10 +110,7 @@ fun DietManageScreen(
     studentName: String,
     onBack: () -> Unit
 ) {
-    val context = LocalContext.current
-    val vm: DietViewModel = viewModel(
-        factory = AppViewModelFactory(context.applicationContext as android.app.Application)
-    )
+        val vm: DietViewModel = koinViewModel()
 
     val templates by vm.templates.collectAsStateWithLifecycle()
     val selectedTemplateId by vm.selectedTemplateId.collectAsStateWithLifecycle()
@@ -612,7 +610,8 @@ private fun MealCard(
                     singleLine = false,
                     minLines = 1,
                     maxLines = 3,
-                    shape = RoundedCornerShape(8.dp)
+                    shape = AppTextFieldShape,
+                    colors = appTextFieldColors()
                 )
             }
         }
@@ -702,7 +701,8 @@ private fun CustomMealsEditDialog(
                     singleLine = false,
                     minLines = 4,
                     maxLines = 8,
-                    shape = RoundedCornerShape(8.dp)
+                    shape = AppTextFieldShape,
+                    colors = appTextFieldColors()
                 )
                 Spacer(Modifier.height(Spacing.xs))
                 Text(
@@ -1013,14 +1013,8 @@ private fun ActivityLevelDropdown(
             enabled = false,
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            shape = RoundedCornerShape(12.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                disabledContainerColor = appGroupedBackground(),
-                disabledTextColor = appOnSurface(),
-                disabledBorderColor = Color.Transparent,
-                disabledTrailingIconColor = appOnSurfaceVariant(),
-                disabledLabelColor = appOnSurfaceVariant()
-            ),
+            shape = AppTextFieldShape,
+            colors = appTextFieldColors(),
             trailingIcon = {
                 Icon(
                     Icons.Outlined.ArrowDropDown,

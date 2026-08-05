@@ -23,6 +23,11 @@ class ScoringViewModel(
     private val studentRepo: StudentRepository
 ) : ViewModel() {
 
+    private val _toast = MutableStateFlow<String?>(null)
+    val toast: StateFlow<String?> = _toast.asStateFlow()
+    private val appExceptionHandler =
+        com.shangmentiyu.sportscoach.core.CoroutineExt.createAppExceptionHandler(_toast, "ScoringViewModel")
+
     private val _students = MutableStateFlow<List<Student>>(emptyList())
     val students: StateFlow<List<Student>> = _students.asStateFlow()
 
@@ -48,14 +53,14 @@ class ScoringViewModel(
     private var lessonId: String? = null
 
     init {
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             studentRepo.getAllStudents().collect { _students.value = it }
         }
     }
 
     fun loadLesson(id: String) {
         lessonId = id
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             val lesson = lessonRepo.getById(id)
             if (lesson != null) {
                 currentLesson = lesson
@@ -171,7 +176,7 @@ class ScoringViewModel(
             return
         }
 
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             // 构建 scores JSON
             val scoresObj = JSONObject()
             for ((name, result) in results) {
@@ -193,7 +198,9 @@ class ScoringViewModel(
                 }
             } else {
                 // 无关联课时，创建新记录
-                val newId = lessonRepo.createLesson(student.name, "")
+                // === v46 断流修复：创建课时必须携带 studentId（软关联外键），
+                // 禁止仅传姓名，否则成绩页按 studentId 查询会断流 ===
+                val newId = lessonRepo.createLesson(student.name, "", studentId = student.studentId)
                 val lesson = lessonRepo.getById(newId)
                 if (lesson != null) {
                     lessonRepo.updateLesson(lesson.copy(scores = scoresObj.toString()))

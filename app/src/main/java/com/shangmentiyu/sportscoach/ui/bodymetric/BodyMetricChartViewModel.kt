@@ -22,6 +22,11 @@ class BodyMetricChartViewModel(
     private val studentRepo: StudentRepository
 ) : ViewModel() {
 
+    private val _toast = MutableStateFlow<String?>(null)
+    val toast: StateFlow<String?> = _toast.asStateFlow()
+    private val appExceptionHandler =
+        com.shangmentiyu.sportscoach.core.CoroutineExt.createAppExceptionHandler(_toast, "BodyMetricChartViewModel")
+
     private val _students = MutableStateFlow<List<String>>(emptyList())
     val students: StateFlow<List<String>> = _students.asStateFlow()
 
@@ -36,7 +41,7 @@ class BodyMetricChartViewModel(
     val delta: StateFlow<BodyMetricRepository.MetricDelta?> = _delta.asStateFlow()
 
     init {
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             _students.value = studentRepo.getAllStudents().first().map { it.name }
         }
     }
@@ -47,7 +52,7 @@ class BodyMetricChartViewModel(
     }
 
     private fun loadHistory(name: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             bodyMetricRepo.getByStudent(name).collect { list ->
                 _history.value = list
                 if (list.size >= 2) {
@@ -63,12 +68,12 @@ class BodyMetricChartViewModel(
     fun addRecord(heightCm: Int, weightKg: Float, note: String) {
         val student = _selectedStudent.value
         if (student.isBlank()) return
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             bodyMetricRepo.record(student, heightCm = heightCm, weightKg = weightKg, note = note)
         }
     }
 
     fun deleteRecord(id: String) {
-        viewModelScope.launch { bodyMetricRepo.delete(id) }
+        viewModelScope.launch(appExceptionHandler) { bodyMetricRepo.delete(id) }
     }
 }

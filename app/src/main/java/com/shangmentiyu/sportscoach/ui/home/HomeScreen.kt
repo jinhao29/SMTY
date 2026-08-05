@@ -45,11 +45,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shangmentiyu.sportscoach.R
 import com.shangmentiyu.sportscoach.data.model.LessonPackage
 import com.shangmentiyu.sportscoach.data.model.Student
-import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
+import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 
@@ -74,10 +73,7 @@ fun HomeScreen(
     onHeightPrediction: (String) -> Unit = {},
     onDietManage: (String) -> Unit = {}
 ) {
-    val context = LocalContext.current
-    val vm: HomeViewModel = viewModel(
-        factory = AppViewModelFactory(context.applicationContext as android.app.Application)
-    )
+        val vm: HomeViewModel = koinViewModel()
 
     var tabIndex by remember { mutableStateOf(0) } // 默认显示课前准备 Tab（123.txt 重构后首页为今日概览）
     // === 终极修复：toast 订阅与 SnackbarHost 已提升到 SportsApp 外层 Box ===

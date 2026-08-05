@@ -51,6 +51,8 @@ import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appOutline
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 import com.shangmentiyu.sportscoach.ui.theme.appSurface
+import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
+import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 /**
  * 按课时包自动排课对话框（共享组件）。
@@ -176,8 +178,10 @@ fun AutoScheduleFromPackageDialog(
                 onValueChange = { coachName = it },
                 label = { Text("教练姓名") },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
+                modifier = Modifier.fillMaxWidth(),
+
+             shape = AppTextFieldShape,
+             colors = appTextFieldColors(),)
 
             // === 上课日多选 ===
             Text(
@@ -217,8 +221,10 @@ fun AutoScheduleFromPackageDialog(
                 trailingIcon = {
                     Icon(Icons.Outlined.Schedule, contentDescription = null, modifier = Modifier.clickable { })
                 },
-                modifier = Modifier.fillMaxWidth()
-            )
+                modifier = Modifier.fillMaxWidth(),
+
+             shape = AppTextFieldShape,
+             colors = appTextFieldColors(),)
 
             // === 地点 ===
             OutlinedTextField(
@@ -226,8 +232,10 @@ fun AutoScheduleFromPackageDialog(
                 onValueChange = { location = it },
                 label = { Text("地点（可选）") },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
+                modifier = Modifier.fillMaxWidth(),
+
+             shape = AppTextFieldShape,
+             colors = appTextFieldColors(),)
 
             // === 课程类型 ===
             OutlinedTextField(
@@ -235,8 +243,10 @@ fun AutoScheduleFromPackageDialog(
                 onValueChange = { lessonType = it },
                 label = { Text("课程类型") },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
+                modifier = Modifier.fillMaxWidth(),
+
+             shape = AppTextFieldShape,
+             colors = appTextFieldColors(),)
         }
     }
 }
@@ -264,8 +274,10 @@ private fun StudentDropdown(
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
             modifier = Modifier
                 .fillMaxWidth()
-                .menuAnchor()
-        )
+                .menuAnchor(),
+
+         shape = AppTextFieldShape,
+         colors = appTextFieldColors(),)
         ExposedDropdownMenuBoxScopeFix {
             androidx.compose.material3.DropdownMenu(
                 expanded = expanded,
@@ -320,8 +332,10 @@ private fun PackageDropdown(
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
             modifier = Modifier
                 .fillMaxWidth()
-                .menuAnchor()
-        )
+                .menuAnchor(),
+
+         shape = AppTextFieldShape,
+         colors = appTextFieldColors(),)
         ExposedDropdownMenuBoxScopeFix {
             androidx.compose.material3.DropdownMenu(
                 expanded = expanded,

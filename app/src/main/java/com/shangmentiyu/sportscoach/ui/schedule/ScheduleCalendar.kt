@@ -1,11 +1,8 @@
 package com.shangmentiyu.sportscoach.ui.schedule
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,7 +21,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,7 +69,12 @@ fun ScheduleCalendar(
     // 把 42 个日期的所有 UI 状态一次性算完，避免在 forEach 里重复 format/比较
     // 用 @Immutable 注解，Compose 检测到引用未变即跳过重组
     val monthDays = remember(currentMonth, selected, today, scheduledDaysOfWeek) {
-        buildCalendarDays(currentMonth, selected, today, scheduledDaysOfWeek, formatter)
+        try {
+            buildCalendarDays(currentMonth, selected, today, scheduledDaysOfWeek, formatter)
+        } catch (e: Exception) {
+            android.util.Log.e("CalendarCrash", "构建日历数据失败", e)
+            emptyList()
+        }
     }
 
     Column(
@@ -154,11 +156,19 @@ fun ScheduleCalendar(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 week.forEach { dayData ->
-                    CalendarDayCell(
-                        data = dayData,
-                        onClick = { onDateSelected(dayData.dateStr) },
-                        modifier = Modifier.weight(1f)
-                    )
+                    key(dayData.dateStr) {
+                        CalendarDayCell(
+                            data = dayData,
+                            onClick = {
+                                try {
+                                    onDateSelected(dayData.dateStr)
+                                } catch (e: Exception) {
+                                    android.util.Log.e("CalendarCrash", "切换日期失败", e)
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
             Spacer(Modifier.height(4.dp))
@@ -241,35 +251,20 @@ private fun CalendarDayCell(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // === 背景色动画过渡 ===
-    // 选中/今日/普通三态切换时，背景色用 180ms tween 平滑过渡
-    val targetBgColor = when {
+    val bgColor = when {
         data.isSelected -> Color(0xFF1A1A1A)
         data.isToday -> LightPrimary.copy(alpha = 0.12f)
         else -> Color.Transparent
     }
-    val bgColor by animateColorAsState(
-        targetValue = targetBgColor,
-        animationSpec = tween(durationMillis = 180),
-        label = "calendar_day_bg"
-    )
 
-    // === 文字色动画过渡 ===
-    val targetTextColor = when {
+    val textColor = when {
         data.isSelected -> Color.White
         data.isToday -> LightPrimary
         data.isCurrentMonth -> Color(0xFF1A1A1A)
         else -> Color(0xFFBDBDBD)
     }
-    val textColor by animateColorAsState(
-        targetValue = targetTextColor,
-        animationSpec = tween(durationMillis = 180),
-        label = "calendar_day_text"
-    )
 
-    // === 按下反馈：无 ripple，仅用 pressed 状态做轻微缩放 ===
     val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
 
     Column(
         modifier = modifier
@@ -277,7 +272,6 @@ private fun CalendarDayCell(
             .clip(CircleShape)
             .clickable(
                 interactionSource = interactionSource,
-                // indication = null：禁用 ripple 涟漪，减少绘制层
                 indication = null
             ) { onClick() }
             .background(bgColor),
@@ -291,7 +285,6 @@ private fun CalendarDayCell(
             fontWeight = if (data.isSelected || data.isToday) FontWeight.Bold else FontWeight.Normal
         )
         Spacer(Modifier.height(2.dp))
-        // 排课指示点：选中日期不显示（已被深色圆覆盖）
         if (data.isScheduled && !data.isSelected) {
             Box(
                 modifier = Modifier
@@ -300,7 +293,6 @@ private fun CalendarDayCell(
                     .background(LightPrimary)
             )
         } else {
-            // 占位保持高度一致，避免选中/非选中切换时高度跳动
             Spacer(Modifier.size(5.dp))
         }
     }

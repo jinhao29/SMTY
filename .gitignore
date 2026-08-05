@@ -9,6 +9,8 @@
 .cxx
 local.properties
 /app/build
+/core/build
+/data/build
 
 # 签名密钥（个人使用也应避免上传）
 *.jks

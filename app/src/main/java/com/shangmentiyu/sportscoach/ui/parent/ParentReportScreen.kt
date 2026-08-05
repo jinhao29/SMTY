@@ -44,15 +44,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shangmentiyu.sportscoach.core.ReportGenerator
 import com.shangmentiyu.sportscoach.data.model.ParentReport
-import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
+import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.theme.GlassCard
 import com.shangmentiyu.sportscoach.ui.theme.GlassSectionTitle
 import com.shangmentiyu.sportscoach.ui.theme.FloatingSnackbarHost
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
+import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
+import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 /**
  * 家长服务主页面：生成周报/月报，查看历史报告并一键分享给家长。
@@ -60,9 +61,7 @@ import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ParentReportScreen(onBack: () -> Unit) {
-    val vm: ParentReportViewModel = viewModel(
-        factory = AppViewModelFactory(LocalContextProvider())
-    )
+    val vm: ParentReportViewModel = koinViewModel()
     val students by vm.students.collectAsStateWithLifecycle()
     val reports by vm.reports.collectAsStateWithLifecycle()
     val selectedStudent by vm.selectedStudent.collectAsStateWithLifecycle()
@@ -250,8 +249,10 @@ private fun GenerateReportDialog(
                     value = selectedName,
                     onValueChange = { selectedName = it },
                     label = { Text("学员姓名") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                    modifier = Modifier.fillMaxWidth(),
+
+                 shape = AppTextFieldShape,
+                 colors = appTextFieldColors(),)
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(

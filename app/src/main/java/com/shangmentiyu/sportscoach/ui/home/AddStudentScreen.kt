@@ -50,11 +50,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shangmentiyu.sportscoach.core.BmiProcessor
 import com.shangmentiyu.sportscoach.core.Standards
 import com.shangmentiyu.sportscoach.data.model.Student
-import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
 import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
@@ -83,12 +81,12 @@ import com.shangmentiyu.sportscoach.ui.theme.Spacing
 @Composable
 fun AddStudentScreen(
     onBack: () -> Unit,
-    student: Student? = null
+    student: Student? = null,
+    // === v46 修复：传入 Activity 级 HomeViewModel（写入协程不被页面 pop 取消）===
+    // 原实现内部 koinViewModel() 绑定 NavBackStackEntry：保存后 onBack() 即销毁
+    // entry → viewModelScope 取消 → addStudent 的 insert 可能未提交 → 学员丢失
+    vm: HomeViewModel
 ) {
-    val context = LocalContext.current
-    val vm: HomeViewModel = viewModel(
-        factory = AppViewModelFactory(context.applicationContext as Application)
-    )
 
     val isEdit = student != null
     // 用 student 作为 key：进入编辑模式时状态会随传入的学员对象重新初始化

@@ -48,7 +48,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.room.withTransaction
 import com.shangmentiyu.sportscoach.data.db.AppDatabase
 import com.shangmentiyu.sportscoach.data.model.Lesson
@@ -56,7 +55,7 @@ import com.shangmentiyu.sportscoach.data.model.Student
 import com.shangmentiyu.sportscoach.data.repo.LessonRepository
 import com.shangmentiyu.sportscoach.data.repo.OperationRepository
 import com.shangmentiyu.sportscoach.data.repo.StudentRepository
-import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
+import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.home.SignResult
 import com.shangmentiyu.sportscoach.ui.theme.AttendanceOnTime
 import com.shangmentiyu.sportscoach.ui.theme.LightSecondary
@@ -167,10 +166,7 @@ fun LessonCheckInScreen(
     onBack: () -> Unit,
     onOpenLesson: (String) -> Unit
 ) {
-    val context = LocalContext.current
-    val vm: LessonCheckInViewModel = viewModel(
-        factory = AppViewModelFactory(context.applicationContext as Application)
-    )
+        val vm: LessonCheckInViewModel = koinViewModel()
 
     val students by vm.students.collectAsStateWithLifecycle()
     val todayLessons by vm.todayLessons.collectAsStateWithLifecycle()

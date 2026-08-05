@@ -51,6 +51,8 @@ import com.shangmentiyu.sportscoach.ui.theme.appBackground
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
+import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
+import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 /**
  * BMI 计算器页面。
@@ -133,7 +135,9 @@ fun BmiCalculatorScreen(
                     suffix = { Text("cm", color = appOnSurfaceVariant()) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                shape = AppTextFieldShape,
+                colors = appTextFieldColors(),
                 )
 
                 OutlinedTextField(
@@ -143,7 +147,9 @@ fun BmiCalculatorScreen(
                     suffix = { Text("kg", color = appOnSurfaceVariant()) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                shape = AppTextFieldShape,
+                colors = appTextFieldColors(),
                 )
 
                 PrimaryButton(

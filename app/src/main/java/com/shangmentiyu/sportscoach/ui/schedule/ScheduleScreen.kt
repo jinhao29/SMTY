@@ -1,9 +1,7 @@
 package com.shangmentiyu.sportscoach.ui.schedule
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,7 +11,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -29,8 +26,6 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Check
-import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.CleaningServices
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteSweep
@@ -40,14 +35,11 @@ import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.PersonRemove
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Warning
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.Text
@@ -67,16 +59,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shangmentiyu.sportscoach.data.model.Schedule
-import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
+import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.operation.OperationViewModel
 import com.shangmentiyu.sportscoach.ui.theme.LightSecondary
 import com.shangmentiyu.sportscoach.ui.theme.LightTertiary
@@ -86,14 +76,12 @@ import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
 import com.shangmentiyu.sportscoach.ui.theme.LightOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.IOSCard
 import com.shangmentiyu.sportscoach.ui.theme.FloatingSnackbarHost
-import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appOutline
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
-import com.shangmentiyu.sportscoach.ui.theme.appSurface
 import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
 import java.time.LocalDate
 import java.time.ZoneId
@@ -138,10 +126,7 @@ private data class DayItem(
 fun ScheduleScreen(
     onBack: () -> Unit
 ) {
-    val context = LocalContext.current
-    val vm: OperationViewModel = viewModel(
-        factory = AppViewModelFactory(context.applicationContext as android.app.Application)
-    )
+        val vm: OperationViewModel = koinViewModel()
 
     val schedules by vm.schedules.collectAsStateWithLifecycle()
     val weekStart by vm.weekStart.collectAsStateWithLifecycle()
@@ -155,8 +140,6 @@ fun ScheduleScreen(
     var showClearAllDialog by remember { mutableStateOf(false) }
     // === 按学员删除排课对话框状态 ===
     var showDeleteByStudentDialog by remember { mutableStateOf(false) }
-    var deleteStudentSearch by remember { mutableStateOf("") }
-    var deletingStudent by remember { mutableStateOf<String?>(null) }
     // === 按课时包自动排课对话框状态 ===
     var showAutoScheduleDialog by remember { mutableStateOf(false) }
 
@@ -221,20 +204,26 @@ fun ScheduleScreen(
     }
 
     // 默认选中今天对应的 dayOfWeek（仅在首次进入页面时计算），切换周时保持
-    // 当前选中的星期几不变，这样用户能明确看到日期选择条随周切换而移动。 
+    // 当前选中的星期几不变，这样用户能明确看到日期选择条随周切换而移动。
     var selectedDayOfWeek by remember { mutableIntStateOf(1) }
     var hasSelectedToday by remember { mutableStateOf(false) }
 
     LaunchedEffect(weekDays) {
         if (!hasSelectedToday && weekDays.isNotEmpty()) {
-            val todayCal = Calendar.getInstance()
-            val todayIdx = weekDays.indexOfFirst { day ->
-                val d = Calendar.getInstance().apply { time = day.date }
-                d.get(Calendar.YEAR) == todayCal.get(Calendar.YEAR) &&
-                    d.get(Calendar.DAY_OF_YEAR) == todayCal.get(Calendar.DAY_OF_YEAR)
+            try {
+                val todayCal = Calendar.getInstance()
+                val todayIdx = weekDays.indexOfFirst { day ->
+                    val d = Calendar.getInstance().apply { time = day.date }
+                    d.get(Calendar.YEAR) == todayCal.get(Calendar.YEAR) &&
+                        d.get(Calendar.DAY_OF_YEAR) == todayCal.get(Calendar.DAY_OF_YEAR)
+                }
+                selectedDayOfWeek = if (todayIdx >= 0) weekDays[todayIdx].dayOfWeek else 1
+                hasSelectedToday = true
+            } catch (e: Exception) {
+                android.util.Log.e("CalendarCrash", "初始化选中日期失败", e)
+                selectedDayOfWeek = 1
+                hasSelectedToday = true
             }
-            selectedDayOfWeek = if (todayIdx >= 0) weekDays[todayIdx].dayOfWeek else 1
-            hasSelectedToday = true
         }
     }
 
@@ -243,9 +232,14 @@ fun ScheduleScreen(
     // weekStart 是周一，selectedDayOfWeek 1=周一 ... 7=周日
     val todayLocal = remember { LocalDate.now() }
     val selectedDateLocal = remember(weekStart, selectedDayOfWeek) {
-        val zone = ZoneId.systemDefault()
-        val weekStartLocal = weekStart.toInstant().atZone(zone).toLocalDate()
-        weekStartLocal.plusDays((selectedDayOfWeek - 1).toLong())
+        try {
+            val zone = ZoneId.systemDefault()
+            val weekStartLocal = weekStart.toInstant().atZone(zone).toLocalDate()
+            weekStartLocal.plusDays((selectedDayOfWeek - 1).toLong())
+        } catch (e: Exception) {
+            android.util.Log.e("CalendarCrash", "计算选中日期失败", e)
+            LocalDate.now()
+        }
     }
     val isSelectedDatePast = selectedDateLocal.isBefore(todayLocal)
 
@@ -274,10 +268,15 @@ fun ScheduleScreen(
     }
     // 根据 weekStart + selectedDayOfWeek 计算当前选中日期字符串
     val selectedDateStr = remember(weekStart, selectedDayOfWeek) {
-        val zone = ZoneId.systemDefault()
-        val weekStartLocal = weekStart.toInstant().atZone(zone).toLocalDate()
-        weekStartLocal.plusDays((selectedDayOfWeek - 1).toLong())
-            .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+        try {
+            val zone = ZoneId.systemDefault()
+            val weekStartLocal = weekStart.toInstant().atZone(zone).toLocalDate()
+            weekStartLocal.plusDays((selectedDayOfWeek - 1).toLong())
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+        } catch (e: Exception) {
+            android.util.Log.e("CalendarCrash", "计算选中日期字符串失败", e)
+            LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+        }
     }
 
     // === 性能优化：把日历点击 lambda 提取到 remember ===
@@ -298,448 +297,379 @@ fun ScheduleScreen(
                     vm.shiftWeek(7)
                 }
                 selectedDayOfWeek = clickedDate.dayOfWeek.value
-            } catch (_: Exception) {
-                // 日期解析失败时静默忽略，避免点击非日期区域崩溃
+            } catch (e: Exception) {
+                android.util.Log.e("CalendarCrash", "切换日期失败", e)
             }
         }
     }
 
-    Scaffold(
-        containerColor = appGroupedBackground(),
-        snackbarHost = { FloatingSnackbarHost(snackbarHost) },
-        topBar = {
-            if (isMultiSelectMode) {
-                // === 多选模式 TopAppBar：关闭按钮 + 已选数量 + 全选当天 ===
-                TopAppBar(
-                    title = { Text("已选 $selectedCount 条", fontWeight = FontWeight.Bold) },
-                    colors = glassTopAppBarColors(),
-                    navigationIcon = {
-                        IconButton(onClick = {
-                            // 退出多选模式并清空选中
-                            isMultiSelectMode = false
-                            selectedScheduleIds.clear()
-                        }) {
-                            Icon(Icons.Outlined.Close, contentDescription = "退出多选")
-                        }
-                    },
-                    actions = {
-                        if (daySchedules.isNotEmpty()) {
-                            TextButton(onClick = {
-                                if (isAllDaySelected) {
-                                    // 取消全选当天
-                                    daySchedules.forEach { selectedScheduleIds.remove(it.id) }
-                                } else {
-                                    // 全选当天
-                                    daySchedules.forEach { selectedScheduleIds[it.id] = true }
-                                }
+    // 最外层 Box：FAB 覆盖于 Scaffold 之上，置于外层 z 层（高于 SnackbarHost）
+    Box(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        Scaffold(
+            containerColor = appGroupedBackground(),
+            snackbarHost = { FloatingSnackbarHost(snackbarHost) },
+            topBar = {
+                if (isMultiSelectMode) {
+                    // === 多选模式 TopAppBar：关闭按钮 + 已选数量 + 全选当天 ===
+                    TopAppBar(
+                        title = { Text("已选 $selectedCount 条", fontWeight = FontWeight.Bold) },
+                        colors = glassTopAppBarColors(),
+                        navigationIcon = {
+                            IconButton(onClick = {
+                                // 退出多选模式并清空选中
+                                isMultiSelectMode = false
+                                selectedScheduleIds.clear()
                             }) {
-                                Text(
-                                    if (isAllDaySelected) "取消全选" else "全选当天",
-                                    color = appPrimary(),
-                                    fontWeight = FontWeight.Medium
-                                )
+                                Icon(Icons.Outlined.Close, contentDescription = "退出多选")
+                            }
+                        },
+                        actions = {
+                            if (daySchedules.isNotEmpty()) {
+                                TextButton(onClick = {
+                                    if (isAllDaySelected) {
+                                        // 取消全选当天
+                                        daySchedules.forEach { selectedScheduleIds.remove(it.id) }
+                                    } else {
+                                        // 全选当天
+                                        daySchedules.forEach { selectedScheduleIds[it.id] = true }
+                                    }
+                                }) {
+                                    Text(
+                                        if (isAllDaySelected) "取消全选" else "全选当天",
+                                        color = appPrimary(),
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
                             }
                         }
-                    }
-                )
-            } else {
-                TopAppBar(
-                    title = { Text("课表", fontWeight = FontWeight.Bold) },
-                    colors = glassTopAppBarColors(),
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
-                        }
-                    },
-                    actions = {
-                        // === 按课时包自动排课入口 ===
-                        // 关联课包购买时间，按多周几自动排课到课时上完那一周
-                        IconButton(onClick = { showAutoScheduleDialog = true }) {
-                            Icon(
-                                Icons.Outlined.EventRepeat,
-                                contentDescription = "按课包排课",
-                                tint = appPrimary()
-                            )
-                        }
-                        // === Bug 修复2：手动触发"清理过去无效排课"按钮 ===
-                        // 即使启动时已自动清理，仍保留手动按钮供用户主动触发
-                        // （如数据库被外部同步污染后可一键再次清理）
-                        IconButton(onClick = { vm.cleanupPastLessonsManually() }) {
-                            Icon(
-                                Icons.Outlined.CleaningServices,
-                                contentDescription = "清理过去无效排课",
-                                tint = appPrimary()
-                            )
-                        }
-                        // === 按学员删除排课入口 ===
-                        IconButton(onClick = { showDeleteByStudentDialog = true }) {
-                            Icon(
-                                Icons.Outlined.PersonRemove,
-                                contentDescription = "按学员删除排课",
-                                tint = appOnSurface()
-                            )
-                        }
-                        // 多选模式入口：仅在有排课时显示
-                        if (schedules.isNotEmpty()) {
-                            IconButton(onClick = { isMultiSelectMode = true }) {
+                    )
+                } else {
+                    TopAppBar(
+                        title = { Text("课表", fontWeight = FontWeight.Bold) },
+                        colors = glassTopAppBarColors(),
+                        navigationIcon = {
+                            IconButton(onClick = onBack) {
+                                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
+                            }
+                        },
+                        actions = {
+                            // === 按课时包自动排课入口 ===
+                            // 关联课包购买时间，按多周几自动排课到课时上完那一周
+                            IconButton(onClick = { showAutoScheduleDialog = true }) {
                                 Icon(
-                                    Icons.Outlined.DeleteSweep,
-                                    contentDescription = "多选删除",
+                                    Icons.Outlined.EventRepeat,
+                                    contentDescription = "按课包排课",
                                     tint = appPrimary()
                                 )
                             }
-                        }
-                        // 清空全部按钮（保留原有功能）
-                        if (schedules.isNotEmpty()) {
-                            IconButton(onClick = { showClearAllDialog = true }) {
+                            // === Bug 修复2：手动触发"清理过去无效排课"按钮 ===
+                            // 即使启动时已自动清理，仍保留手动按钮供用户主动触发
+                            // （如数据库被外部同步污染后可一键再次清理）
+                            IconButton(onClick = { vm.cleanupPastLessonsManually() }) {
                                 Icon(
                                     Icons.Outlined.CleaningServices,
-                                    contentDescription = "清空全部",
-                                    tint = MaterialTheme.colorScheme.error
+                                    contentDescription = "清理过去无效排课",
+                                    tint = appPrimary()
                                 )
                             }
+                            // === 按学员删除排课入口 ===
+                            IconButton(onClick = { showDeleteByStudentDialog = true }) {
+                                Icon(
+                                    Icons.Outlined.PersonRemove,
+                                    contentDescription = "按学员删除排课",
+                                    tint = appOnSurface()
+                                )
+                            }
+                            // 多选模式入口：仅在有排课时显示
+                            if (schedules.isNotEmpty()) {
+                                IconButton(onClick = { isMultiSelectMode = true }) {
+                                    Icon(
+                                        Icons.Outlined.DeleteSweep,
+                                        contentDescription = "多选删除",
+                                        tint = appPrimary()
+                                    )
+                                }
+                            }
+                            // 清空全部按钮（保留原有功能）
+                            if (schedules.isNotEmpty()) {
+                                IconButton(onClick = { showClearAllDialog = true }) {
+                                    Icon(
+                                        Icons.Outlined.CleaningServices,
+                                        contentDescription = "清空全部",
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
                         }
-                    }
-                )
-            }
-        },
-        floatingActionButton = {
-            // 多选模式下隐藏 FAB，避免与底部操作栏冲突
-            if (!isMultiSelectMode) {
-                FloatingActionButton(
-                    onClick = {
-                        isCreate = true
-                        prefillDay = selectedDayOfWeek
-                        vm.startCreate()
-                        showEditDialog = true
-                    },
-                    shape = CircleShape,
-                    containerColor = appPrimary()
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Add,
-                        contentDescription = "新增课程",
-                        tint = Color.White
+                    )
+                }
+            },
+            bottomBar = {
+                // === 多选模式底部操作栏：悬浮白色胶囊 + 删除选中按钮 ===
+                if (isMultiSelectMode) {
+                    MultiSelectBottomBar(
+                        selectedCount = selectedCount,
+                        onDelete = { showBatchDeleteDialog = true }
                     )
                 }
             }
-        },
-        bottomBar = {
-            // === 多选模式底部操作栏：悬浮白色胶囊 + 删除选中按钮 ===
-            if (isMultiSelectMode) {
-                MultiSelectBottomBar(
-                    selectedCount = selectedCount,
-                    onDelete = { showBatchDeleteDialog = true }
-                )
-            }
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(appGroupedBackground())
-                .padding(padding)
-        ) {
-            // === v34 布局优化3：顶部瘦身 ===
-            // 取消白色 IOSCard 包裹，直接平铺在浅灰底色上，缩小整体垂直高度
+        ) { padding ->
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = Spacing.screenH)
-                    .padding(top = Spacing.sm, bottom = Spacing.sm),
-                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+                    .fillMaxSize()
+                    .background(appGroupedBackground())
+                    .padding(padding)
             ) {
-                // 第一行：周次范围标题 + 周切换按钮组（上一周 / 今天 / 下一周）
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                // === v34 布局优化3：顶部瘦身 ===
+                // 取消白色 IOSCard 包裹，直接平铺在浅灰底色上，缩小整体垂直高度
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.screenH)
+                        .padding(top = Spacing.sm, bottom = Spacing.sm),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.sm)
                 ) {
-                    Text(
-                        text = weekRangeText(weekStart),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = appOnSurface(),
-                        modifier = Modifier.weight(1f, fill = false),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                        // 上一周按钮（图标 + 文字 + 圆角浅主色背景）
-                        WeekShiftButton(
-                            text = "上一周",
-                            icon = Icons.AutoMirrored.Outlined.KeyboardArrowLeft,
-                            onClick = { vm.shiftWeek(-7) }
+                    // 第一行：周次范围标题 + 周切换按钮组（上一周 / 今天 / 下一周）
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = weekRangeText(weekStart),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = appOnSurface(),
+                            modifier = Modifier.weight(1f, fill = false),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
-                        // 今天按钮（实心主色，突出快捷回到本周）
-                        TodayButton(onClick = { vm.resetToThisWeek() })
-                        // 下一周按钮
-                        WeekShiftButton(
-                            text = "下一周",
-                            icon = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-                            onClick = { vm.shiftWeek(7) }
-                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                            // 上一周按钮（图标 + 文字 + 圆角浅主色背景）
+                            WeekShiftButton(
+                                text = "上一周",
+                                icon = Icons.AutoMirrored.Outlined.KeyboardArrowLeft,
+                                onClick = { vm.shiftWeek(-7) }
+                            )
+                            // 今天按钮（实心主色，突出快捷回到本周）
+                            TodayButton(onClick = { vm.resetToThisWeek() })
+                            // 下一周按钮
+                            WeekShiftButton(
+                                text = "下一周",
+                                icon = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                                onClick = { vm.shiftWeek(7) }
+                            )
+                        }
                     }
+
+                    // 第二行：胶囊日期选择条（始终保留在固定头部，作为周内快速切换）
+                    DaySelector(
+                        days = weekDays,
+                        selectedDayOfWeek = selectedDayOfWeek,
+                        onDaySelected = { dow ->
+                            try {
+                                if (dow in 1..7) {
+                                    selectedDayOfWeek = dow
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.e("CalendarCrash", "切换日期失败", e)
+                            }
+                        }
+                    )
                 }
 
-                // 第二行：胶囊日期选择条（始终保留在固定头部，作为周内快速切换）
-                DaySelector(
-                    days = weekDays,
-                    selectedDayOfWeek = selectedDayOfWeek,
-                    onDaySelected = { selectedDayOfWeek = it }
-                )
-            }
+                // === v24 优化2：余额不足警告 Alert Banner（浅橙色背景提示条） ===
+                if (noBalanceWarnings.isNotEmpty()) {
+                    NoBalanceWarningBanner(
+                        warnings = noBalanceWarnings,
+                        onDismiss = { vm.clearNoBalanceWarnings() }
+                    )
+                }
 
-            // === v24 优化2：余额不足警告 Alert Banner（浅橙色背景提示条） ===
-            if (noBalanceWarnings.isNotEmpty()) {
-                NoBalanceWarningBanner(
-                    warnings = noBalanceWarnings,
-                    onDismiss = { vm.clearNoBalanceWarnings() }
-                )
-            }
-
-            // === 课程列表 + 日历（日历作为 LazyColumn 第一个 item，随列表滚动）===
-            if (daySchedules.isEmpty()) {
-                // 空状态：日历 + 概览卡 + 空提示
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                        horizontal = Spacing.screenH,
-                        vertical = Spacing.sm
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(Spacing.md)
-                ) {
-                    item(key = "calendar") {
-                        ScheduleCalendar(
-                            selectedDate = selectedDateStr,
-                            scheduledDaysOfWeek = scheduledDaysOfWeek,
-                            onDateSelected = onCalendarDateSelected
-                        )
-                    }
-                    item(key = "overview") {
-                        OverviewCard(
-                            totalToday = daySchedules.size,
-                            signedOut = 0,
-                            remaining = daySchedules.size
-                        )
-                    }
-                    item(key = "empty_state") {
-                        IOSCard(
-                            modifier = Modifier.fillMaxWidth(),
-                            contentPadding = Spacing.xl
-                        ) {
-                            Box(
+                // === 课程列表 + 日历（日历作为 LazyColumn 第一个 item，随列表滚动）===
+                if (daySchedules.isEmpty()) {
+                    // 空状态：日历 + 概览卡 + 空提示
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                            horizontal = Spacing.screenH,
+                            vertical = Spacing.sm
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.md)
+                    ) {
+                        item(key = "calendar") {
+                            ScheduleCalendar(
+                                selectedDate = selectedDateStr,
+                                scheduledDaysOfWeek = scheduledDaysOfWeek,
+                                onDateSelected = onCalendarDateSelected
+                            )
+                        }
+                        item(key = "overview") {
+                            OverviewCard(
+                                totalToday = daySchedules.size,
+                                signedOut = 0,
+                                remaining = daySchedules.size
+                            )
+                        }
+                        item(key = "empty_state") {
+                            IOSCard(
                                 modifier = Modifier.fillMaxWidth(),
-                                contentAlignment = Alignment.Center
+                                contentPadding = Spacing.xl
                             ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(
-                                        "今日无排课",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF1A1A1A)
-                                    )
-                                    Spacer(Modifier.height(Spacing.sm))
-                                    Text(
-                                        "点击右下角 + 添加课程",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = Color(0xFF6B6B6B)
-                                    )
+                                Box(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text(
+                                            "今日无排课",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF1A1A1A)
+                                        )
+                                        Spacer(Modifier.height(Spacing.sm))
+                                        Text(
+                                            "点击右下角 + 添加课程",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color(0xFF6B6B6B)
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                        horizontal = Spacing.screenH,
-                        vertical = Spacing.sm
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(Spacing.md)
-                ) {
-                    // === 日历作为第一个 item，随列表滚动 ===
-                    item(key = "calendar") {
-                        ScheduleCalendar(
-                            selectedDate = selectedDateStr,
-                            scheduledDaysOfWeek = scheduledDaysOfWeek,
-                            onDateSelected = onCalendarDateSelected
-                        )
-                    }
-                    // === 概览卡作为第二个 item ===
-                    item(key = "overview") {
-                        OverviewCard(
-                            totalToday = daySchedules.size,
-                            signedOut = 0,
-                            remaining = daySchedules.size
-                        )
-                    }
-                    items(daySchedules, key = { it.id }) { s ->
-                        val isSelected = selectedScheduleIds[s.id] == true
-                        KeepScheduleCard(
-                            schedule = s,
-                            isPastDate = isSelectedDatePast,
-                            selectionMode = isMultiSelectMode,
-                            isSelected = isSelected,
-                            onClick = {
-                                if (isMultiSelectMode) {
-                                    // 多选模式：点击切换选中态（过去日期也允许选中删除）
-                                    if (isSelected) {
-                                        selectedScheduleIds.remove(s.id)
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                            horizontal = Spacing.screenH,
+                            vertical = Spacing.sm
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.md)
+                    ) {
+                        // === 日历作为第一个 item，随列表滚动 ===
+                        item(key = "calendar") {
+                            ScheduleCalendar(
+                                selectedDate = selectedDateStr,
+                                scheduledDaysOfWeek = scheduledDaysOfWeek,
+                                onDateSelected = onCalendarDateSelected
+                            )
+                        }
+                        // === 概览卡作为第二个 item ===
+                        item(key = "overview") {
+                            OverviewCard(
+                                totalToday = daySchedules.size,
+                                signedOut = 0,
+                                remaining = daySchedules.size
+                            )
+                        }
+                        items(daySchedules, key = { it.id }) { s ->
+                            val isSelected = selectedScheduleIds[s.id] == true
+                            KeepScheduleCard(
+                                schedule = s,
+                                isPastDate = isSelectedDatePast,
+                                selectionMode = isMultiSelectMode,
+                                isSelected = isSelected,
+                                onClick = {
+                                    if (isMultiSelectMode) {
+                                        // 多选模式：点击切换选中态（过去日期也允许选中删除）
+                                        if (isSelected) {
+                                            selectedScheduleIds.remove(s.id)
+                                        } else {
+                                            selectedScheduleIds[s.id] = true
+                                        }
                                     } else {
+                                        // === Bug 修复3：过去日期的排课不可操作（避免误编辑历史记录）===
+                                        if (isSelectedDatePast) return@KeepScheduleCard
+                                        isCreate = false
+                                        prefillDay = null
+                                        vm.startEdit(s.id)
+                                        showEditDialog = true
+                                    }
+                                },
+                                onLongClick = {
+                                    if (isMultiSelectMode) {
+                                        // 多选模式下长按也切换选中（与点击一致）
+                                        if (isSelected) {
+                                            selectedScheduleIds.remove(s.id)
+                                        } else {
+                                            selectedScheduleIds[s.id] = true
+                                        }
+                                    } else {
+                                        // === Bug 修复3：过去日期的排课不可操作 ===
+                                        if (isSelectedDatePast) return@KeepScheduleCard
+                                        // 非多选模式下长按进入多选模式并选中当前
+                                        isMultiSelectMode = true
                                         selectedScheduleIds[s.id] = true
                                     }
-                                } else {
-                                    // === Bug 修复3：过去日期的排课不可操作（避免误编辑历史记录）===
-                                    if (isSelectedDatePast) return@KeepScheduleCard
-                                    isCreate = false
-                                    prefillDay = null
-                                    vm.startEdit(s.id)
-                                    showEditDialog = true
                                 }
-                            },
-                            onLongClick = {
-                                if (isMultiSelectMode) {
-                                    // 多选模式下长按也切换选中（与点击一致）
-                                    if (isSelected) {
-                                        selectedScheduleIds.remove(s.id)
-                                    } else {
-                                        selectedScheduleIds[s.id] = true
-                                    }
-                                } else {
-                                    // === Bug 修复3：过去日期的排课不可操作 ===
-                                    if (isSelectedDatePast) return@KeepScheduleCard
-                                    // 非多选模式下长按进入多选模式并选中当前
-                                    isMultiSelectMode = true
-                                    selectedScheduleIds[s.id] = true
-                                }
-                            }
-                        )
+                            )
+                        }
                     }
                 }
+            }
+        }
+        // === FAB：移出 Scaffold，置于外层 Box 底部右端，z 高于 SnackbarHost ===
+        // 多选模式下隐藏 FAB，避免与底部操作栏冲突
+        if (!isMultiSelectMode) {
+            FloatingActionButton(
+                onClick = {
+                    isCreate = true
+                    prefillDay = selectedDayOfWeek
+                    vm.startCreate()
+                    showEditDialog = true
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    .padding(Spacing.lg),
+                shape = CircleShape,
+                containerColor = appPrimary()
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Add,
+                    contentDescription = "新增课程",
+                    tint = Color.White
+                )
             }
         }
     }
 
     // 长按课程卡片弹出的操作菜单（修改 / 删除该节课）
     actionTargetSchedule?.let { target ->
-        AlertDialog(
-            onDismissRequest = { actionTargetSchedule = null },
-            title = { Text("课程操作", fontWeight = FontWeight.Bold) },
-            text = {
-                Column {
-                    Text(
-                        "学员：${target.studentName}",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Text(
-                        "时间：${target.startTime}" +
-                            if (target.lessonType.isNotBlank()) " · ${target.lessonType}" else "",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                    )
-                    if (target.location.isNotBlank()) {
-                        Text(
-                            "地点：${target.location}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
-                    }
-                    Spacer(Modifier.height(Spacing.sm))
-                    Text(
-                        "请选择操作",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                }
+        ScheduleActionMenuDialog(
+            schedule = target,
+            onEdit = {
+                actionTargetSchedule = null
+                isCreate = false
+                prefillDay = null
+                vm.startEdit(target.id)
+                showEditDialog = true
             },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val s = target
-                        actionTargetSchedule = null
-                        isCreate = false
-                        prefillDay = null
-                        vm.startEdit(s.id)
-                        showEditDialog = true
-                    }
-                ) {
-                    Icon(
-                        Icons.Outlined.Edit,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(Modifier.width(Spacing.xs))
-                    Text("修改")
-                }
+            onDelete = {
+                pendingDeleteSchedule = target
+                actionTargetSchedule = null
+                showDeleteConfirmDialog = true
             },
-            dismissButton = {
-                Row {
-                    TextButton(
-                        onClick = {
-                            pendingDeleteSchedule = target
-                            actionTargetSchedule = null
-                            showDeleteConfirmDialog = true
-                        }
-                    ) {
-                        Icon(
-                            Icons.Outlined.DeleteSweep,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                        Spacer(Modifier.width(Spacing.xs))
-                        Text("删除", color = MaterialTheme.colorScheme.error)
-                    }
-                    TextButton(onClick = { actionTargetSchedule = null }) {
-                        Text("取消")
-                    }
-                }
-            }
+            onDismiss = { actionTargetSchedule = null }
         )
     }
 
     // 删除课程二次确认对话框
     if (showDeleteConfirmDialog && pendingDeleteSchedule != null) {
         val toDelete = pendingDeleteSchedule!!
-        AlertDialog(
-            onDismissRequest = {
+        DeleteScheduleConfirmDialog(
+            schedule = toDelete,
+            onConfirm = {
+                vm.deleteSchedule(toDelete.id)
                 showDeleteConfirmDialog = false
                 pendingDeleteSchedule = null
             },
-            title = { Text("删除课程", fontWeight = FontWeight.Bold) },
-            text = {
-                Text(
-                    buildString {
-                        append("确认删除以下课程吗？\n\n")
-                        append("学员：${toDelete.studentName}\n")
-                        append("时间：${toDelete.startTime}")
-                        if (toDelete.lessonType.isNotBlank()) {
-                            append(" · ${toDelete.lessonType}")
-                        }
-                        append("\n\n此操作不可撤销。")
-                    }
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        vm.deleteSchedule(toDelete.id)
-                        showDeleteConfirmDialog = false
-                        pendingDeleteSchedule = null
-                    }
-                ) {
-                    Text("删除", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    showDeleteConfirmDialog = false
-                    pendingDeleteSchedule = null
-                }) {
-                    Text("取消")
-                }
+            onDismiss = {
+                showDeleteConfirmDialog = false
+                pendingDeleteSchedule = null
             }
         )
     }
@@ -764,33 +694,16 @@ fun ScheduleScreen(
 
     // === 批量删除二次确认对话框（多选模式）===
     if (showBatchDeleteDialog) {
-        AlertDialog(
-            onDismissRequest = { showBatchDeleteDialog = false },
-            title = { Text("批量删除排课", fontWeight = FontWeight.Bold) },
-            text = {
-                Text(
-                    "确认删除已选中的 $selectedCount 条排课吗？\n\n" +
-                    "此操作仅删除排课记录，不会影响已签到的课时记录。\n此操作不可撤销。"
-                )
+        BatchDeleteSchedulesDialog(
+            selectedCount = selectedCount,
+            onConfirm = {
+                val ids = selectedScheduleIds.filter { it.value }.keys.toList()
+                vm.deleteSchedules(ids)
+                showBatchDeleteDialog = false
+                isMultiSelectMode = false
+                selectedScheduleIds.clear()
             },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val ids = selectedScheduleIds.filter { it.value }.keys.toList()
-                        vm.deleteSchedules(ids)
-                        showBatchDeleteDialog = false
-                        isMultiSelectMode = false
-                        selectedScheduleIds.clear()
-                    }
-                ) {
-                    Text("删除 $selectedCount 条", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showBatchDeleteDialog = false }) {
-                    Text("取消")
-                }
-            }
+            onDismiss = { showBatchDeleteDialog = false }
         )
     }
 
@@ -805,126 +718,27 @@ fun ScheduleScreen(
 
     // 清空全部课表确认对话框
     if (showClearAllDialog) {
-        AlertDialog(
-            onDismissRequest = { showClearAllDialog = false },
-            title = { Text("清空全部课表", fontWeight = FontWeight.Bold) },
-            text = {
-                Text(
-                    "确认清空所有排课记录吗？\n\n" +
-                    "此操作将删除全部 ${schedules.size} 条排课，" +
-                    "但不会影响已签到的课时记录。\n此操作不可撤销。"
-                )
+        ClearAllSchedulesDialog(
+            scheduleCount = schedules.size,
+            onConfirm = {
+                vm.deleteAllSchedules()
+                showClearAllDialog = false
             },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        vm.deleteAllSchedules()
-                        showClearAllDialog = false
-                    }
-                ) {
-                    Text("清空全部", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showClearAllDialog = false }) {
-                    Text("取消")
-                }
-            }
+            onDismiss = { showClearAllDialog = false }
         )
     }
 
-    // === 按学员删除排课对话框 ===
+    // === 按学员删除排课对话框（内部含搜索 + 确认两步）===
     if (showDeleteByStudentDialog) {
         val students by vm.students.collectAsStateWithLifecycle()
-        val filteredStudents = remember(students, deleteStudentSearch) {
-            if (deleteStudentSearch.isBlank()) students.map { it.name }
-            else students.map { it.name }.filter { it.contains(deleteStudentSearch, ignoreCase = true) }
-        }
-
-        GlassAlertDialog(
-            onDismissRequest = {
+        DeleteByStudentDialog(
+            students = students.map { it.name },
+            onDelete = { name ->
+                vm.deleteAllSchedulesByStudent(name)
                 showDeleteByStudentDialog = false
-                deleteStudentSearch = ""
             },
-            title = "按学员删除排课",
-            confirmButton = { },
-            dismissButton = {
-                TextButton(onClick = {
-                    showDeleteByStudentDialog = false
-                    deleteStudentSearch = ""
-                }) { Text("取消") }
-            }
-        ) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
-            ) {
-                Text(
-                    "选择学员删除其所有排课记录（不影响课时包数据）",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = appOnSurfaceVariant()
-                )
-                OutlinedTextField(
-                    value = deleteStudentSearch,
-                    onValueChange = { deleteStudentSearch = it },
-                    label = { Text("搜索学员") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                LazyColumn(
-                    modifier = Modifier.heightIn(max = 300.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    items(
-                        items = filteredStudents,
-                        key = { it }
-                    ) { name ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable {
-                                    deletingStudent = name
-                                }
-                                .padding(vertical = 12.dp, horizontal = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(name, modifier = Modifier.weight(1f))
-                            Icon(
-                                Icons.Outlined.ChevronRight,
-                                contentDescription = null,
-                                tint = appOutline(),
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // 确认删除对话框
-    deletingStudent?.let { name ->
-        GlassAlertDialog(
-            onDismissRequest = { deletingStudent = null },
-            title = "确认删除排课",
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        vm.deleteAllSchedulesByStudent(name)
-                        deletingStudent = null
-                        showDeleteByStudentDialog = false
-                        deleteStudentSearch = ""
-                    },
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                ) { Text("删除", fontWeight = FontWeight.SemiBold) }
-            },
-            dismissButton = {
-                TextButton(onClick = { deletingStudent = null }) { Text("取消") }
-            }
-        ) {
-            Text("确认删除学员「${name}」的所有排课记录？\n\n此操作仅删除排课记录，不影响课时包数据。")
-        }
+            onDismiss = { showDeleteByStudentDialog = false }
+        )
     }
 }
 
@@ -1216,223 +1030,6 @@ private fun DaySelector(
  * @param onClick 点击回调
  * @param onLongClick 长按回调
  */
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
-@Composable
-private fun KeepScheduleCard(
-    schedule: Schedule,
-    isPastDate: Boolean = false,
-    selectionMode: Boolean = false,
-    isSelected: Boolean = false,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit
-) {
-    // === Bug 修复3：过去日期叠加 0.4f 透明度，与 isActive=false 的 0.5f 叠加 ===
-    val baseAlpha = if (schedule.isActive) 1f else 0.5f
-    val pastAlpha = if (isPastDate) 0.4f else 1f
-    val inactiveAlpha = baseAlpha * pastAlpha
-    // 选中态叠加轻微珊瑚橙边框高亮
-    val selectedBorder = if (isSelected) appPrimary() else Color.Transparent
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(
-                elevation = 4.dp,
-                shape = RoundedCornerShape(16.dp),
-                ambientColor = Color.Black.copy(alpha = 0.04f),
-                spotColor = Color.Black.copy(alpha = 0.08f)
-            )
-            .clip(RoundedCornerShape(16.dp))
-            .background(appSurface())
-            .border(width = if (isSelected) 2.dp else 0.dp, color = selectedBorder, shape = RoundedCornerShape(16.dp))
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick
-            )
-            .graphicsLayerAlpha(inactiveAlpha)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(Spacing.md),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // === 多选模式：左侧圆形复选框（选中=珊瑚橙实心+白色勾，未选中=空心圆环）===
-            if (selectionMode) {
-                Box(
-                    modifier = Modifier
-                        .size(24.dp)
-                        .clip(CircleShape)
-                        .background(if (isSelected) appPrimary() else Color.Transparent)
-                        .border(
-                            width = 2.dp,
-                            color = if (isSelected) appPrimary() else appOutline(),
-                            shape = CircleShape
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (isSelected) {
-                        Icon(
-                            imageVector = Icons.Outlined.Check,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-                Spacer(Modifier.width(Spacing.sm))
-            }
-
-            // === 左侧：圆角矩形学员头像（珊瑚橙渐变底色 + 首字母白色）===
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(
-                        brush = androidx.compose.ui.graphics.Brush.linearGradient(
-                            colors = listOf(
-                                Color(0xFFFF6B47),  // 珊瑚橙
-                                Color(0xFFFFA078)   // 浅珊瑚橙
-                            )
-                        )
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = schedule.studentName.firstOrNull()?.toString() ?: "?",
-                    color = Color.White,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-        Spacer(Modifier.width(Spacing.md))
-
-        // === 中间：学员名 + 详情（weight=1 撑满剩余空间）===
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            // 第一行：学员名（纯黑加粗）+ 过去角标
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
-            ) {
-                Text(
-                    text = schedule.studentName,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = appOnSurface(),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false)
-                )
-                if (isPastDate) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(appOnSurfaceVariant().copy(alpha = 0.2f))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = "已过去",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = appOnSurfaceVariant()
-                        )
-                    }
-                }
-                if (!schedule.isActive) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(appOnSurfaceVariant().copy(alpha = 0.2f))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = "已暂停",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = appOnSurfaceVariant()
-                        )
-                    }
-                }
-            }
-            // 第二行：课程时间（珊瑚橙）· 地点 · 教练姓名（灰色 #6B6B6B 小字号，点号分隔）
-            // v40 任务2b：时间部分统一珊瑚橙 #FF6B47
-            val timeText = "${schedule.startTime}-${schedule.endTime()}"
-            val metaText = buildString {
-                if (schedule.location.isNotBlank()) {
-                    append(schedule.location)
-                }
-                if (schedule.coachName.isNotBlank()) {
-                    if (isNotEmpty()) append(" · ")
-                    append("教练：${schedule.coachName}")
-                }
-            }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = timeText,
-                    fontSize = 12.sp,
-                    color = appPrimary(),
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1
-                )
-                if (metaText.isNotBlank()) {
-                    Text(
-                        text = "· $metaText",
-                        fontSize = 12.sp,
-                        color = appOnSurfaceVariant(),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
-                    )
-                }
-            }
-        }
-
-        // === 最右侧：珊瑚橙"训练课"胶囊标签（课时类型）===
-        if (schedule.lessonType.isNotBlank()) {
-            Spacer(Modifier.width(Spacing.sm))
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(appPrimary().copy(alpha = 0.12f))
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-            ) {
-                Text(
-                    text = schedule.lessonType,
-                    fontSize = 11.sp,
-                    color = appPrimary(),
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1
-                )
-            }
-        }
-    }
-
-        // === 左侧珊瑚橙垂直装饰细线（卡片左边缘，强调品牌色）===
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .size(width = 3.dp, height = 36.dp)
-                .background(appPrimary())
-        )
-    }
-}
-
-/**
- * 应用透明度到整个组件（通过 graphicsLayer）。
- * 用于过去日期/已暂停卡片的视觉降级。
- */
-@Composable
-private fun Modifier.graphicsLayerAlpha(alpha: Float): Modifier =
-    this.then(
-        Modifier.graphicsLayer { this.alpha = alpha }
-    )
 
 /**
  * 计算本周日期范围文本（yyyy年MM月dd日 ~ yyyy年MM月dd日）。

@@ -33,6 +33,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,7 +61,6 @@ import com.shangmentiyu.sportscoach.data.model.PlanImage
 import com.shangmentiyu.sportscoach.data.model.Schedule
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import com.shangmentiyu.sportscoach.ui.theme.PrimaryButton
-import com.shangmentiyu.sportscoach.ui.theme.SecondaryButton
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
@@ -74,8 +76,8 @@ import com.shangmentiyu.sportscoach.ui.theme.appPrimary
  *
  * 三态显示：
  * - 未签到：显示"课前签到"主按钮，点击跳转签到页面
- * - 已签到未签退：显示"课堂详情"次要按钮，点击弹出详情对话框（含"前往签退"入口）
- * - 已签退：显示"课堂详情"次要按钮，点击弹出详情对话框（仅查看，无签退入口）
+ * - 已签到未签退：显示"签退"主按钮，点击跳转签到页面执行签退
+ * - 已签退：显示"课堂详情"次要按钮（浅色文字），点击弹出详情对话框（仅查看，无签退入口）
  *
  * === 防误操作设计 ===
  * 签到/签退后不再直接跳转签到页面，而是先弹出"课堂详情"对话框，
@@ -119,9 +121,10 @@ internal fun PreClassScheduleCard(
         dao.getByStudent(schedule.studentName).collect { value = it }
     }
 
-    val lessonStatus = signedLesson?.status
     val isSignedIn = signedLesson != null
-    val isSignedOut = lessonStatus == "已签退"
+    // === 已签退判断（任务二）：直接检查 lesson.signOutTime ===
+    // 签退事务会同时写入 status="已签退" 与 signOutTime，以 signOutTime 为准更可靠
+    val isSignedOut = signedLesson?.signOutTime?.isNotBlank() == true
 
     // === 课堂详情对话框状态 ===
     // 已签到/已签退后，点击"课堂详情"按钮弹出此对话框，避免直接跳转签到页导致误操作
@@ -266,27 +269,33 @@ internal fun PreClassScheduleCard(
 
             Spacer(Modifier.height(Spacing.sm))
             when {
-                // === 已签退：显示"课堂详情"按钮（可点击），弹出详情对话框查看签到签退信息 ===
-                // 原实现为禁用按钮，教练无法查看已签到签退的详情
                 isSignedOut -> {
-                    SecondaryButton(
-                        text = "课堂详情",
+                    OutlinedButton(
                         onClick = { showLessonDetail = true },
-                        modifier = Modifier.fillMaxWidth(),
-                        icon = Icons.Outlined.CheckCircle
-                    )
+                        modifier = Modifier.fillMaxWidth().height(44.dp),
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = onSurfaceVariantColor
+                        ),
+                        border = BorderStroke(1.dp, onSurfaceVariantColor.copy(alpha = 0.3f))
+                    ) {
+                        Icon(
+                            Icons.Outlined.PlayArrow,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text("课堂详情")
+                    }
                 }
-                // === 已签到未签退：显示"课堂详情"按钮，弹出详情对话框 ===
-                // 原实现为"进入课堂"直接跳转签到页，容易误操作导致重复签到
                 isSignedIn -> {
-                    SecondaryButton(
-                        text = "课堂详情",
-                        onClick = { showLessonDetail = true },
+                    PrimaryButton(
+                        text = "签退",
+                        onClick = onSign,
                         modifier = Modifier.fillMaxWidth(),
                         icon = Icons.Outlined.PlayArrow
                     )
                 }
-                // === 未签到：显示"课前签到"主按钮，直接跳转签到页 ===
                 else -> {
                     PrimaryButton(
                         text = "课前签到",

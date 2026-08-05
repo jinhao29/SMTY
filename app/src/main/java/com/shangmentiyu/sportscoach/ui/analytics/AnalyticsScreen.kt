@@ -42,8 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
+import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.theme.LightSecondary
 import com.shangmentiyu.sportscoach.ui.theme.LightTertiary
 import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
@@ -75,11 +74,7 @@ import com.shangmentiyu.sportscoach.ui.theme.appSurface
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AnalyticsScreen(onBack: () -> Unit) {
-    val vm: AnalyticsViewModel = viewModel(
-        factory = AppViewModelFactory(
-            LocalContext.current.applicationContext as android.app.Application
-        )
-    )
+    val vm: AnalyticsViewModel = koinViewModel()
 
     val loading by vm.loading.collectAsStateWithLifecycle()
     val students by vm.students.collectAsStateWithLifecycle()
@@ -107,6 +102,8 @@ fun AnalyticsScreen(onBack: () -> Unit) {
         }
 
         val studentNames = remember(students) { students.map { it.name } }
+        // 预计算项目分组列表（避免 LazyColumn 每次重组都 toList 分配新 List）
+        val projectEntries = remember(recordsByProject) { recordsByProject.entries.toList() }
 
         LazyColumn(
             modifier = Modifier
@@ -181,7 +178,7 @@ fun AnalyticsScreen(onBack: () -> Unit) {
                 }
             } else {
                 items(
-                    items = recordsByProject.entries.toList(),
+                    items = projectEntries,
                     key = { it.key }
                 ) { (projectName, records) ->
                     ProjectSection(

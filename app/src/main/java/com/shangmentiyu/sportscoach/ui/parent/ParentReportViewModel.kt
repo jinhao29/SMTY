@@ -41,6 +41,8 @@ class ParentReportViewModel(
     /** 操作结果提示 */
     private val _toast = MutableStateFlow<String?>(null)
     val toast: StateFlow<String?> = _toast.asStateFlow()
+    private val appExceptionHandler =
+        com.shangmentiyu.sportscoach.core.CoroutineExt.createAppExceptionHandler(_toast, "ParentReportViewModel")
 
     fun selectStudent(name: String?) {
         _selectedStudent.value = name
@@ -60,7 +62,7 @@ class ParentReportViewModel(
 
     /** 生成报告 */
     fun generateReport(studentName: String, type: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             try {
                 val id = reportRepo.generateAndSave(studentName, type)
                 if (id != null) {
@@ -76,7 +78,7 @@ class ParentReportViewModel(
 
     /** 标记已分享 */
     fun markShared(reportId: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             reportRepo.markShared(reportId)
             _toast.value = "已标记为已分享"
         }
@@ -84,7 +86,7 @@ class ParentReportViewModel(
 
     /** 删除报告 */
     fun deleteReport(reportId: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             reportRepo.delete(reportId)
             _toast.value = "报告已删除"
             if (_viewingReport.value?.id == reportId) {

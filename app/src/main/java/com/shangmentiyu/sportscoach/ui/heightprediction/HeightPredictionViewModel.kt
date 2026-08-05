@@ -51,6 +51,8 @@ class HeightPredictionViewModel(
 
     private val _toast = MutableStateFlow<String?>(null)
     val toast: StateFlow<String?> = _toast.asStateFlow()
+    private val appExceptionHandler =
+        com.shangmentiyu.sportscoach.core.CoroutineExt.createAppExceptionHandler(_toast, "HeightPredictionViewModel")
 
     /** 当前操作的学员（保存时使用） */
     private var currentStudent: Student? = null
@@ -61,7 +63,7 @@ class HeightPredictionViewModel(
      * @param studentName 学员姓名
      */
     fun loadStudent(studentName: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             val student = studentRepo.getByName(studentName) ?: run {
                 _toast.value = "学员不存在"
                 return@launch
@@ -117,7 +119,7 @@ class HeightPredictionViewModel(
             onDone(false)
             return
         }
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             try {
                 val updated = student.copy(
                     fatherHeight = _fatherHeight.value.toDoubleOrNull() ?: 0.0,

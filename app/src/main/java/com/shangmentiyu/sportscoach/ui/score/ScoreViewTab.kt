@@ -1,5 +1,7 @@
 package com.shangmentiyu.sportscoach.ui.score
 
+import android.util.Log
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -19,10 +21,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Assessment
+import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.PersonOutline
 import androidx.compose.material.icons.outlined.TrendingDown
 import androidx.compose.material.icons.outlined.TrendingFlat
 import androidx.compose.material.icons.outlined.TrendingUp
@@ -31,6 +35,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.VerticalDivider
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import androidx.compose.runtime.Composable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -43,15 +48,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
+import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.analytics.AnalyticsViewModel
-import com.shangmentiyu.sportscoach.ui.theme.LightSecondary
-import com.shangmentiyu.sportscoach.ui.theme.LightTertiary
-import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
 import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
 import com.shangmentiyu.sportscoach.ui.theme.LightOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.BrandGradientEnd
@@ -73,14 +75,12 @@ import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
  */
 @Composable
 fun ScoreViewTab(onEditScore: (String) -> Unit = {}) {
-    val vm: AnalyticsViewModel = viewModel(
-        factory = AppViewModelFactory(
-            LocalContext.current.applicationContext as android.app.Application
-        )
-    )
+    val vm: AnalyticsViewModel = koinViewModel()
 
     val loading by vm.loading.collectAsStateWithLifecycle()
     val students by vm.students.collectAsStateWithLifecycle()
+    // === v46 数据流诊断：Logcat 过滤 DataFlow 查看学员列表是否加载成功 ===
+    Log.d("DataFlow", "下拉列表加载到的学员数量: ${students.size}")
     val selectedStudent by vm.selectedStudent.collectAsStateWithLifecycle()
     val recordsByProject by vm.recordsByProject.collectAsStateWithLifecycle()
     val overview by vm.overview.collectAsStateWithLifecycle()
@@ -98,6 +98,8 @@ fun ScoreViewTab(onEditScore: (String) -> Unit = {}) {
     }
 
     val studentNames = remember(students) { students.map { it.name } }
+    // 预计算项目分组列表（避免 LazyColumn 每次重组都 toList 分配新 List）
+    val projectEntries = remember(recordsByProject) { recordsByProject.entries.toList() }
 
     LazyColumn(
         modifier = Modifier.fillMaxWidth(),
@@ -111,7 +113,7 @@ fun ScoreViewTab(onEditScore: (String) -> Unit = {}) {
     ) {
         // 空学员
         if (students.isEmpty()) {
-            item { EmptyHint(title = "暂无学员", subtitle = "请先在「学员管理」中添加学员") }
+            item { EmptyHint(title = "暂无学员", subtitle = "请先在「学员管理」中添加学员", icon = Icons.Outlined.PersonOutline) }
             return@LazyColumn
         }
 
@@ -133,7 +135,7 @@ fun ScoreViewTab(onEditScore: (String) -> Unit = {}) {
         if (recordsByProject.isEmpty()) {
             item { EmptyHint(title = "暂无成绩记录", subtitle = "在「录入成绩」中保存成绩后，将自动汇总到这里") }
         } else {
-            items(recordsByProject.entries.toList(), key = { it.key }) { (projectName, records) ->
+            items(projectEntries, key = { it.key }) { (projectName, records) ->
                 ProjectSection(
                     projectName = projectName,
                     records = records,
@@ -167,7 +169,9 @@ fun ScoreViewTab(onEditScore: (String) -> Unit = {}) {
 }
 
 /**
- * 学员选择器卡片：点击展开下拉列表 + 顶部活力渐变装饰条 + 1.5dp 蓝紫渐变全包裹边框。
+ * 当前学员信息卡片：纯白大圆角卡片（20dp 圆角 + 柔和阴影），Row 布局。
+ * 左侧珊瑚橙渐变圆底头像，中间"当前学员"小字 + 学员名字大字，最右侧灰色指示箭头。
+ * 点击展开下拉列表选择学员。
  */
 @Composable
 private fun StudentPicker(
@@ -181,24 +185,23 @@ private fun StudentPicker(
         modifier = Modifier.fillMaxWidth()
             .shadow(
                 elevation = 4.dp,
-                shape = RoundedCornerShape(10.dp),
+                shape = RoundedCornerShape(20.dp),
                 ambientColor = Color(0x1A000000),
                 spotColor = Color(0x1A000000)
             )
-            .background(Color.White, RoundedCornerShape(10.dp))
+            .background(Color.White, RoundedCornerShape(20.dp))
     ) {
-        Box(
-            modifier = Modifier.fillMaxWidth().height(4.dp).background(
-                Brush.linearGradient(colors = listOf(BrandGradientStart, BrandGradientEnd))
-            )
-        )
         Row(
             modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle)
                 .padding(horizontal = Spacing.cardPadding, vertical = Spacing.md),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // 珊瑚橙渐变圆底头像（BrandGradientStart → BrandGradientEnd）
             Box(
-                modifier = Modifier.size(32.dp).background(MaterialTheme.colorScheme.primary, CircleShape),
+                modifier = Modifier.size(44.dp).background(
+                    Brush.linearGradient(colors = listOf(BrandGradientStart, BrandGradientEnd)),
+                    CircleShape
+                ),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -211,15 +214,17 @@ private fun StudentPicker(
             Spacer(Modifier.width(Spacing.md))
             Column(modifier = Modifier.weight(1f)) {
                 Text("当前学员", style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
-                Text(selected ?: "未选择", style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold)
+                    color = Color(0xFF6B6B6B))
+                Text(selected ?: "未选择", style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF1A1A1A))
             }
+            // 灰色指示箭头（展开时向下，收起时向右）
             Icon(
                 if (expanded) Icons.Outlined.ExpandMore else Icons.Outlined.ChevronRight,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                modifier = Modifier.size(20.dp)
+                tint = Color(0xFF6B6B6B),
+                modifier = Modifier.size(22.dp)
             )
         }
         if (expanded) {
@@ -252,64 +257,69 @@ private fun StudentPicker(
 }
 
 /**
- * 概览统计卡片：三宫格（总成绩 / 参与项目 / 最近测试）+ 1.5dp 蓝紫渐变全包裹边框。
+ * 概览统计卡片：独立纯白大圆角卡片（20dp 圆角 + 柔和阴影）。
+ * 三宫格（总成绩 / 参与项目 / 最近测试），数据间用极细浅灰分割线（Black 6% alpha），
+ * 图标为珊瑚橙线框样式。
  */
 @Composable
 private fun OverviewStats(overview: AnalyticsViewModel.OverviewStats) {
-    Column(
+    Row(
         modifier = Modifier.fillMaxWidth()
             .shadow(
                 elevation = 4.dp,
-                shape = RoundedCornerShape(10.dp),
+                shape = RoundedCornerShape(20.dp),
                 ambientColor = Color(0x1A000000),
                 spotColor = Color(0x1A000000)
             )
-            .background(Color.White, RoundedCornerShape(10.dp))
+            .background(Color.White, RoundedCornerShape(20.dp))
+            .padding(vertical = Spacing.lg),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier.fillMaxWidth().height(4.dp).background(
-                Brush.linearGradient(colors = listOf(BrandGradientStart, BrandGradientEnd))
-            )
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = Spacing.md),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            StatCell(label = "总成绩", value = overview.totalCount.toString(), bgColor = LightPrimary)
-            StatDivider()
-            StatCell(label = "参与项目", value = overview.projectCount.toString(), bgColor = LightSecondary)
-            StatDivider()
-            StatCell(label = "最近测试", value = overview.latestDate.takeLast(5), bgColor = LightPrimary, small = true)
-        }
+        StatCell(label = "总成绩", value = overview.totalCount.toString(), modifier = Modifier.weight(1f))
+        StatDivider()
+        StatCell(label = "参与项目", value = overview.projectCount.toString(), modifier = Modifier.weight(1f))
+        StatDivider()
+        StatCell(label = "最近测试", value = overview.latestDate.takeLast(5), small = true, modifier = Modifier.weight(1f))
     }
 }
 
 @Composable
-private fun StatCell(label: String, value: String, bgColor: Color, small: Boolean = false) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+private fun StatCell(
+    label: String,
+    value: String,
+    small: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        // 珊瑚橙线框图标（浅橙圆底衬托，非实色块）
         Box(
-            modifier = Modifier.size(28.dp).background(bgColor, RoundedCornerShape(7.dp)),
+            modifier = Modifier.size(32.dp).background(LightPrimary.copy(alpha = 0.12f), RoundedCornerShape(9.dp)),
             contentAlignment = Alignment.Center
         ) {
             Icon(Icons.Outlined.Assessment, contentDescription = null,
-                tint = Color.White, modifier = Modifier.size(16.dp))
+                tint = LightPrimary, modifier = Modifier.size(18.dp))
         }
         Spacer(Modifier.height(6.dp))
         Text(
             value,
             style = if (small) MaterialTheme.typography.titleMedium
                    else MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF1A1A1A)
         )
         Text(label, style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
+            color = Color(0xFF6B6B6B))
     }
 }
 
+/** 极细浅灰垂直分割线：Black 6% alpha，1dp 宽。 */
 @Composable
 private fun StatDivider() {
-    Box(modifier = Modifier.width(0.5.dp).height(56.dp)
-        .background(appDividerColor()))
+    VerticalDivider(
+        modifier = Modifier.height(48.dp),
+        thickness = 1.dp,
+        color = Color.Black.copy(alpha = 0.06f)
+    )
 }
 
 /**
@@ -542,27 +552,46 @@ private fun ScoreBadge(score: Double, grade: String) {
 }
 
 /**
- * 空状态提示。
+ * 空状态卡片：纯白大圆角卡片（24dp 圆角 + 柔和阴影），居中珊瑚橙线框图标 + 黑色主标题 + 灰色副标题。
+ * 外层保留 24dp 垂直边距，避免贴底。
  */
 @Composable
-private fun EmptyHint(title: String, subtitle: String) {
+private fun EmptyHint(
+    title: String,
+    subtitle: String,
+    icon: ImageVector = Icons.Outlined.BarChart
+) {
     Column(
-        modifier = Modifier.fillMaxWidth().padding(vertical = Spacing.xxl),
+        modifier = Modifier.fillMaxWidth().padding(vertical = Spacing.xl), // 24dp 呼吸边距
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Box(
-            modifier = Modifier.size(56.dp).background(
-                LightPrimary.copy(alpha = 0.12f), RoundedCornerShape(14.dp)
-            ),
-            contentAlignment = Alignment.Center
+        Column(
+            modifier = Modifier.fillMaxWidth()
+                .shadow(
+                    elevation = 4.dp,
+                    shape = RoundedCornerShape(24.dp),
+                    ambientColor = Color(0x1A000000),
+                    spotColor = Color(0x1A000000)
+                )
+                .background(Color.White, RoundedCornerShape(24.dp))
+                .padding(vertical = Spacing.xxl),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Icon(Icons.Outlined.Assessment, contentDescription = null,
-                tint = LightPrimary, modifier = Modifier.size(28.dp))
+            Box(
+                modifier = Modifier.size(56.dp).background(
+                    LightPrimary.copy(alpha = 0.12f), RoundedCornerShape(14.dp)
+                ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null,
+                    tint = LightPrimary, modifier = Modifier.size(28.dp))
+            }
+            Spacer(Modifier.height(Spacing.md))
+            Text(title, style = MaterialTheme.typography.titleMedium,
+                color = Color(0xFF1A1A1A))
+            Spacer(Modifier.height(Spacing.xs))
+            Text(subtitle, style = MaterialTheme.typography.labelMedium,
+                color = Color(0xFF6B6B6B))
         }
-        Spacer(Modifier.height(Spacing.md))
-        Text(title, style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(Spacing.xs))
-        Text(subtitle, style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
     }
 }

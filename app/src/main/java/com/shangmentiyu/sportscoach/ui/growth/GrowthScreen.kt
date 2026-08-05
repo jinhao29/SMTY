@@ -54,12 +54,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shangmentiyu.sportscoach.core.AbilityAnalyzer
 import com.shangmentiyu.sportscoach.core.BmiProcessor
 import com.shangmentiyu.sportscoach.core.Standards
 import com.shangmentiyu.sportscoach.data.model.Lesson
-import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
+import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.theme.AttendanceAbsent
 import com.shangmentiyu.sportscoach.ui.theme.AttendanceLate
 import com.shangmentiyu.sportscoach.ui.theme.AttendanceLeave
@@ -92,6 +91,8 @@ import com.shangmentiyu.sportscoach.ui.theme.BrandGradientStart
 import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
+import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
+import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 /**
  * 成长档案页：明亮活力渐变风格（Dribbble-inspired）。
@@ -112,9 +113,7 @@ fun GrowthScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    val vm: GrowthViewModel = viewModel(
-        factory = AppViewModelFactory(context.applicationContext as android.app.Application)
-    )
+    val vm: GrowthViewModel = koinViewModel()
 
     val student by vm.student.collectAsStateWithLifecycle()
     val lessons by vm.lessons.collectAsStateWithLifecycle()
@@ -468,8 +467,10 @@ private fun ParentNameInputDialog(
                     onValueChange = { parentName = it },
                     placeholder = { Text("如：张爸爸 / 李妈妈") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                    modifier = Modifier.fillMaxWidth(),
+
+                 shape = AppTextFieldShape,
+                 colors = appTextFieldColors(),)
                 Spacer(Modifier.height(Spacing.sm))
                 Text(
                     "加密后生成 4 位密码，需口头告知家长查看",

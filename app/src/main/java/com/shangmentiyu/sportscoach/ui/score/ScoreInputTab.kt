@@ -1,5 +1,7 @@
 package com.shangmentiyu.sportscoach.ui.score
 
+import android.util.Log
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,12 +39,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shangmentiyu.sportscoach.core.ScoreResult
 import com.shangmentiyu.sportscoach.core.Scorer
 import com.shangmentiyu.sportscoach.core.Std
 import com.shangmentiyu.sportscoach.core.Standards
-import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
+import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.scoring.ScoringViewModel
 import com.shangmentiyu.sportscoach.ui.theme.FloatingSnackbarHost
 import com.shangmentiyu.sportscoach.ui.theme.GlassCard
@@ -51,6 +52,8 @@ import com.shangmentiyu.sportscoach.ui.theme.ScoreFail
 import com.shangmentiyu.sportscoach.ui.theme.ScoreGood
 import com.shangmentiyu.sportscoach.ui.theme.ScorePass
 import kotlinx.coroutines.launch
+import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
+import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 /**
  * 录入成绩 Tab：学员选择 + 体测项目成绩输入 + 保存。
@@ -61,12 +64,11 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScoreInputTab() {
-    val context = LocalContext.current
-    val vm: ScoringViewModel = viewModel(
-        factory = AppViewModelFactory(context.applicationContext as android.app.Application)
-    )
+        val vm: ScoringViewModel = koinViewModel()
 
     val students by vm.students.collectAsStateWithLifecycle()
+    // === v46 数据流诊断：Logcat 过滤 DataFlow 查看学员列表是否加载成功 ===
+    Log.d("DataFlow", "下拉列表加载到的学员数量: ${students.size}")
     val selectedStudent by vm.selectedStudent.collectAsStateWithLifecycle()
     val standards by vm.standards.collectAsStateWithLifecycle()
     val scoreInputs by vm.scoreInputs.collectAsStateWithLifecycle()
@@ -92,8 +94,10 @@ fun ScoreInputTab() {
                     modifier = Modifier.fillMaxWidth().menuAnchor(
                         MenuAnchorType.PrimaryNotEditable,
                         enabled = true
-                    )
-                )
+                    ),
+
+                 shape = AppTextFieldShape,
+                 colors = appTextFieldColors(),)
                 ExposedDropdownMenu(expanded = studentExpanded, onDismissRequest = { studentExpanded = false }) {
                     students.forEach { student ->
                         DropdownMenuItem(
@@ -196,8 +200,10 @@ private fun ScoreInputRow(
                 onValueChange = onValueChange,
                 label = { Text("输入成绩(${std.unit})") },
                 modifier = Modifier.weight(1f),
-                singleLine = true
-            )
+                singleLine = true,
+
+             shape = AppTextFieldShape,
+             colors = appTextFieldColors(),)
             Spacer(modifier = Modifier.width(8.dp))
             if (result != null && result.ok && result.score != null) {
                 val scoreColor = when (result.grade) {

@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Apps
+import androidx.compose.material.icons.outlined.Article
 import androidx.compose.material.icons.outlined.Calculate
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.CleaningServices
@@ -69,8 +70,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
+import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.Routes
 import com.shangmentiyu.sportscoach.update.UpdateManager
 import com.shangmentiyu.sportscoach.update.UpdateResult
@@ -89,6 +89,8 @@ import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 import com.shangmentiyu.sportscoach.ui.theme.appBackground
+import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
+import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 /**
  * 设置页：iOS Settings 风格。
@@ -104,22 +106,24 @@ import com.shangmentiyu.sportscoach.ui.theme.appBackground
 @Composable
 fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
     val context = LocalContext.current
-    val vm: SettingsViewModel = viewModel(
-        factory = AppViewModelFactory(context.applicationContext as android.app.Application)
-    )
+    // === v46 架构层四：Koin 注入（由 AppModule 提供 SettingsViewModel）===
+    val vm: SettingsViewModel = koinViewModel()
 
-    val coach by vm.coach.collectAsStateWithLifecycle()
-    val todayCount by vm.todayCount.collectAsStateWithLifecycle()
-    val totalCount by vm.totalCount.collectAsStateWithLifecycle()
-    val statusMessage by vm.statusMessage.collectAsStateWithLifecycle()
-    val backupInProgress by vm.backupInProgress.collectAsStateWithLifecycle()
-    val backupProgress by vm.backupProgress.collectAsStateWithLifecycle()
-    val needRestart by vm.needRestart.collectAsStateWithLifecycle()
+    // === v46 架构层三：单一 UiState 驱动，局部变量从 UiState 派生 ===
+    // UI 只订阅 vm.uiState，以下为派生别名，保持下方渲染代码零改动
+    val uiState by vm.uiState.collectAsStateWithLifecycle()
+    val coach = uiState.coach
+    val todayCount = uiState.todayCount
+    val totalCount = uiState.totalCount
+    val statusMessage = uiState.statusMessage
+    val backupInProgress = uiState.backupInProgress
+    val backupProgress = uiState.backupProgress
+    val needRestart = uiState.needRestart
     // === v30 全自动无感备份开关状态 ===
-    val autoBackupEnabled by vm.autoBackupEnabled.collectAsStateWithLifecycle()
-
+    val autoBackupEnabled = uiState.autoBackupEnabled
+    val floatingWindowEnabled = uiState.floatingWindowEnabled
     // === v24 优化3：统一进度对话框（导出/备份/恢复全程显示）===
-    val progressState by vm.progressState.collectAsStateWithLifecycle()
+    val progressState = uiState.progressState
     // 完成态自动延迟 1.5s 关闭，让用户看到"完成"反馈
     LaunchedEffect(progressState) {
         if (!progressState.isActive && progressState.progress >= 1f && progressState.currentStep.isNotBlank()) {
@@ -169,6 +173,8 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
 
     // 恢复确认对话框：恢复会覆盖当前所有数据，需用户二次确认
     var showRestoreConfirm by remember { mutableStateOf(false) }
+    // === v45：一键修正历史错误排课二次确认 ===
+    var showFixScheduleConfirm by remember { mutableStateOf(false) }
 
     // 清理一年前签到照片确认对话框：删除照片不可恢复，需用户二次确认
     var showCleanPhotosConfirm by remember { mutableStateOf(false) }
@@ -434,6 +440,16 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
                             showTopDivider = true,
                             onClick = { showImportStrategyDialog = true }
                         )
+                        // === v45：一键修正历史错误排课（清理 + 重排）===
+                        SettingsActionRow(
+                            icon = Icons.Outlined.CleaningServices,
+                            iconBgColor = LightSecondary,
+                            iconContentDescription = "修正历史排课",
+                            title = "修正历史排课数据",
+                            subtitle = "清理早于购买日/超额的错误排课并重新生成",
+                            showTopDivider = true,
+                            onClick = { showFixScheduleConfirm = true }
+                        )
                     }
                 }
 
@@ -545,6 +561,52 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
                             Switch(
                                 checked = autoBackupEnabled,
                                 onCheckedChange = { vm.setAutoBackupEnabled(it) }
+                            )
+                        }
+                        // 分隔线
+                        Box(
+                            modifier = Modifier
+                                .padding(start = 60.dp)
+                                .fillMaxWidth()
+                                .height(0.5.dp)
+                                .background(appDividerColor())
+                        )
+                        // === 悬浮窗开关（默认关闭） ===
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = Spacing.md, vertical = Spacing.md),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.md)
+                        ) {
+                            IosIconBadge(
+                                icon = Icons.Outlined.Apps,
+                                iconBgColor = LightSecondary,
+                                contentDescription = "悬浮窗"
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "悬浮窗",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = appOnSurface()
+                                )
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    if (floatingWindowEnabled)
+                                        "已开启，桌面显示话术快捷复制"
+                                    else
+                                        "已关闭",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (floatingWindowEnabled)
+                                        LightTertiary
+                                    else
+                                        appOnSurfaceVariant()
+                                )
+                            }
+                            Switch(
+                                checked = floatingWindowEnabled,
+                                onCheckedChange = { vm.setFloatingWindowEnabled(it) }
                             )
                         }
                     }
@@ -888,6 +950,21 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
                     }
                 }
 
+                // === 话术管理：自定义家长沟通话术，复制后粘贴给家长 ===
+                IosSectionWrapper(text = "家长沟通") {
+                    IosGroupedListCard {
+                        SettingsActionRow(
+                            icon = Icons.Outlined.Article,
+                            iconBgColor = LightPrimary,
+                            iconContentDescription = "话术管理",
+                            title = "话术管理",
+                            subtitle = "自定义话术项目，复制后粘贴给家长",
+                            showTopDivider = false,
+                            onClick = { onNavigate(Routes.SCRIPT_LIST) }
+                        )
+                    }
+                }
+
                 // 分组 7：关于
                 IosSectionWrapper(text = "关于") {
                     IosGroupedListCard {
@@ -985,11 +1062,7 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
                             label = { Text("教练姓名") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                cursorColor = MaterialTheme.colorScheme.primary,
-                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                focusedTextColor = MaterialTheme.colorScheme.onSurface
-                            )
+                            colors = appTextFieldColors(),
                         )
                     },
                     confirmButton = {
@@ -1048,12 +1121,46 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
                 )
             }
 
+            // === v45：修正历史排课前二次确认对话框 ===
+            if (showFixScheduleConfirm) {
+                GlassAlertDialog(
+                    onDismissRequest = { showFixScheduleConfirm = false },
+                    title = "修正历史排课数据",
+                    content = {
+                        Column {
+                            Text(
+                                "将会清理所有未来未签退的错误占位排课，并根据当前课时包重新生成正确的排课计划，确定继续吗？",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(Modifier.height(Spacing.sm))
+                            Text(
+                                "安全提示：仅清理未签退的占位排课，已签退的历史课时数据会完整保留。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        Button(onClick = {
+                            showFixScheduleConfirm = false
+                            vm.fixHistoricalScheduleErrors()
+                        }) { Text("确定修正") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showFixScheduleConfirm = false }) { Text("取消") }
+                    }
+                )
+            }
+
             // 恢复成功后重启确认对话框：让用户主动确认重启，避免突然杀进程导致用户困惑
             if (needRestart) {
                 GlassAlertDialog(
                     onDismissRequest = {
                         // 不允许点外部关闭：必须用户主动确认重启，否则数据已恢复但 App 仍持有旧 ViewModel
                     },
+                    // v46 修复：禁止系统返回键关闭，恢复后必须重启才能继续使用
+                    dismissOnBackPress = false,
                     title = "恢复成功",
                     content = {
                         Text(

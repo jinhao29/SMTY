@@ -24,6 +24,8 @@ import com.shangmentiyu.sportscoach.data.model.ExerciseItem
 data class ScheduleForm(
     /** 编辑模式携带原 Schedule.id；新建模式为空字符串 */
     val id: String = "",
+    // v46：学员唯一 ID（软关联，下拉选中时传递；旧数据/手输时为 null）
+    val studentId: String? = null,
     val studentName: String = "",
     val coachName: String = "李",    // 教练默认为"李"
     val dayOfWeek: Int = 1,          // 1=周一 ... 7=周日（编辑模式使用，或新建模式回退值）

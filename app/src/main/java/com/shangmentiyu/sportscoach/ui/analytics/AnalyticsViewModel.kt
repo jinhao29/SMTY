@@ -28,6 +28,11 @@ class AnalyticsViewModel(
     private val lessonRepo: LessonRepository
 ) : ViewModel() {
 
+    private val _toast = MutableStateFlow<String?>(null)
+    val toast: StateFlow<String?> = _toast.asStateFlow()
+    private val appExceptionHandler =
+        com.shangmentiyu.sportscoach.core.CoroutineExt.createAppExceptionHandler(_toast, "AnalyticsViewModel")
+
     /** 所有学员 */
     private val _students = MutableStateFlow<List<Student>>(emptyList())
     val students: StateFlow<List<Student>> = _students.asStateFlow()
@@ -58,13 +63,22 @@ class AnalyticsViewModel(
 
     /** 加载学员列表并默认选中第一个 */
     private fun loadStudents() {
-        viewModelScope.launch {
-            studentRepo.getAllStudents().collectLatest { list ->
-                _students.value = list
-                _loading.value = false
-                if (_selectedStudent.value == null && list.isNotEmpty()) {
-                    selectStudent(list.first().name)
+        viewModelScope.launch(appExceptionHandler) {
+            try {
+                studentRepo.getAllStudents().collectLatest { list ->
+                    _students.value = list
+                    _loading.value = false
+                    if (_selectedStudent.value == null && list.isNotEmpty()) {
+                        selectStudent(list.first().name)
+                    }
                 }
+            } catch (e: Exception) {
+                // === 断流修复：Flow 订阅/查询异常时记录日志，避免静默失败 ===
+                // 异常后 collectLatest 终止，学生列表不再更新；日志便于定位根因
+                android.util.Log.e("ScoreError", "加载学员列表失败", e)
+            } finally {
+                // === 断流修复：任何异常路径都必须复位加载态，杜绝"一直加载中" ===
+                _loading.value = false
             }
         }
     }
@@ -72,7 +86,7 @@ class AnalyticsViewModel(
     /** 选择学员，加载其课时并按项目聚合 */
     fun selectStudent(name: String) {
         _selectedStudent.value = name
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             val list = try {
                 lessonRepo.getLessonsByStudent(name).first()
             } catch (_: Exception) {
@@ -133,7 +147,7 @@ class AnalyticsViewModel(
      * @param onDone 完成回调（主线程），参数为是否成功
      */
     fun deleteScore(lessonId: String, projectName: String, onDone: (Boolean) -> Unit) {
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             try {
                 val lesson = lessonRepo.getById(lessonId)
                 if (lesson == null) {

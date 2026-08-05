@@ -23,6 +23,11 @@ class TrainingCycleViewModel(
     private val studentRepo: StudentRepository
 ) : ViewModel() {
 
+    private val _toast = MutableStateFlow<String?>(null)
+    val toast: StateFlow<String?> = _toast.asStateFlow()
+    private val appExceptionHandler =
+        com.shangmentiyu.sportscoach.core.CoroutineExt.createAppExceptionHandler(_toast, "TrainingCycleViewModel")
+
     private val _students = MutableStateFlow<List<String>>(emptyList())
     val students: StateFlow<List<String>> = _students.asStateFlow()
 
@@ -36,7 +41,7 @@ class TrainingCycleViewModel(
     val currentCycle: StateFlow<TrainingCycle?> = _currentCycle.asStateFlow()
 
     init {
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             _students.value = studentRepo.getAllStudents().first().map { it.name }
         }
     }
@@ -47,7 +52,7 @@ class TrainingCycleViewModel(
     }
 
     private fun loadCycles(name: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             opRepo.getCyclesByStudent(name).collect { list ->
                 _cycles.value = list
             }
@@ -70,7 +75,7 @@ class TrainingCycleViewModel(
         totalWeeks: Int,
         startDate: String
     ) {
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             opRepo.createCycle(studentName, name, goal, totalWeeks, startDate)
         }
     }
@@ -83,7 +88,7 @@ class TrainingCycleViewModel(
             else p
         }
         val updated = cycle.withWeeklyPlans(plans)
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             opRepo.updateCycle(updated)
             _currentCycle.value = updated
         }
@@ -92,7 +97,7 @@ class TrainingCycleViewModel(
     /** 标记周期完成 */
     fun markCompleted() {
         val cycle = _currentCycle.value ?: return
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             val updated = cycle.copy(status = "已完成")
             opRepo.updateCycle(updated)
             _currentCycle.value = updated
@@ -101,7 +106,7 @@ class TrainingCycleViewModel(
 
     /** 删除周期 */
     fun deleteCycle(id: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             opRepo.deleteCycle(id)
             _currentCycle.value = null
         }

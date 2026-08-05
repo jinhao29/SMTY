@@ -68,12 +68,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shangmentiyu.sportscoach.core.JsonSafe
 import com.shangmentiyu.sportscoach.core.PhotoCrypto
 import com.shangmentiyu.sportscoach.data.model.ExerciseItem
 import com.shangmentiyu.sportscoach.data.model.Lesson
-import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
+import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.theme.LightSecondary
 import com.shangmentiyu.sportscoach.ui.theme.LightTertiary
 import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
@@ -92,6 +91,8 @@ import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
 import com.shangmentiyu.sportscoach.util.ShareUtils
 import org.json.JSONObject
 import java.io.File
+import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
+import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 /**
  * 课后小结页：完整展示签到信息（照片 + 文字）+ 可编辑小结文本 + 分享导出。
  *
@@ -110,9 +111,7 @@ fun SummaryScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    val vm: SummaryViewModel = viewModel(
-        factory = AppViewModelFactory(context.applicationContext as android.app.Application)
-    )
+    val vm: SummaryViewModel = koinViewModel()
 
     val lesson by vm.lesson.collectAsStateWithLifecycle()
     val student by vm.student.collectAsStateWithLifecycle()
@@ -217,8 +216,10 @@ fun SummaryScreen(
                 label = { Text("课堂小结") },
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 6,
-                textStyle = MaterialTheme.typography.bodyMedium
-            )
+                textStyle = MaterialTheme.typography.bodyMedium,
+
+             shape = AppTextFieldShape,
+             colors = appTextFieldColors(),)
 
             // 7. 操作按钮第一行：重生成 | 复制 | 保存
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {

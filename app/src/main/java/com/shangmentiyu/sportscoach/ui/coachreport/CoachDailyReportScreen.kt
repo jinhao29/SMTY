@@ -42,9 +42,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shangmentiyu.sportscoach.data.model.Lesson
-import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
+import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.theme.GlassCard
 import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
 import com.shangmentiyu.sportscoach.ui.theme.ScoreFail
@@ -60,10 +59,7 @@ fun CoachDailyReportScreen(
     onBack: () -> Unit,
     onOpenLesson: (String) -> Unit = {}
 ) {
-    val context = LocalContext.current
-    val vm: CoachDailyReportViewModel = viewModel(
-        factory = AppViewModelFactory(context.applicationContext as android.app.Application)
-    )
+        val vm: CoachDailyReportViewModel = koinViewModel()
 
     val selectedDate by vm.selectedDate.collectAsStateWithLifecycle()
     val selectedStudent by vm.selectedStudent.collectAsStateWithLifecycle()

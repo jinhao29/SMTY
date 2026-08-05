@@ -27,6 +27,11 @@ class DailyPlanViewModel(
     private val opRepo: OperationRepository
 ) : ViewModel() {
 
+    private val _toast = MutableStateFlow<String?>(null)
+    val toast: StateFlow<String?> = _toast.asStateFlow()
+    private val appExceptionHandler =
+        com.shangmentiyu.sportscoach.core.CoroutineExt.createAppExceptionHandler(_toast, "DailyPlanViewModel")
+
     private val _selectedDate = MutableStateFlow(today())
     val selectedDate: StateFlow<String> = _selectedDate.asStateFlow()
 
@@ -41,7 +46,7 @@ class DailyPlanViewModel(
     val dayOfWeek: StateFlow<Int> = _dayOfWeek.asStateFlow()
 
     init {
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             _selectedDate.collect { date ->
                 _dayOfWeek.value = parseDayOfWeek(date)
                 loadSchedulesForDay(parseDayOfWeek(date))
@@ -67,7 +72,7 @@ class DailyPlanViewModel(
     }
 
     private fun loadSchedulesForDay(dayOfWeek: Int) {
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             opRepo.getSchedulesByDay(dayOfWeek).collect { list ->
                 _schedules.value = list
             }
@@ -75,7 +80,7 @@ class DailyPlanViewModel(
     }
 
     private fun loadLessonsForDate(date: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             lessonRepo.getAllLessons().collect { all ->
                 _lessons.value = all.filter { it.date == date }
             }

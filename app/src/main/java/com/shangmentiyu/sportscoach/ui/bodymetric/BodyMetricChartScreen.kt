@@ -49,13 +49,14 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shangmentiyu.sportscoach.data.model.BodyMetricHistory
-import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
+import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.theme.GlassCard
 import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
 import com.shangmentiyu.sportscoach.ui.theme.ScoreFail
 import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
+import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
+import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 /**
  * 体型变化曲线页面：展示学员身高/体重/BMI 的历史变化。
@@ -63,10 +64,7 @@ import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BodyMetricChartScreen(onBack: () -> Unit) {
-    val context = LocalContext.current
-    val vm: BodyMetricChartViewModel = viewModel(
-        factory = AppViewModelFactory(context.applicationContext as android.app.Application)
-    )
+        val vm: BodyMetricChartViewModel = koinViewModel()
 
     val students by vm.students.collectAsStateWithLifecycle()
     val selectedStudent by vm.selectedStudent.collectAsStateWithLifecycle()
@@ -124,8 +122,10 @@ fun BodyMetricChartScreen(onBack: () -> Unit) {
                             onValueChange = { vm.selectStudent(it) },
                             label = { Text("学员姓名") },
                             modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
-                        )
+                            singleLine = true,
+
+                         shape = AppTextFieldShape,
+                         colors = appTextFieldColors(),)
                         students.take(8).forEach { name ->
                             Text("· $name", style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier.padding(start = 8.dp, top = 2.dp))
@@ -366,21 +366,27 @@ private fun AddRecordDialog(
                 OutlinedTextField(
                     value = height, onValueChange = { height = it.filter { c -> c.isDigit() } },
                     label = { Text("身高 (cm)") },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true
-                )
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+
+                 shape = AppTextFieldShape,
+                 colors = appTextFieldColors(),)
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = weight,
                     onValueChange = { weight = it.filter { c -> c.isDigit() || c == '.' } },
                     label = { Text("体重 (kg)") },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true
-                )
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+
+                 shape = AppTextFieldShape,
+                 colors = appTextFieldColors(),)
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = note, onValueChange = { note = it },
                     label = { Text("备注（可选）") },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true
-                )
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+
+                 shape = AppTextFieldShape,
+                 colors = appTextFieldColors(),)
             }
         },
         confirmButton = {

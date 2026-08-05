@@ -31,6 +31,12 @@ object Routes {
     // === 工具类 ===
     const val BMI_CALCULATOR = "bmi_calculator"
 
+    // === 话术管理（设置页二级入口） ===
+    const val SCRIPT_LIST = "script_list"
+    const val SCRIPT_DETAIL = "script_detail/{scriptId}"
+
+    fun scriptDetail(scriptId: String?) = if (scriptId.isNullOrBlank()) "script_detail/new" else "script_detail/$scriptId"
+
     // === 运营/排课（保留为二级页面，供主页课前准备 Tab 调用） ===
     const val OPERATION = "operation"
     const val LESSON_CHECKIN = "lesson_checkin"

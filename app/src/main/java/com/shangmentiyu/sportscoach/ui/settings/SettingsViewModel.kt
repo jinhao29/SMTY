@@ -13,10 +13,12 @@ import com.shangmentiyu.sportscoach.core.BackupManager
 import com.shangmentiyu.sportscoach.core.ProgressState
 import com.shangmentiyu.sportscoach.data.repo.BackupRepository
 import com.shangmentiyu.sportscoach.data.repo.LessonRepository
+import com.shangmentiyu.sportscoach.data.repo.OperationRepository
 import com.shangmentiyu.sportscoach.data.repo.SettingsRepository
 import com.shangmentiyu.sportscoach.data.repo.StudentRepository
 import com.shangmentiyu.sportscoach.excel.ExcelSync
 import com.shangmentiyu.sportscoach.excel.ImportStrategy
+import com.shangmentiyu.sportscoach.ui.settings.state.SettingsUiState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -41,6 +43,8 @@ class SettingsViewModel(
     private val studentRepo: StudentRepository,
     private val settingsRepo: SettingsRepository,
     private val backupRepo: BackupRepository,
+    // v45：运营 Repository，用于一键修正历史错误排课
+    private val opRepo: OperationRepository,
     // v26 优化1：操作日志 Repository（审计溯源）
     private val auditLogRepo: com.shangmentiyu.sportscoach.data.repo.AuditLogRepository? = null
 ) : ViewModel() {
@@ -54,6 +58,9 @@ class SettingsViewModel(
     val autoBackupEnabled: StateFlow<Boolean> = settingsRepo.autoBackupEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
+    val floatingWindowEnabled: StateFlow<Boolean> = settingsRepo.floatingWindowEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
     /**
      * 设置自动备份开关。
      * - 立即写入 DataStore 持久化
@@ -66,6 +73,49 @@ class SettingsViewModel(
             settingsRepo.setAutoBackupEnabled(enabled)
             AutoBackupScheduler.reloadSettings()
             _statusMessage.value = if (enabled) "已开启自动备份" else "已关闭自动备份"
+        }
+    }
+
+    fun setFloatingWindowEnabled(enabled: Boolean) {
+        safeLaunch {
+            settingsRepo.setFloatingWindowEnabled(enabled)
+            val intent = Intent(app, com.shangmentiyu.sportscoach.service.FloatingWindowService::class.java)
+            if (enabled) {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    app.startForegroundService(intent)
+                } else {
+                    app.startService(intent)
+                }
+            } else {
+                app.stopService(intent)
+            }
+        }
+    }
+
+    /**
+     * === v45：一键修正历史错误排课 ===
+     *
+     * 调用 [OperationRepository.fixHistoricalScheduleErrors] 清理历史 Bug 产生的错误排课
+     * （早于购买日期 / 超过剩余课时），并在剩余额度内重新生成正确排课。
+     * 完成后通过 [_statusMessage] 向 UI 反馈修正统计。
+     */
+    fun fixHistoricalScheduleErrors() {
+        safeLaunch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    opRepo.fixHistoricalScheduleErrors()
+                }
+                _statusMessage.value = buildString {
+                    append("已成功修正 ${result.fixedStudents} 位学员的错误排课数据")
+                    append("（删除排课 ${result.deletedSchedules} 条、")
+                    append("占位课时 ${result.deletedPlaceholders} 条，")
+                    append("重新生成 ${result.regeneratedLessons} 条）")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("SettingsVM",
+                    "修正历史排课失败：${e.message}", e)
+                _statusMessage.value = "修正失败：${e.message ?: "未知异常"}"
+            }
         }
     }
 
@@ -193,6 +243,33 @@ class SettingsViewModel(
      */
     private val _progressState = MutableStateFlow(ProgressState.Idle)
     val progressState: StateFlow<ProgressState> = _progressState.asStateFlow()
+
+    // === v46 架构层三：单一 UiState 聚合（UI 只订阅这一个状态） ===
+    // 嵌套 combine 规避 vararg combine 要求同类型限制；核心展示态聚合为 SettingsUiState，
+    // 子模块局部状态（照片统计/缓存/桌面连接）保持独立 StateFlow。
+    val uiState: StateFlow<SettingsUiState> = combine(
+        combine(coach, todayCount, totalCount) { c, today, total -> Triple(c, today, total) },
+        combine(autoBackupEnabled, _statusMessage, _progressState) { a, s, p -> Triple(a, s, p) },
+        combine(_backupInProgress, _backupProgress, _needRestart) { i, p, n -> Triple(i, p, n) },
+        floatingWindowEnabled
+    ) { stats, flags, backup, floating ->
+        SettingsUiState(
+            coach = stats.first,
+            todayCount = stats.second,
+            totalCount = stats.third,
+            autoBackupEnabled = flags.first,
+            floatingWindowEnabled = floating,
+            statusMessage = flags.second,
+            progressState = flags.third,
+            backupInProgress = backup.first,
+            backupProgress = backup.second,
+            needRestart = backup.third
+        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000),
+        initialValue = SettingsUiState()
+    )
 
     /** UI 消费了进度事件后调用，重置为 Idle（关闭 ProgressDialog） */
     fun consumeProgressState() {
@@ -600,13 +677,22 @@ class SettingsViewModel(
                 }
                 _statusMessage.value = result.message
                 if (result.success && result.needRestart) {
-                    // 恢复成功：保留安全备份直到下次启动（若用户反悔可通过文件管理器手动恢复）
-                    _needRestart.value = true
+                    // === v46 修复：恢复成功立即自动重启（根治"恢复后无法添加学员"）===
+                    // 数据库已被 closeAndResetInstance 关闭，各 Repository 注入的旧 db 引用永久失效；
+                    // 若继续运行（用户按返回键/不点重启），此后所有写操作（添加学员/排课/签到等）
+                    // 必然失败。数据已替换，重启加载新数据是唯一正确路径——不再依赖用户点击确认。
+                    _needRestart.value = true  // 兜底：若自动重启异常，UI 仍弹"立即重启"确认框
                     _backupProgress.value = BackupProgress.Done(result.message)
+                    restartApp()
                 } else {
-                    // 恢复失败：删除安全备份（当前数据未变更）
-                    runCatching { safetyFile.delete() }
+                    // === v46 安全修复：恢复失败时保留安全备份（防数据丢失）===
+                    // restoreDetailed 流程会先清空本地数据库再解压，因此恢复失败时
+                    // 本地数据可能已损坏/清空——安全备份是原数据的唯一回滚副本，
+                    // 绝不能按"当前数据未变更"的假设删除。保留并提示用户手动找回。
                     _backupProgress.value = BackupProgress.Done(result.message)
+                    _statusMessage.value =
+                        "恢复失败：${result.message}（本地数据可能已受影响，" +
+                            "恢复前的安全备份已保留，可进入应用缓存目录找回）"
                 }
             } finally {
                 _backupInProgress.value = false

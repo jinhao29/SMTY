@@ -53,10 +53,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shangmentiyu.sportscoach.data.model.Student
 import com.shangmentiyu.sportscoach.domain.HeightPredictionResult
-import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
+import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.theme.FloatingSnackbarHost
 import com.shangmentiyu.sportscoach.ui.theme.BrandGradientStart
 import com.shangmentiyu.sportscoach.ui.theme.IOSCard
@@ -67,6 +66,8 @@ import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 import com.shangmentiyu.sportscoach.ui.theme.appSurface
+import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
+import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 // === 修正值语义色（仅用于小字修正值文本，非卡片背景色块） ===
 /** 加分提示色：iOS 活力绿 */
@@ -95,10 +96,7 @@ fun HeightPredictionScreen(
     studentName: String,
     onBack: () -> Unit
 ) {
-    val context = LocalContext.current
-    val vm: HeightPredictionViewModel = viewModel(
-        factory = AppViewModelFactory(context.applicationContext as android.app.Application)
-    )
+        val vm: HeightPredictionViewModel = koinViewModel()
 
     val student by vm.studentInfo.collectAsStateWithLifecycle()
     val fatherHeight by vm.fatherHeight.collectAsStateWithLifecycle()
@@ -317,13 +315,8 @@ private fun NumberInputRow(
                     color = appOnSurface().copy(alpha = 0.5f)
                 )
             },
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = appPrimary(),
-                unfocusedBorderColor = appOnSurface().copy(alpha = 0.15f),
-                focusedContainerColor = Color.Transparent,
-                unfocusedContainerColor = Color.Transparent
-            ),
-            shape = RoundedCornerShape(8.dp)
+            colors = appTextFieldColors(),
+            shape = AppTextFieldShape
         )
     }
 }

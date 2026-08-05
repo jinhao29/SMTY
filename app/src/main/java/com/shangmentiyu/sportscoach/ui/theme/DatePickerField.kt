@@ -39,6 +39,8 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
+import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 /**
  * 日期选择器共享组件。
@@ -163,8 +165,10 @@ fun OutlinedDatePickerField(
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.clickable { showPicker = true }
             )
-        }
-    )
+        },
+
+     shape = AppTextFieldShape,
+     colors = appTextFieldColors(),)
 
     if (showPicker) {
         val initialMillis = parseDateToMillis(value)
@@ -258,8 +262,10 @@ fun OutlinedTimePickerField(
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.clickable { showPicker = true }
             )
-        }
-    )
+        },
+
+     shape = AppTextFieldShape,
+     colors = appTextFieldColors(),)
 
     if (showPicker) {
         val state = rememberTimePickerState(

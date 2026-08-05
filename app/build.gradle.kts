@@ -9,28 +9,31 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+// === v46 架构层五 Phase 2：依赖 :core 纯逻辑模块（算法/计算/分析） ===
+
 // === 版本号自动化（CI 注入环境变量 / 本地 fallback） ===
 // 策略：
 // 1. CI 环境（GitHub Actions）：workflow 通过 GITHUB_ENV 注入 VERSION_CODE 和 VERSION_NAME
 //    - VERSION_CODE = github.run_number（严格递增，每次 push +1）
 //    - VERSION_NAME = 0.<github.run_number>（从 0.1 开始递增）
-// 2. 本地环境（Android Studio 直接打包）：环境变量不存在时使用极大默认值
-//    - versionCode = 99999
-//    - versionName = "9.9.9-local"
-// 设计说明：
-// - github.run_number 在仓库维度严格递增，可保证每次构建 versionCode 唯一递增
-// - 本地默认值 99999 永远高于 GitHub 发布版本，彻底屏蔽本地调试时的更新提示
-// - 版本号从 0.1 开始，便于后续 1.0 正式发布时做明显的 major 版本跃迁
+// 2. 本地环境（Android Studio 直接打包）：环境变量不存在时回退到极低版本
+//    - versionCode = 1
+//    - versionName = "0.0.1-local"
+// v46 修正：原回退值 99999 / 9.9.9-local 永远高于云端版本，导致本地调试版
+// 无法触发更新弹窗，无法完整测试自动更新链路。改为极低版本后：
+// - 本地版 versionCode=1 永远低于云端 run_number，配合 UpdateChecker 的
+//   "-local" 防呆拦截，本地每次检查更新都会弹出云端新版本
+// - 云端 Release tag 统一为 v0.<run_number>，与 versionName 0.<run_number> 对齐
 
 // === Release 签名配置（CI 通过 Secrets 注入 / 本地可选 keystore.properties） ===
-// 设计要点：
-// - CI 环境：GitHub Actions 解码 KEYSTORE_BASE64 Secret 写入 keystore.jks + keystore.properties
-//   build.gradle.kts 检测到 keystore.properties 自动切换 release 签名
-// - 本地环境：开发者可手动放置 keystore.properties + keystore.jks 使用 release 签名
+// 设计要点（v46 修正）：
+// - CI 环境：GitHub Actions 解码 KEYSTORE_BASE64 Secret 写入 app/keystore.jks + app/keystore.properties
+//   build.gradle.kts 检测到 app/ 下的 keystore.properties 自动切换 release 签名
+// - 本地环境：开发者可手动放置 app/keystore.properties + app/keystore.jks 使用 release 签名
 // - Fallback：未配置 keystore.properties 时使用 debug 签名，保证 AS 直接打包不报错
 //   ⚠️ 注意：debug 签名的 APK 无法覆盖安装到已安装 release 签名的设备
 //           GitHub Release 必须配置 KEYSTORE_BASE64 Secret 以使用 release 签名
-val signingPropsFile: File = rootProject.file("keystore.properties")
+val signingPropsFile: File = file("keystore.properties")
 val hasSigningProps: Boolean = signingPropsFile.exists()
 val signingProps: Properties = Properties().apply {
     if (hasSigningProps) {
@@ -47,14 +50,15 @@ android {
         minSdk = 26
         targetSdk = 35
 
-        // 版本号策略：
-        // - 本地调试（无环境变量）：versionCode=99999, versionName=9.9.9-local
-        //   极大版本号，永远高于 GitHub 发布版本，彻底屏蔽本地调试时的更新提示
+        // 版本号策略（v46 修正）：
+        // - 本地调试（无环境变量）：versionCode=1, versionName=0.0.1-local
+        //   极低版本，永远低于云端版本，配合 UpdateChecker 的"-local"防呆拦截
+        //   本地每次检查更新都能触发云端新版本弹窗，便于测试完整更新链路
         // - GitHub Actions 云端打包：通过 GITHUB_ENV 注入 VERSION_CODE / VERSION_NAME
         //   versionCode = github.run_number（1, 2, 3...）
         //   versionName = 0.${github.run_number}（0.1, 0.2, 0.33...）
-        versionCode = (System.getenv("VERSION_CODE")?.toIntOrNull() ?: 99999)
-        versionName = (System.getenv("VERSION_NAME") ?: "9.9.9-local")
+        versionCode = (System.getenv("VERSION_CODE")?.toIntOrNull() ?: 1)
+        versionName = (System.getenv("VERSION_NAME") ?: "0.0.1-local")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -68,7 +72,7 @@ android {
         // 未配置时 fallback 到 debug 签名（Android Studio 直接打包不报错）
         if (hasSigningProps) {
             create("release") {
-                storeFile = file(signingProps.getProperty("storeFile"))
+                storeFile = file(signingProps.getProperty("storeFile", "keystore.jks"))
                 storePassword = signingProps.getProperty("storePassword")
                 keyAlias = signingProps.getProperty("keyAlias")
                 keyPassword = signingProps.getProperty("keyPassword")
@@ -170,6 +174,10 @@ android {
 // 升级到 Room 2.7.1（原生支持 KSP2）已解决，无需额外 ksp 参数。
 
 dependencies {
+    // === v46 架构层五 Phase 2/3：:core 纯逻辑 + :data 数据层 ===
+    implementation(project(":core"))
+    implementation(project(":data"))
+
     // === v25 优化6：依赖版本统一通过 gradle/libs.versions.toml 管理 ===
     // 升级依赖时只需修改 libs.versions.toml 一处，避免版本号散落导致冲突
 
@@ -207,13 +215,6 @@ dependencies {
     implementation(libs.androidx.paging.runtime.ktx)
     implementation(libs.androidx.paging.compose)
 
-    // 数据存储
-    implementation(libs.androidx.datastore.preferences)
-
-    // Apache POI（Excel 导入导出，与桌面端互通）
-    implementation(libs.apache.poi)
-    implementation(libs.apache.poi.ooxml)
-
     // 文件选择器
     implementation(libs.androidx.documentfile)
 
@@ -232,6 +233,12 @@ dependencies {
     implementation(libs.gson)
     // WorkManager：定期后台检查更新
     implementation(libs.androidx.work.runtime.ktx)
+
+    // ===== Koin DI（架构层四，v46）=====
+    // BOM 统一版本 + Android/Compose 扩展
+    implementation(platform(libs.koin.bom))
+    implementation(libs.koin.android)
+    implementation(libs.koin.androidx.compose)
 
     // 调试工具
     debugImplementation(libs.androidx.compose.ui.tooling)

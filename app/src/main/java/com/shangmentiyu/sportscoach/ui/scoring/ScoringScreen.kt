@@ -17,12 +17,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import com.shangmentiyu.sportscoach.core.Standards
 import com.shangmentiyu.sportscoach.core.Std
 import com.shangmentiyu.sportscoach.core.Scorer
-import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
+import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.theme.*
 import com.shangmentiyu.sportscoach.ui.theme.FloatingSnackbarHost
 import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
@@ -33,15 +33,14 @@ fun ScoringScreen(
     lessonId: String?,
     onBack: () -> Unit
 ) {
-    val context = LocalContext.current
-    val vm: ScoringViewModel = viewModel(factory = AppViewModelFactory(context.applicationContext as android.app.Application))
+        val vm: ScoringViewModel = koinViewModel()
 
-    val students by vm.students.collectAsState()
-    val selectedStudent by vm.selectedStudent.collectAsState()
-    val standards by vm.standards.collectAsState()
-    val scoreInputs by vm.scoreInputs.collectAsState()
-    val scoreResults by vm.scoreResults.collectAsState()
-    val customProjects by vm.customProjects.collectAsState()
+    val students by vm.students.collectAsStateWithLifecycle()
+    val selectedStudent by vm.selectedStudent.collectAsStateWithLifecycle()
+    val standards by vm.standards.collectAsStateWithLifecycle()
+    val scoreInputs by vm.scoreInputs.collectAsStateWithLifecycle()
+    val scoreResults by vm.scoreResults.collectAsStateWithLifecycle()
+    val customProjects by vm.customProjects.collectAsStateWithLifecycle()
     var studentExpanded by remember { mutableStateOf(false) }
     var showAddCustomDialog by remember { mutableStateOf(false) }
 
@@ -81,6 +80,8 @@ fun ScoringScreen(
                     readOnly = true,
                     label = { Text("选择学员") },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = studentExpanded) },
+                    shape = AppTextFieldShape,
+                    colors = appTextFieldColors(),
                     modifier = Modifier.fillMaxWidth().menuAnchor(
                         androidx.compose.material3.MenuAnchorType.PrimaryNotEditable,
                         enabled = true
@@ -104,6 +105,8 @@ fun ScoringScreen(
                     Text("请先选择学员", color = MaterialTheme.colorScheme.outline)
                 }
             } else {
+                // 预计算自定义项目列表（customProjects 为 Set，转 List 以适配 items）
+                val customProjectList = remember(customProjects) { customProjects.toList() }
                 LazyColumn(
                     modifier = Modifier.weight(1f),
                     contentPadding = PaddingValues(16.dp),
@@ -120,8 +123,8 @@ fun ScoringScreen(
                         )
                     }
 
-                    // 自定义项目（customProjects 为 Set，转 List 以适配 items）
-                    items(customProjects.toList(), key = { it }) { name ->
+                    // 自定义项目
+                    items(customProjectList, key = { it }) { name ->
                         CustomScoreRow(
                             name = name,
                             inputValue = scoreInputs[name] ?: "",
@@ -235,7 +238,9 @@ private fun ScoreRow(
                 onValueChange = onValueChange,
                 label = { Text("输入成绩(${std.unit})") },
                 modifier = Modifier.weight(1f),
-                singleLine = true
+                singleLine = true,
+                shape = AppTextFieldShape,
+                colors = appTextFieldColors()
             )
             Spacer(modifier = Modifier.width(8.dp))
             // 得分和等级
@@ -296,7 +301,9 @@ private fun CustomScoreRow(
                 onValueChange = onValueChange,
                 label = { Text("输入成绩") },
                 modifier = Modifier.weight(1f),
-                singleLine = true
+                singleLine = true,
+                shape = AppTextFieldShape,
+                colors = appTextFieldColors()
             )
             Spacer(modifier = Modifier.width(8.dp))
             IconButton(onClick = onRemove) {
@@ -335,6 +342,8 @@ private fun AddCustomProjectDialog(
                     onValueChange = { name = it },
                     label = { Text("项目名称") },
                     singleLine = true,
+                    shape = AppTextFieldShape,
+                    colors = appTextFieldColors(),
                     modifier = Modifier.fillMaxWidth()
                 )
             }

@@ -33,14 +33,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shangmentiyu.sportscoach.data.repo.OperationRepository
-import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
+import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.theme.GlassCard
 import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
 import com.shangmentiyu.sportscoach.ui.theme.ScoreFail
 import com.shangmentiyu.sportscoach.ui.theme.ScorePass
 import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
+import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
+import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 /**
  * 阶段性总结页面：选择学员 + 时间范围，展示聚合统计与进步对比。
@@ -48,10 +49,7 @@ import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StageSummaryScreen(onBack: () -> Unit) {
-    val context = LocalContext.current
-    val vm: StageSummaryViewModel = viewModel(
-        factory = AppViewModelFactory(context.applicationContext as android.app.Application)
-    )
+        val vm: StageSummaryViewModel = koinViewModel()
 
     val students by vm.students.collectAsStateWithLifecycle()
     val selectedStudent by vm.selectedStudent.collectAsStateWithLifecycle()
@@ -91,8 +89,10 @@ fun StageSummaryScreen(onBack: () -> Unit) {
                         onValueChange = { vm.selectStudent(it) },
                         label = { Text("学员姓名") },
                         modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
+                        singleLine = true,
+
+                     shape = AppTextFieldShape,
+                     colors = appTextFieldColors(),)
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("可选学员：", style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline)

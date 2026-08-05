@@ -58,11 +58,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shangmentiyu.sportscoach.data.db.AppDatabase
 import com.shangmentiyu.sportscoach.data.model.PlanImage
 import com.shangmentiyu.sportscoach.data.model.Schedule
-import com.shangmentiyu.sportscoach.ui.AppViewModelFactory
+import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.dailyplan.DailyPlanViewModel
 import com.shangmentiyu.sportscoach.ui.operation.OperationViewModel
 import com.shangmentiyu.sportscoach.ui.schedule.ScheduleEditDialog
@@ -94,13 +93,8 @@ fun PreClassTab(
     onLessonCheckIn: () -> Unit,
     onSchedule: () -> Unit = {}
 ) {
-    val context = LocalContext.current
-    val dailyVm: DailyPlanViewModel = viewModel(
-        factory = AppViewModelFactory(context.applicationContext as android.app.Application)
-    )
-    val opVm: OperationViewModel = viewModel(
-        factory = AppViewModelFactory(context.applicationContext as android.app.Application)
-    )
+        val dailyVm: DailyPlanViewModel = koinViewModel()
+    val opVm: OperationViewModel = koinViewModel()
 
     val selectedDate by dailyVm.selectedDate.collectAsStateWithLifecycle()
     val schedules by dailyVm.schedules.collectAsStateWithLifecycle()
@@ -558,6 +552,8 @@ private fun RecentSchedulesDialogContent(
     val grouped = remember(schedules) {
         schedules.sortedBy { it.dayOfWeek }.groupBy { it.dayOfWeek }
     }
+    // 预计算分组列表（避免 LazyColumn 每次重组都 toList 分配新 List）
+    val groupedEntries = remember(grouped) { grouped.entries.toList() }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -592,11 +588,11 @@ private fun RecentSchedulesDialogContent(
                     Text("暂无任何排课记录", color = appOnSurfaceVariant())
                 }
             } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(horizontal = Spacing.md),
-                    verticalArrangement = Arrangement.spacedBy(Spacing.sm)
-                ) {
-                    items(grouped.entries.toList(), key = { it.key }) { (dayOfWeek, daySchedules) ->
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize().padding(horizontal = Spacing.md),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+                    ) {
+                        items(groupedEntries, key = { it.key }) { (dayOfWeek, daySchedules) ->
                         IosCard {
                             Column(modifier = Modifier.padding(Spacing.md)) {
                                 Text(

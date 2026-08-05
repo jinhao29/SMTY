@@ -27,6 +27,11 @@ class SummaryViewModel(
     private val studentRepo: StudentRepository
 ) : ViewModel() {
 
+    private val _toast = MutableStateFlow<String?>(null)
+    val toast: StateFlow<String?> = _toast.asStateFlow()
+    private val appExceptionHandler =
+        com.shangmentiyu.sportscoach.core.CoroutineExt.createAppExceptionHandler(_toast, "SummaryViewModel")
+
     private val _lesson = MutableStateFlow<Lesson?>(null)
     val lesson: StateFlow<Lesson?> = _lesson.asStateFlow()
 
@@ -38,7 +43,7 @@ class SummaryViewModel(
 
     /** 按 lessonId 加载课堂与学员，若小结为空则自动生成。 */
     fun load(lessonId: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             val l = lessonRepo.getById(lessonId)
             _lesson.value = l
             if (l != null) {
@@ -62,7 +67,7 @@ class SummaryViewModel(
     /** 保存小结到数据库，完成后回调 onDone。 */
     fun save(onDone: () -> Unit) {
         val l = _lesson.value ?: return
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             lessonRepo.updateLesson(l.copy(summary = _summary.value))
             onDone()
         }

@@ -120,7 +120,7 @@ object ShareUtils {
 
     /**
      * 将课堂小结渲染为图片（家长友好格式）。
-     * 深色科技风配色，与 App 主题一致。
+     * 浅色主题配色，与 App 主题一致。
      */
     fun renderLessonReportImage(
         lesson: Lesson,
@@ -158,14 +158,14 @@ object ShareUtils {
 
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        canvas.drawColor(Color.parseColor("#1A1A2E")) // 深色背景
+        canvas.drawColor(Color.parseColor("#FAFAFA")) // 暖白背景
 
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         var y = padding
 
         // === 标题 ===
         val gradeLabel = student?.let { Standards.gradeFullLabel(it.grade) } ?: ""
-        paint.color = Color.WHITE
+        paint.color = Color.parseColor("#1A1A1A")
         paint.textSize = 42f
         paint.typeface = Typeface.DEFAULT_BOLD
         paint.textAlign = Paint.Align.LEFT
@@ -180,20 +180,20 @@ object ShareUtils {
         y += 60
 
         // 副标题
-        paint.color = Color.parseColor("#818CF8")
+        paint.color = Color.parseColor("#FF6B47")
         paint.textSize = 26f
         paint.textAlign = Paint.Align.LEFT
         canvas.drawText("课堂训练报告", padding.toFloat(), y.toFloat(), paint)
         y += 50
 
         // 分割线
-        paint.color = Color.parseColor("#4338CA")
+        paint.color = Color.parseColor("#FF6B47")
         paint.strokeWidth = 3f
         canvas.drawLine(padding.toFloat(), y.toFloat(), (width - padding).toFloat(), y.toFloat(), paint)
         y += 40
 
         // === 学员信息 ===
-        paint.color = Color.parseColor("#E0E0E0")
+        paint.color = Color.parseColor("#6B6B6B")
         paint.textSize = 26f
         val schoolText = student?.school?.ifBlank { "" } ?: ""
         val genderText = student?.gender ?: ""
@@ -206,7 +206,7 @@ object ShareUtils {
         y += 50
 
         // === 课时信息 ===
-        paint.color = Color.parseColor("#A5B4FC")
+        paint.color = Color.parseColor("#FF6B47")
         val lessonInfo = "${lesson.duration}分钟 · ${lesson.lessonType} · ${lesson.attendance}"
         canvas.drawText(lessonInfo, padding.toFloat(), y.toFloat(), paint)
         if (lesson.location.isNotBlank()) {
@@ -219,7 +219,7 @@ object ShareUtils {
         // === 训练内容 ===
         if (exercises.isNotEmpty()) {
             y += 20
-            paint.color = Color.WHITE
+            paint.color = Color.parseColor("#1A1A1A")
             paint.textSize = 32f
             paint.typeface = Typeface.DEFAULT_BOLD
             val doneCount = exercises.count { it.done }
@@ -230,11 +230,11 @@ object ShareUtils {
             paint.typeface = Typeface.DEFAULT
             for (item in exercises) {
                 val mark = if (item.done) "✓" else "○"
-                val markColor = if (item.done) Color.parseColor("#10B981") else Color.parseColor("#6B7280")
+                val markColor = if (item.done) Color.parseColor("#10B981") else Color.parseColor("#9CA3AF")
                 paint.color = markColor
                 canvas.drawText(mark, padding.toFloat(), y.toFloat(), paint)
 
-                paint.color = Color.parseColor("#E5E7EB")
+                paint.color = Color.parseColor("#1A1A1A")
                 val text = "${item.name}  ${item.sets}组×${item.reps}（${item.intensity}）"
                 canvas.drawText(text, (padding + 40).toFloat(), y.toFloat(), paint)
                 y += lineHeight
@@ -245,7 +245,7 @@ object ShareUtils {
         // === 成绩 ===
         if (scores.isNotEmpty()) {
             y += 20
-            paint.color = Color.WHITE
+            paint.color = Color.parseColor("#1A1A1A")
             paint.textSize = 32f
             paint.typeface = Typeface.DEFAULT_BOLD
             canvas.drawText("体测成绩", padding.toFloat(), y.toFloat(), paint)
@@ -257,7 +257,7 @@ object ShareUtils {
                 val score = info.optDouble("score", 0.0)
                 val grade = info.optString("grade", "")
 
-                paint.color = Color.parseColor("#E5E7EB")
+                paint.color = Color.parseColor("#1A1A1A")
                 paint.textAlign = Paint.Align.LEFT
                 canvas.drawText(name, padding.toFloat(), y.toFloat(), paint)
 
@@ -278,14 +278,14 @@ object ShareUtils {
 
         // === 课堂评价 ===
         y += 20
-        paint.color = Color.WHITE
+        paint.color = Color.parseColor("#1A1A1A")
         paint.textSize = 32f
         paint.typeface = Typeface.DEFAULT_BOLD
         paint.textAlign = Paint.Align.LEFT
         canvas.drawText("课堂评价", padding.toFloat(), y.toFloat(), paint)
         y += 50
 
-        paint.color = Color.parseColor("#E5E7EB")
+        paint.color = Color.parseColor("#6B6B6B")
         paint.textSize = 26f
         paint.typeface = Typeface.DEFAULT
         val evalText = "训练态度：${lesson.attitude}  整体表现：${lesson.performance}/10"
@@ -293,7 +293,7 @@ object ShareUtils {
         y += lineHeight
 
         if (lesson.nextGoal.isNotBlank()) {
-            paint.color = Color.parseColor("#A5B4FC")
+            paint.color = Color.parseColor("#FF6B47")
             canvas.drawText("下次课目标：${lesson.nextGoal}", padding.toFloat(), y.toFloat(), paint)
             y += lineHeight
         }
@@ -301,14 +301,14 @@ object ShareUtils {
         // 教练寄语（自由编辑内容）
         if (lesson.coachComment.isNotBlank()) {
             y += 10
-            paint.color = Color.WHITE
+            paint.color = Color.parseColor("#1A1A1A")
             paint.textSize = 28f
             paint.typeface = Typeface.DEFAULT_BOLD
             paint.textAlign = Paint.Align.LEFT
             canvas.drawText("教练寄语", padding.toFloat(), y.toFloat(), paint)
             y += 44
 
-            paint.color = Color.parseColor("#E5E7EB")
+            paint.color = Color.parseColor("#6B6B6B")
             paint.textSize = 24f
             paint.typeface = Typeface.DEFAULT
             // 自动换行处理
@@ -321,7 +321,7 @@ object ShareUtils {
 
         // === 底部 ===
         y += 30
-        paint.color = Color.parseColor("#6B7280")
+        paint.color = Color.parseColor("#9CA3AF")
         paint.textSize = 22f
         paint.textAlign = Paint.Align.CENTER
         val coachName = lesson.coach.ifBlank { "体育教学助手" }

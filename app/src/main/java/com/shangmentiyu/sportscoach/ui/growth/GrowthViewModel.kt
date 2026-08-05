@@ -42,6 +42,11 @@ class GrowthViewModel(
     private val bodyMetricRepo: BodyMetricRepository? = null
 ) : ViewModel() {
 
+    private val _toast = MutableStateFlow<String?>(null)
+    val toast: StateFlow<String?> = _toast.asStateFlow()
+    private val appExceptionHandler =
+        com.shangmentiyu.sportscoach.core.CoroutineExt.createAppExceptionHandler(_toast, "GrowthViewModel")
+
     private val _student = MutableStateFlow<Student?>(null)
     val student: StateFlow<Student?> = _student.asStateFlow()
 
@@ -115,7 +120,7 @@ class GrowthViewModel(
 
     /** 加载学员的全部数据 */
     fun load(studentName: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             _student.value = studentRepo.getByName(studentName)
             lessonRepo.getLessonsByStudent(studentName).collect { lessonList ->
                 _lessons.value = lessonList
@@ -178,7 +183,7 @@ class GrowthViewModel(
         }
 
         _isGenerating.value = true
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             try {
                 // 1. 加载身体形态历史（按日期升序）
                 val bodyMetrics: List<BodyMetricHistory> = withContext(Dispatchers.IO) {
@@ -261,7 +266,7 @@ class GrowthViewModel(
         }
 
         _isGenerating.value = true
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             try {
                 // 1. 加载身体形态历史（按日期升序）
                 val bodyMetrics: List<BodyMetricHistory> = withContext(Dispatchers.IO) {
@@ -337,7 +342,7 @@ class GrowthViewModel(
             onDone(false, "归档功能未初始化")
             return
         }
-        viewModelScope.launch {
+        viewModelScope.launch(appExceptionHandler) {
             try {
                 val boundary = todayStr().let { today ->
                     val date = java.time.LocalDate.parse(today)
