@@ -27,7 +27,7 @@ class ParentReportRepository(
      */
     suspend fun generateAndSave(studentName: String, type: String): String? {
         val student = studentRepo.getByName(studentName) ?: return null
-        val lessons = lessonRepo.getByStudentOnce(studentName)
+        val lessons = lessonRepo.getByStudentOnceDual(student.studentId, studentName)
         if (lessons.isEmpty()) return null
 
         val content = ReportGenerator.generate(student, lessons, type)

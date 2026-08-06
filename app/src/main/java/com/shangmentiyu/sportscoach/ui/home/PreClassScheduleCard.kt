@@ -118,7 +118,8 @@ internal fun PreClassScheduleCard(
     ) {
         val dao = AppDatabase.getDatabase(context.applicationContext as android.app.Application)
             .planImageDao()
-        dao.getByStudent(schedule.studentName).collect { value = it }
+        // v48 双通道：studentId 优先，旧数据 NULL 回退姓名
+        dao.getByStudentDual(schedule.studentId, schedule.studentName).collect { value = it }
     }
 
     val isSignedIn = signedLesson != null

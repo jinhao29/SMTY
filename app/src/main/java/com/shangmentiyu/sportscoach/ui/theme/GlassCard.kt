@@ -122,9 +122,9 @@ fun GlassSectionSubtitle(text: String, modifier: Modifier = Modifier) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun glassTopAppBarColors(): TopAppBarColors {
-    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
-    val containerStart = if (isDark) NightSurface else LightBackground
-    val scrolledColor = if (isDark) NightSurface else LightSurface
+    // v48：统一读取主题令牌，跟随手动深色模式开关
+    val containerStart = MaterialTheme.colorScheme.background
+    val scrolledColor = MaterialTheme.colorScheme.surface
     return TopAppBarDefaults.topAppBarColors(
         containerColor = containerStart,
         scrolledContainerColor = scrolledColor,

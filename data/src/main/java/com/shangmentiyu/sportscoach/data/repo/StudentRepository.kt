@@ -187,11 +187,13 @@ class StudentRepository(
         // training_cycles/student_plan_images），与 softDeleteStudentById 保持一致
         db?.withTransaction {
             dao.softDeleteByName(name)
-            db.scheduleDao().deleteByStudent(name)
             db.lessonDao().deleteByStudent(name)
+            db.scheduleDao().deleteByStudent(name)
             db.lessonPackageDao().deleteByStudent(name)
             db.trainingCycleDao().deleteByStudent(name)
-            db.planImageDao().deleteByStudent(name)
+            // v48 双通道：studentId 优先，旧数据 NULL 回退姓名
+            val sid = dao.getByName(name)?.studentId
+            db.planImageDao().deleteByStudentIdDual(sid, name)
         } ?: dao.softDeleteByName(name)
         // v26 优化1：记录操作日志（软删除）
         auditLog?.log(
@@ -266,6 +268,8 @@ class StudentRepository(
             database.bodyMetricHistoryDao().renameStudent(oldName, newName)
             database.parentReportDao().renameStudent(oldName, newName)
             database.dietDao().renameStudent(oldName, newName)
+            // v48 双通道：student_plan_images 改名并补写 studentId（旧数据 NULL 回退姓名）
+            database.planImageDao().renameStudentIdDual(dao.getByName(oldName)?.studentId, oldName, newName)
 
             // v26 优化1：在事务内记录日志，保证数据与日志一致性
             auditLog?.log(
@@ -370,6 +374,8 @@ class StudentRepository(
                 database.bodyMetricHistoryDao().renameStudent(oldName, newName)
                 database.parentReportDao().renameStudent(oldName, newName)
                 database.dietDao().renameStudent(oldName, newName)
+                // v48 双通道：student_plan_images 改名并补写 studentId
+                database.planImageDao().renameStudentIdDual(studentId, oldName, newName)
 
                 // 4.3 在事务内记录日志，保证数据与日志一致性
                 auditLog?.log(
@@ -431,7 +437,8 @@ class StudentRepository(
                     database.scheduleDao().deleteByStudentIdDual(studentId, target.name)
                     database.lessonPackageDao().deleteByStudentIdDual(studentId, target.name)
                     database.trainingCycleDao().deleteByStudentIdDual(studentId, target.name)
-                    // 注：student_plan_images 无 studentId 字段，仅按姓名清理，已包含在 deleteStudent(name) 中
+                    // v48 双通道：student_plan_images 补入 studentId 清理（旧数据 NULL 回退姓名）
+                    database.planImageDao().deleteByStudentIdDual(studentId, target.name)
                     auditLog?.log(
                         action = "删除学员（ID 软删）",
                         targetStudent = target.name,
@@ -566,11 +573,11 @@ class StudentRepository(
                                     // 物理删除主表 + 级联子表（重名覆盖场景必须清空旧关联数据）
                                     dao.deleteByName(s.name)
                                     database.lessonDao().deleteByStudent(s.name)
-                                    database.lessonPackageDao().deleteByStudent(s.name)
                                     database.scheduleDao().deleteByStudent(s.name)
+                                    database.lessonPackageDao().deleteByStudent(s.name)
+                                    database.trainingCycleDao().deleteByStudent(s.name)
                                     database.bodyMetricHistoryDao().deleteByStudent(s.name)
                                     database.parentReportDao().deleteByStudent(s.name)
-                                    database.trainingCycleDao().deleteByStudent(s.name)
                                     database.dietDao().deleteByStudentName(s.name)
                                 }
                                 dao.insert(s.copy(studentId = java.util.UUID.randomUUID().toString().take(8)))
@@ -663,6 +670,9 @@ class StudentRepository(
      * - 若 [ftsDao] 为空（旧调用方未注入）：走 [searchByLike] LIKE 兜底。
      * - 若 FTS 查询抛异常（索引损坏 / SQLite 错误）：捕获后走 LIKE 兜底，
      *   并通过 Logcat 警告，提示后续可调用 [rebuildFtsIndex] 重建。
+     * - v47：若 FTS 返回空结果也走 LIKE 兜底。原因：studentFts 未指定 tokenizer
+     *   （默认 simple，非 ICU 分词），中文无空格整串分词导致输入部分词（如"张"搜"张三"）
+     *   时 MATCH 静默返回空，LIKE 兜底可覆盖此类部分词场景。
      *
      * @param rawQuery 用户原始输入，无需手动转义。
      * @return 命中的活跃学员列表（按 createdAt 升序），无结果返回空列表。
@@ -676,7 +686,7 @@ class StudentRepository(
             val ftsQuery = escapeFtsQuery(query)
             return try {
                 val names = fts.searchIds(ftsQuery)
-                if (names.isEmpty()) return emptyList()
+                if (names.isEmpty()) return searchByLike(query)
                 // 按 names 顺序逐个查询学员信息（学员数量通常 <1000，逐个查询可接受）
                 // 若未来学员量爆炸，可改为 `WHERE name IN (:names)` 一次性查询
                 names.mapNotNull { dao.getByName(it) }

@@ -61,6 +61,25 @@ class SettingsViewModel(
     val floatingWindowEnabled: StateFlow<Boolean> = settingsRepo.floatingWindowEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
+    // === v48 终极打磨：深色模式偏好（null=跟随系统 / true=深色 / false=亮色） ===
+    val darkTheme: StateFlow<Boolean?> = settingsRepo.darkTheme
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /**
+     * 设置深色模式偏好。
+     * - null：跟随系统（默认）
+     * - true：强制深色
+     * - false：强制亮色
+     * 写入 DataStore 持久化，SportsCoachTheme 即时响应切换。
+     */
+    fun setDarkTheme(enabled: Boolean) {
+        safeLaunch {
+            // 开关语义：开 = 强制深色；关 = 恢复跟随系统
+            settingsRepo.setDarkTheme(if (enabled) true else null)
+            _statusMessage.value = if (enabled) "已切换深色模式" else "已恢复跟随系统"
+        }
+    }
+
     /**
      * 设置自动备份开关。
      * - 立即写入 DataStore 持久化
@@ -251,14 +270,16 @@ class SettingsViewModel(
         combine(coach, todayCount, totalCount) { c, today, total -> Triple(c, today, total) },
         combine(autoBackupEnabled, _statusMessage, _progressState) { a, s, p -> Triple(a, s, p) },
         combine(_backupInProgress, _backupProgress, _needRestart) { i, p, n -> Triple(i, p, n) },
-        floatingWindowEnabled
-    ) { stats, flags, backup, floating ->
+        floatingWindowEnabled,
+        darkTheme
+    ) { stats, flags, backup, floating, theme ->
         SettingsUiState(
             coach = stats.first,
             todayCount = stats.second,
             totalCount = stats.third,
             autoBackupEnabled = flags.first,
             floatingWindowEnabled = floating,
+            darkTheme = theme,
             statusMessage = flags.second,
             progressState = flags.third,
             backupInProgress = backup.first,
@@ -635,13 +656,12 @@ class SettingsViewModel(
     /**
      * 从用户通过 SAF 选择的备份文件恢复整库数据。
      *
-     * 流程（P3-b 优化：恢复前自动安全备份）：
+     * 流程（v47 起安全备份由 BackupManager.restoreDetailed 内部保证）：
      * 1. 标记进行中状态（UI 禁用按钮）
-     * 2. **先调用 [BackupRepository.backupToCache] 在 App 内部缓存目录创建当前数据的安全备份**
-     *    —— 若恢复失败或备份文件损坏，可通过该缓存文件回滚，避免用户数据永久丢失
-     * 3. 调用 [BackupRepository.restore] 执行恢复，传入进度回调
-     * 4. 成功时标记 [needRestart]，UI 据此引导用户重启应用
-     * 5. 失败时仅展示错误消息，不修改任何状态
+     * 2. 调用 [BackupRepository.restore] 执行恢复
+     *    - BackupManager 恢复前自动创建安全备份；恢复失败自动回滚到恢复前数据
+     * 3. 成功时标记 [needRestart]，UI 据此引导用户重启应用
+     * 4. 失败时展示错误消息（此时恢复前数据已被自动回滚，或双失败时保留在缓存目录）
      *
      * 警告：恢复会覆盖当前所有学员/课时包/排课/签到数据。
      *
@@ -651,26 +671,6 @@ class SettingsViewModel(
         safeLaunch {
             _backupInProgress.value = true
             try {
-                // === P3-b: 恢复前自动安全备份 ===
-                // 在 App 缓存目录创建当前数据的安全备份，作为回滚保险
-                _backupProgress.value = BackupProgress.Working("safety", 0, 0, "正在创建安全备份…")
-                val safetyFile = File(
-                    app.cacheDir,
-                    "smty_safety_${System.currentTimeMillis()}.smty_backup"
-                )
-                val safetyResult = backupRepo.backupToCache(safetyFile) { phase, current, total, msg ->
-                    _backupProgress.value = BackupProgress.Working(
-                        "safety_$phase", current, total,
-                        "安全备份：$msg"
-                    )
-                }
-                if (!safetyResult.success) {
-                    _statusMessage.value = "恢复已中止：自动安全备份失败，请重试"
-                    _backupProgress.value = BackupProgress.Done(safetyResult.message)
-                    return@safeLaunch
-                }
-
-                // === 执行恢复 ===
                 _backupProgress.value = BackupProgress.Working("restore", 0, 0, "正在恢复数据…")
                 val result = backupRepo.restore(sourceUri) { phase, current, total, msg ->
                     _backupProgress.value = BackupProgress.Working(phase, current, total, msg)
@@ -685,14 +685,9 @@ class SettingsViewModel(
                     _backupProgress.value = BackupProgress.Done(result.message)
                     restartApp()
                 } else {
-                    // === v46 安全修复：恢复失败时保留安全备份（防数据丢失）===
-                    // restoreDetailed 流程会先清空本地数据库再解压，因此恢复失败时
-                    // 本地数据可能已损坏/清空——安全备份是原数据的唯一回滚副本，
-                    // 绝不能按"当前数据未变更"的假设删除。保留并提示用户手动找回。
+                    // 恢复失败：BackupManager 已尝试自动回滚，本地数据状态见消息说明
                     _backupProgress.value = BackupProgress.Done(result.message)
-                    _statusMessage.value =
-                        "恢复失败：${result.message}（本地数据可能已受影响，" +
-                            "恢复前的安全备份已保留，可进入应用缓存目录找回）"
+                    _statusMessage.value = result.message
                 }
             } finally {
                 _backupInProgress.value = false

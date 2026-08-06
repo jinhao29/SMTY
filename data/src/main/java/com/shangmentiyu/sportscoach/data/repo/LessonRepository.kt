@@ -36,6 +36,9 @@ class LessonRepository(private val dao: LessonDao) {
 
     fun getAllLessons(): Flow<List<Lesson>> = dao.getAll()
     fun getLessonsByStudent(name: String): Flow<List<Lesson>> = dao.getByStudent(name)
+    /** v46：双通道查询（studentId 优先、studentName 回退） */
+    fun getLessonsByStudentDual(studentId: String?, name: String): Flow<List<Lesson>> =
+        dao.getByStudentDual(studentId, name)
     fun getTodayLessons(): Flow<List<Lesson>> = dao.getByDate(todayDateStr())
     fun getTodayCount(): Flow<Int> = dao.countByDate(todayDateStr())
     fun getTotalCount(): Flow<Int> = dao.count()
@@ -86,6 +89,17 @@ class LessonRepository(private val dao: LessonDao) {
         pagingSourceFactory = { dao.pagingByStudent(name) }
     ).flow.map { it.map { lesson -> lesson } }
 
+    /** v46：双通道分页查询（studentId 优先、studentName 回退） */
+    fun pagedLessonsByStudentDual(studentId: String?, name: String): Flow<PagingData<Lesson>> = Pager(
+        config = PagingConfig(
+            pageSize = 30,
+            prefetchDistance = 15,
+            initialLoadSize = 60,
+            enablePlaceholders = false
+        ),
+        pagingSourceFactory = { dao.pagingByStudentDual(studentId, name) }
+    ).flow.map { it.map { lesson -> lesson } }
+
     /**
      * 查询从指定日期起的所有课时（按日期升序、时间升序）。
      * 用于学员列表"下一节课"显示：取每个学员的第一条记录即为下一节课。
@@ -109,6 +123,10 @@ class LessonRepository(private val dao: LessonDao) {
 
     /** 一次性获取学员全部课时（非 Flow） */
     suspend fun getByStudentOnce(name: String): List<Lesson> = dao.getByStudent(name).first()
+
+    /** v46：双通道一次性获取学员全部课时（studentId 优先、studentName 回退） */
+    suspend fun getByStudentOnceDual(studentId: String?, name: String): List<Lesson> =
+        dao.getByStudentDual(studentId, name).first()
 
     /**
      * 创建课时记录：自动生成 ID、当前日期与时间。

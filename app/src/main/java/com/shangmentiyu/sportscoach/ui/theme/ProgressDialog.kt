@@ -97,7 +97,7 @@ fun ProgressDialog(state: ProgressState) {
                         Icon(
                             imageVector = Icons.Outlined.CheckCircle,
                             contentDescription = null,
-                            tint = Color(0xFF4CAF50),
+                            tint = appOnSuccessContainer(),
                             modifier = Modifier.size(48.dp)
                         )
                     } else if (state.progress < 0f) {

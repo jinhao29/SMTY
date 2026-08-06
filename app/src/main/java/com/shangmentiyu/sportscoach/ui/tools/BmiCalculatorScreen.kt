@@ -51,6 +51,8 @@ import com.shangmentiyu.sportscoach.ui.theme.appBackground
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
+import com.shangmentiyu.sportscoach.ui.theme.appTertiary
+import com.shangmentiyu.sportscoach.ui.theme.appInfoBlue
 import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
 import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
@@ -190,10 +192,10 @@ private fun BmiResultCard(
     category: BmiProcessor.BmiCategory
 ) {
     val (bgColor, textColor) = when (category) {
-        BmiProcessor.BmiCategory.THIN -> Color(0xFF42A5F5) to Color.White
+        BmiProcessor.BmiCategory.THIN -> appInfoBlue() to Color.White
         BmiProcessor.BmiCategory.NORMAL -> appPrimary() to Color.White
-        BmiProcessor.BmiCategory.OVERWEIGHT -> Color(0xFFFFA726) to Color.White
-        BmiProcessor.BmiCategory.OBESE -> Color(0xFFEF5350) to Color.White
+        BmiProcessor.BmiCategory.OVERWEIGHT -> appTertiary() to Color.White
+        BmiProcessor.BmiCategory.OBESE -> MaterialTheme.colorScheme.error to MaterialTheme.colorScheme.onError
     }
 
     Column(
@@ -267,10 +269,10 @@ private fun BmiStandardCard() {
             fontWeight = FontWeight.SemiBold,
             color = appOnSurface()
         )
-        BmiStandardRow(label = "偏瘦", range = "< 18.5", color = Color(0xFF42A5F5))
+        BmiStandardRow(label = "偏瘦", range = "< 18.5", color = appInfoBlue())
         BmiStandardRow(label = "正常", range = "18.5 ~ 24", color = appPrimary())
-        BmiStandardRow(label = "超重", range = "24 ~ 28", color = Color(0xFFFFA726))
-        BmiStandardRow(label = "肥胖", range = "≥ 28", color = Color(0xFFEF5350))
+        BmiStandardRow(label = "超重", range = "24 ~ 28", color = appTertiary())
+        BmiStandardRow(label = "肥胖", range = "≥ 28", color = MaterialTheme.colorScheme.error)
         Spacer(Modifier.height(Spacing.xs))
         Text(
             text = "注：中国成人 BMI 标准（GB/T 26343-2010），青少年仅作参考。",

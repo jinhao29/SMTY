@@ -74,6 +74,8 @@ import com.shangmentiyu.sportscoach.ui.summary.SummaryScreen
 import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
 import com.shangmentiyu.sportscoach.ui.theme.appBackground
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
+import com.shangmentiyu.sportscoach.ui.theme.appOnSuccessContainer
+import com.shangmentiyu.sportscoach.ui.theme.appSuccessContainer
 import com.shangmentiyu.sportscoach.ui.training.TrainingPlanScreen
 import com.shangmentiyu.sportscoach.ui.operation.OperationScreen
 import com.shangmentiyu.sportscoach.ui.schedule.ScheduleScreen
@@ -254,8 +256,8 @@ private fun DesktopConnectionBanner(
     ) {
         val host = connection?.host ?: ""
         Surface(
-            color = Color(0xFFE8F5E9),  // 浅绿背景
-            contentColor = Color(0xFF2E7D32),
+            color = appSuccessContainer(),
+            contentColor = appOnSuccessContainer(),
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(
@@ -269,18 +271,18 @@ private fun DesktopConnectionBanner(
                     imageVector = Icons.Outlined.Computer,
                     contentDescription = null,
                     modifier = Modifier.size(14.dp),
-                    tint = Color(0xFF2E7D32)
+                    tint = appOnSuccessContainer()
                 )
                 // 绿色脉冲指示灯
                 Box(
                     modifier = Modifier
                         .size(8.dp)
-                        .background(Color(0xFF4CAF50), CircleShape)
+                        .background(appOnSuccessContainer(), CircleShape)
                 )
                 Text(
                     text = "已连接：电脑端 $host",
                     style = MaterialTheme.typography.labelMedium,
-                    color = Color(0xFF2E7D32),
+                    color = appOnSuccessContainer(),
                     fontWeight = FontWeight.Medium
                 )
             }

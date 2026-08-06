@@ -28,8 +28,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 import com.shangmentiyu.sportscoach.ui.theme.appSurface
+import com.shangmentiyu.sportscoach.ui.theme.appSurfaceVariant
 
 /**
  * 成绩查看页：底部导航主入口，整合"录入成绩"与"查看成绩"两个 Tab。
@@ -99,12 +101,12 @@ private fun RowScope.ScoreTabItem(
     onClick: () -> Unit
 ) {
     val bgColor by animateColorAsState(
-        targetValue = if (selected) appPrimary() else Color(0xFFF0F0F0),
+        targetValue = if (selected) appPrimary() else appSurfaceVariant(),
         animationSpec = tween(durationMillis = 200),
         label = "score_tab_bg"
     )
     val textColor by animateColorAsState(
-        targetValue = if (selected) Color.White else Color(0xFF6B6B6B),
+        targetValue = if (selected) Color.White else appOnSurfaceVariant(),
         animationSpec = tween(durationMillis = 200),
         label = "score_tab_text"
     )

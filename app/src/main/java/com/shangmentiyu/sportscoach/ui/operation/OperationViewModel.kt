@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -78,6 +79,17 @@ class OperationViewModel(
     // === 排课 ===
     val schedules: StateFlow<List<Schedule>> = opRepo.getActiveSchedules()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // === v48 终极打磨：排课列表首帧加载标记（骨架屏） ===
+    private val _schedulesLoaded = MutableStateFlow(false)
+    val schedulesLoaded: StateFlow<Boolean> = _schedulesLoaded.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            schedules.first()
+            _schedulesLoaded.value = true
+        }
+    }
 
     /** 当前选中的周几（1-7），默认今天 */
     private val _selectedDay = MutableStateFlow(getTodayDayOfWeek())
@@ -225,6 +237,21 @@ class OperationViewModel(
 
     fun showToast(msg: String) { _toast.value = msg }
     fun clearToast() { _toast.value = null }
+
+    /**
+     * 删除一条排课记忆（时间/地点历史下拉项，UI 长按触发）。
+     * 删除后 timeMemories/locationMemories 通过 Room Flow 自动刷新。
+     */
+    fun deleteMemory(mem: ScheduleMemory) {
+        safeLaunch {
+            try {
+                memoryRepo.deleteMemory(mem.coachName, mem.field, mem.value)
+                _toast.value = "已删除历史记忆「${mem.value}」"
+            } catch (e: Exception) {
+                _toast.value = "删除记忆失败：${e.message ?: "未知异常"}"
+            }
+        }
+    }
 
     // === 排课操作 ===
     fun selectDay(day: Int) { _selectedDay.value = day }
@@ -808,7 +835,7 @@ class OperationViewModel(
      *
      * 课时消耗机制：
      * - Schedule.isLongTerm=true 触发 [ensureLongTermLessonsForWeek] 每周自动生成 Lesson
-     * - Lesson 签到时通过 [LessonPackageRepository.consumeLesson] 扣减课时
+     * - Lesson 签退时通过 [com.shangmentiyu.sportscoach.data.repo.OperationRepository.consumeLessonForCheckOut] 扣减课时
      * - 余额耗尽后 [ensureLongTermLessonsForWeek] 自动停止生成（依赖 countLongTermPendingFrom 余额检查）
      * - endDate 字段作为额外保险，未来可用于 UI 标识"排课结束日期"
      *

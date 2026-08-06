@@ -50,6 +50,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -623,13 +624,13 @@ private fun HeroStudentCard(
         Box(
             modifier = Modifier
                 .size(180.dp)
-                .offset(x = 220.dp, y = (-60).dp)
+                .graphicsLayer { translationX = 220.dp.toPx(); translationY = (-60).dp.toPx() }
                 .background(Color.White.copy(alpha = 0.08f), CircleShape)
         )
         Box(
             modifier = Modifier
                 .size(120.dp)
-                .offset(x = 280.dp, y = 80.dp)
+                .graphicsLayer { translationX = 280.dp.toPx(); translationY = 80.dp.toPx() }
                 .background(Color.White.copy(alpha = 0.06f), CircleShape)
         )
 

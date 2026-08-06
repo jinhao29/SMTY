@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -231,7 +232,7 @@ private fun FloatingScriptMenu(
         modifier = Modifier
             .width(220.dp)
             .background(
-                color = Color(0xCCFF6B47),
+                color = appPrimary().copy(alpha = 0.8f),
                 shape = RoundedCornerShape(16.dp)
             )
             .padding(12.dp)
@@ -264,7 +265,7 @@ private fun FloatingScriptMenu(
                         fontWeight = FontWeight.Medium,
                         modifier = Modifier
                             .background(
-                                color = Color(0x33FFFFFF),
+                                color = Color.White.copy(alpha = 0.2f),
                                 shape = RoundedCornerShape(8.dp)
                             )
                             .clickable { onCopy(script) }

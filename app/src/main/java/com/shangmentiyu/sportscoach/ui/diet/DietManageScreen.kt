@@ -81,8 +81,12 @@ import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
+import com.shangmentiyu.sportscoach.ui.theme.appOnSuccessContainer
+import com.shangmentiyu.sportscoach.ui.theme.appOnWarningContainer
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
+import com.shangmentiyu.sportscoach.ui.theme.appSuccessContainer
 import com.shangmentiyu.sportscoach.ui.theme.appSurface
+import com.shangmentiyu.sportscoach.ui.theme.appWarningContainer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.LocalContentColor
@@ -1135,16 +1139,16 @@ private fun TdeeResultCard(result: TdeeResult) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFFE8F5E9))   // 柔和浅绿
+                        .background(appSuccessContainer())
                         .padding(Spacing.sm),
                     verticalAlignment = Alignment.Top
                 ) {
-                    Text("减脂建议", fontWeight = FontWeight.SemiBold, color = Color(0xFF2E7D32))
+                    Text("减脂建议", fontWeight = FontWeight.SemiBold, color = appOnSuccessContainer())
                     Spacer(Modifier.width(Spacing.sm))
                     Text(
                         "建议每日热量缺口 ${result.deficitAdvice} 大卡（约 300~500 大卡），即摄入 ${result.tdee.toInt() - result.deficitAdvice} 大卡。",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF2E7D32)
+                        color = appOnSuccessContainer()
                     )
                 }
             } else if (!result.isAdult && result.warningText != null) {
@@ -1153,16 +1157,16 @@ private fun TdeeResultCard(result: TdeeResult) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFFFFF3E0))   // 柔和浅橙警示
+                        .background(appWarningContainer())
                         .padding(Spacing.sm),
                     verticalAlignment = Alignment.Top
                 ) {
-                    Text("⚠ 注意", fontWeight = FontWeight.SemiBold, color = Color(0xFFE65100))
+                    Text("⚠ 注意", fontWeight = FontWeight.SemiBold, color = appOnWarningContainer())
                     Spacer(Modifier.width(Spacing.sm))
                     Text(
                         result.warningText,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFFE65100)
+                        color = appOnWarningContainer()
                     )
                 }
             }

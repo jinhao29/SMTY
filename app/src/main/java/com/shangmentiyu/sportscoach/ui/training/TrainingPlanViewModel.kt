@@ -59,7 +59,7 @@ class TrainingPlanViewModel(
             _student.value = s
 
             // 收集一次课时数据用于计算雷达
-            lessonRepo.getLessonsByStudent(studentName).collect { lessons ->
+            lessonRepo.getLessonsByStudentDual(s?.studentId, studentName).collect { lessons ->
                 val scores = AbilityAnalyzer.extractScores(lessons)
                 val radar = AbilityAnalyzer.computeRadar(scores)
                 _radar.value = radar

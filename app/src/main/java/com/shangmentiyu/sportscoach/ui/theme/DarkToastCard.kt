@@ -65,7 +65,7 @@ fun DarkToastCard(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFF1C1C1E))
+            .background(NightGlassSurface)
             .padding(16.dp)
     ) {
         Column {
@@ -93,7 +93,7 @@ fun DarkToastCard(
                     Icon(
                         imageVector = Icons.Outlined.Close,
                         contentDescription = "关闭",
-                        tint = Color(0xFFA6A8AB),
+                        tint = NightOnSurfaceVariant,
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -104,7 +104,7 @@ fun DarkToastCard(
                 Spacer(modifier = Modifier.size(8.dp))
                 Text(
                     text = description,
-                    color = Color(0xFFA6A8AB),
+                    color = NightOnSurfaceVariant,
                     fontSize = 14.sp
                 )
             }

@@ -19,6 +19,8 @@ data class SettingsUiState(
     val totalCount: Int = 0,
     val autoBackupEnabled: Boolean = true,
     val floatingWindowEnabled: Boolean = false,
+    // v48 新增：深色模式偏好（null=跟随系统 / true=深色 / false=亮色）
+    val darkTheme: Boolean? = null,
     val statusMessage: String? = null,
     val backupInProgress: Boolean = false,
     val backupProgress: SettingsViewModel.BackupProgress = SettingsViewModel.BackupProgress.Idle,

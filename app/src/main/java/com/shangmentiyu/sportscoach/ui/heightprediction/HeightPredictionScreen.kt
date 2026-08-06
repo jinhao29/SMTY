@@ -64,17 +64,15 @@ import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
+import com.shangmentiyu.sportscoach.ui.theme.appOnSuccessContainer
+import com.shangmentiyu.sportscoach.ui.theme.appOnWarningContainer
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 import com.shangmentiyu.sportscoach.ui.theme.appSurface
 import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
 import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 // === 修正值语义色（仅用于小字修正值文本，非卡片背景色块） ===
-/** 加分提示色：iOS 活力绿 */
-private val PositiveColor = Color(0xFF34C759)
-
-/** 扣分提示色：iOS 暖橙 */
-private val NegativeColor = Color(0xFFFF9500)
+// 加分绿 / 扣分橙，v48 起走主题令牌（appOnSuccessContainer / appOnWarningContainer）
 
 /**
  * 身高遗传潜力与后天预测页面。
@@ -431,8 +429,8 @@ private fun PredictionResultCard(r: HeightPredictionResult) {
             Spacer(Modifier.width(Spacing.sm))
             val sign = if (r.adjustment > 0) "+" else ""
             val adjColor = when {
-                r.adjustment > 0 -> PositiveColor
-                r.adjustment < 0 -> NegativeColor
+                r.adjustment > 0 -> appOnSuccessContainer()
+                r.adjustment < 0 -> appOnWarningContainer()
                 else -> appOnSurface().copy(alpha = 0.5f)
             }
             Text(
@@ -460,13 +458,13 @@ private fun PredictionResultCard(r: HeightPredictionResult) {
                     modifier = Modifier
                         .size(6.dp)
                         .clip(CircleShape)
-                        .background(NegativeColor)
+                        .background(appOnWarningContainer())
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
                     warning,
                     style = MaterialTheme.typography.bodySmall,
-                    color = NegativeColor,
+                    color = appOnWarningContainer(),
                     fontWeight = FontWeight.Medium
                 )
             }

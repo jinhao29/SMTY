@@ -48,8 +48,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.room.withTransaction
-import com.shangmentiyu.sportscoach.data.db.AppDatabase
 import com.shangmentiyu.sportscoach.data.model.Lesson
 import com.shangmentiyu.sportscoach.data.model.Student
 import com.shangmentiyu.sportscoach.data.repo.LessonRepository
@@ -82,13 +80,14 @@ import java.util.Locale
  * 协调 StudentRepository / LessonRepository / OperationRepository 完成：
  * - 展示所有学员及其剩余课时
  * - 展示当日已签到学员列表
- * - 触发签到流程：消课 + 写课时记录在同一个 DB 事务中，保证原子性
+ * - 触发签到流程（v47 起与新路径统一：仅创建 status="已签到" 的 Lesson，
+ *   不扣减课时包；签退时由 saveFeedbackAndCheckOut → consumeLessonForCheckOut 统一扣减，
+ *   避免旧路径签到即消课 + 新路径签退再消课导致重复扣费）
  */
 class LessonCheckInViewModel(
     private val studentRepo: StudentRepository,
     private val lessonRepo: LessonRepository,
-    private val opRepo: OperationRepository,
-    private val db: AppDatabase
+    private val opRepo: OperationRepository
 ) : ViewModel() {
 
     val students: StateFlow<List<Student>> = studentRepo.getAllStudents()
@@ -117,36 +116,36 @@ class LessonCheckInViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     /**
-     * 签到：消课 + 写课时记录在同一个 DB 事务中执行，保证原子性。
+     * 签到：仅创建 status="已签到" 的 Lesson，不扣减课时包（与 HomeViewModel.sign 语义一致）。
      *
-     * - 消课成功 → 写课时记录（packageId 关联），事务提交。
-     * - 消课失败（无可用课时包或扣减异常）→ 不创建签到记录，事务回滚，
-     *   明确提示用户，避免"签到成功但课时未减"的数据不一致。
+     * 扣减课时统一发生在签退环节（saveFeedbackAndCheckOut → consumeLessonForCheckOut），
+     * 保证同一课时全程只扣减一次，杜绝"签到即消课 + 签退再消课"的重复扣费。
      */
     fun sign(studentName: String, onCreated: (SignResult) -> Unit) {
         viewModelScope.launch {
-            val (consume, lessonId) = db.withTransaction {
-                val consume = opRepo.consumeLesson(studentName)
-                if (!consume.success) {
-                    return@withTransaction consume to null
-                }
-                val lid = lessonRepo.createLesson(
+            val result = try {
+                val lessonId = lessonRepo.createLesson(
                     studentName = studentName,
                     coach = "",
-                    packageId = consume.packageId
+                    packageId = ""
                 )
-                consume to lid
-            }
-            onCreated(
                 SignResult(
-                    lessonId = lessonId ?: "",
-                    consumed = consume.success,
-                    packageName = consume.packageName,
-                    remainingAfter = consume.remainingAfter,
-                    message = if (consume.success) consume.message
-                              else "签到失败：${consume.message}（请确认学员已购买课时包）"
+                    lessonId = lessonId,
+                    consumed = false,
+                    packageName = "",
+                    remainingAfter = 0,
+                    message = "签到成功（签退时再扣减课时）"
                 )
-            )
+            } catch (e: Exception) {
+                SignResult(
+                    lessonId = "",
+                    consumed = false,
+                    packageName = "",
+                    remainingAfter = 0,
+                    message = "签到失败：${e.message ?: "未知异常"}"
+                )
+            }
+            onCreated(result)
         }
     }
 }

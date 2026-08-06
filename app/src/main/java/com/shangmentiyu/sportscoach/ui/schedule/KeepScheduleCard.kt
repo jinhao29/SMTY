@@ -36,6 +36,7 @@ import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appOutline
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
+import com.shangmentiyu.sportscoach.ui.theme.appSecondary
 import com.shangmentiyu.sportscoach.ui.theme.appSurface
 
 /**
@@ -129,8 +130,8 @@ fun KeepScheduleCard(
                     .background(
                         brush = androidx.compose.ui.graphics.Brush.linearGradient(
                             colors = listOf(
-                                Color(0xFFFF6B47),  // 珊瑚橙
-                                Color(0xFFFFA078)   // 浅珊瑚橙
+                                appPrimary(),  // 珊瑚橙
+                                appSecondary()   // 浅珊瑚橙
                             )
                         )
                     ),

@@ -27,6 +27,7 @@ import androidx.compose.material.icons.outlined.Calculate
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.CleaningServices
 import androidx.compose.material.icons.outlined.CloudUpload
+import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.FolderOpen
@@ -335,15 +336,57 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
                         "设置",
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1A1A1A),
+                        color = appOnSurface(),
                         letterSpacing = (-0.5).sp
                     )
                     Spacer(Modifier.height(Spacing.xs))
                     Text(
-                        "教练信息 · 数据同步 · 关于",
+                        "教练信息 · 外观 · 数据同步 · 关于",
                         fontSize = 14.sp,
-                        color = Color(0xFF6B6B6B)
+                        color = appOnSurfaceVariant()
                     )
+                }
+
+                // === v48 终极打磨：外观（深色模式开关） ===
+                // 三态语义：开关开 = 强制深色；开关关 = 跟随系统
+                // 持久化到 DataStore，MainActivity 根节点注入 SportsCoachTheme 即时生效
+                IosSectionWrapper(text = "外观") {
+                    IosGroupedListCard {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = Spacing.md, vertical = Spacing.md),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.md)
+                        ) {
+                            IosIconBadge(
+                                icon = Icons.Outlined.DarkMode,
+                                iconBgColor = LightPrimary,
+                                contentDescription = "深色模式"
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "深色模式",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = appOnSurface()
+                                )
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    if (uiState.darkTheme == true)
+                                        "已开启，全天使用深色外观"
+                                    else
+                                        "跟随系统深色外观",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = appOnSurfaceVariant()
+                                )
+                            }
+                            Switch(
+                                checked = uiState.darkTheme == true,
+                                onCheckedChange = { vm.setDarkTheme(it) }
+                            )
+                        }
+                    }
                 }
 
                 // 分组 1：教练设置（点击行打开编辑对话框，确认后保存）

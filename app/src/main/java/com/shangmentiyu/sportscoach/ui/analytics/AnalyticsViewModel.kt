@@ -88,7 +88,8 @@ class AnalyticsViewModel(
         _selectedStudent.value = name
         viewModelScope.launch(appExceptionHandler) {
             val list = try {
-                lessonRepo.getLessonsByStudent(name).first()
+                val studentId = _students.value.firstOrNull { it.name == name }?.studentId
+                lessonRepo.getLessonsByStudentDual(studentId, name).first()
             } catch (_: Exception) {
                 emptyList()
             }

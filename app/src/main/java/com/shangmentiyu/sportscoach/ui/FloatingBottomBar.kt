@@ -36,7 +36,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
+import com.shangmentiyu.sportscoach.ui.theme.appSurface
 
 /**
  * 药丸高亮式悬浮底部导航栏（v45 重构）。
@@ -87,7 +89,7 @@ fun FloatingBottomBar(
                     spotColor = Color.Black.copy(alpha = 0.06f)
                 ),
             shape = RoundedCornerShape(24.dp),
-            color = Color(0xFFFFFFFF)  // 纯白，禁止任何渐变或半透明
+            color = appSurface()  // 纯白实底（暗色模式自动跟随表面令牌）
         ) {
             Row(
                 modifier = Modifier
@@ -172,11 +174,12 @@ private fun NavTabItem(
     // === 性能优化：用 derivedStateOf 缓存目标颜色，避免动画过程中重复计算 ===
     // appPrimary() 是 @Composable 函数，先取出主色，再用 derivedStateOf 包裹依赖 selected 的派生颜色
     val primaryColor = appPrimary()
+    val onSurfaceVariant = appOnSurfaceVariant()
     val targetContentColor by remember(selected, primaryColor) {
-        derivedStateOf { if (selected) primaryColor else Color(0xFF6B6B6B) }
+        derivedStateOf { if (selected) primaryColor else onSurfaceVariant }
     }
     val targetBgColor by remember(selected) {
-        derivedStateOf { if (selected) Color(0x33FF6B47) else Color.Transparent }
+        derivedStateOf { if (selected) primaryColor.copy(alpha = 0.2f) else Color.Transparent }
     }
 
     // === 动画优化：导航项颜色切换用 animateColorAsState 平滑过渡 ===

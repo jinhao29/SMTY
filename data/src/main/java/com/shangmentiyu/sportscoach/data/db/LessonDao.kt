@@ -29,8 +29,16 @@ interface LessonDao {
     @Query("SELECT * FROM lessons WHERE studentName = :name ORDER BY date DESC, time DESC")
     fun pagingByStudent(name: String): PagingSource<Int, Lesson>
 
+    /** v46：双通道分页查询（studentId 优先、studentName 回退） */
+    @Query("SELECT * FROM lessons WHERE studentId = :studentId OR (studentId IS NULL AND studentName = :name) ORDER BY date DESC, time DESC")
+    fun pagingByStudentDual(studentId: String?, name: String): PagingSource<Int, Lesson>
+
     @Query("SELECT * FROM lessons WHERE studentName = :name ORDER BY date DESC, time DESC")
     fun getByStudent(name: String): Flow<List<Lesson>>
+
+    /** v46：双通道查询（studentId 优先、studentName 回退） */
+    @Query("SELECT * FROM lessons WHERE studentId = :studentId OR (studentId IS NULL AND studentName = :name) ORDER BY date DESC, time DESC")
+    fun getByStudentDual(studentId: String?, name: String): Flow<List<Lesson>>
 
     @Query("SELECT * FROM lessons WHERE date = :date ORDER BY time DESC")
     fun getByDate(date: String): Flow<List<Lesson>>
@@ -145,6 +153,16 @@ interface LessonDao {
             "AND status != '已签退'"
     )
     suspend fun countLongTermPendingFrom(studentName: String, fromDate: String): Int
+
+    /** v46：双通道统计长期自动未签退课时（studentId 优先、studentName 回退） */
+    @Query(
+        "SELECT COUNT(*) FROM lessons WHERE " +
+            "(studentId = :studentId OR (studentId IS NULL AND studentName = :name)) " +
+            "AND date >= :fromDate " +
+            "AND lessonType LIKE '%(长期自动)%' " +
+            "AND status != '已签退'"
+    )
+    suspend fun countLongTermPendingFromDual(studentId: String?, name: String, fromDate: String): Int
 
     @Insert
     suspend fun insert(lesson: Lesson)

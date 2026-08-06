@@ -28,6 +28,22 @@ interface PlanImageDao {
     @Query("SELECT * FROM student_plan_images WHERE studentName = :name ORDER BY createdAt DESC")
     suspend fun getByStudentOnce(name: String): List<PlanImage>
 
+    /** === v48 双通道：按学员 ID 查询图片（优先），studentName 兜底（兼容旧数据）=== */
+    @Query(
+        "SELECT * FROM student_plan_images " +
+            "WHERE studentId = :sid OR (studentId IS NULL AND studentName = :name) " +
+            "ORDER BY createdAt DESC"
+    )
+    fun getByStudentDual(sid: String?, name: String): Flow<List<PlanImage>>
+
+    /** === v48 双通道：一次性查询（非 Flow，用于后台处理）=== */
+    @Query(
+        "SELECT * FROM student_plan_images " +
+            "WHERE studentId = :sid OR (studentId IS NULL AND studentName = :name) " +
+            "ORDER BY createdAt DESC"
+    )
+    suspend fun getByStudentDualOnce(sid: String?, name: String): List<PlanImage>
+
     /** 查询最近 N 天内的所有训练计划图片（按创建时间倒序） */
     @Query(
         "SELECT * FROM student_plan_images WHERE createdAt >= :sinceTimestamp " +
@@ -55,9 +71,19 @@ interface PlanImageDao {
     @Query("DELETE FROM student_plan_images WHERE studentName = :name")
     suspend fun deleteByStudent(name: String)
 
-    /** 学员改名：级联更新 student_plan_images 表的 studentName 字段 */
-    @Query("UPDATE student_plan_images SET studentName = :newName WHERE studentName = :oldName")
-    suspend fun renameStudent(oldName: String, newName: String)
+    /** === v48 双通道：删除学员所有图片（studentId 优先，studentName 兜底兼容旧数据）=== */
+    @Query(
+        "DELETE FROM student_plan_images " +
+            "WHERE studentId = :sid OR (studentId IS NULL AND studentName = :name)"
+    )
+    suspend fun deleteByStudentIdDual(sid: String?, name: String)
+
+    /** === v48 双通道：学员改名级联（先补 studentId 再改姓名）=== */
+    @Query(
+        "UPDATE student_plan_images SET studentId = :sid, studentName = :newName " +
+            "WHERE studentId = :sid OR (studentId IS NULL AND studentName = :oldName)"
+    )
+    suspend fun renameStudentIdDual(sid: String?, oldName: String, newName: String)
 
     /** 清理超过指定天数的旧记录（用于冷数据归档，可选调用） */
     @Query("DELETE FROM student_plan_images WHERE createdAt < :beforeTimestamp")

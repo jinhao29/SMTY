@@ -80,6 +80,7 @@ import com.shangmentiyu.sportscoach.ui.home.HomeViewModel.GradeFilter
 import com.shangmentiyu.sportscoach.ui.home.HomeViewModel.StudentSortBy
 import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
+import com.shangmentiyu.sportscoach.ui.theme.StudentListSkeleton
 import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 /**
@@ -101,6 +102,8 @@ fun StudentListTab(
     onDietManage: (String) -> Unit = {}
 ) {
     val students by vm.students.collectAsStateWithLifecycle()
+    // === v48 终极打磨：学员列表首帧加载标记（骨架屏） ===
+    val studentsLoaded by vm.studentsLoaded.collectAsStateWithLifecycle()
     // === v24 优化5：使用筛选+排序后的学员列表 ===
     val filteredStudents by vm.filteredStudents.collectAsStateWithLifecycle()
     val remainingMap by vm.remainingMap.collectAsStateWithLifecycle()
@@ -251,7 +254,14 @@ fun StudentListTab(
                 )
             }
 
-            if (students.isEmpty()) {
+            if (!studentsLoaded) {
+                // === v48 终极打磨：骨架屏（替代转圈/闪空态） ===
+                // Room 首帧到达前显示与学员卡片结构一致的脉冲占位块
+                Column(modifier = Modifier.fillMaxSize()) {
+                    IosSectionHeader("学员列表")
+                    StudentListSkeleton()
+                }
+            } else if (students.isEmpty()) {
                 // === 空状态：搜索栏下方居中显示提示文字 ===
                 Box(
                     modifier = Modifier.fillMaxSize(),

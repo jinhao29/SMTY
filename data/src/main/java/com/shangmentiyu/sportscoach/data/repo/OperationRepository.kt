@@ -1,6 +1,5 @@
 package com.shangmentiyu.sportscoach.data.repo
 
-import android.util.Log
 import androidx.room.withTransaction
 import com.shangmentiyu.sportscoach.core.AutoBackupScheduler
 import com.shangmentiyu.sportscoach.data.db.AppDatabase
@@ -8,48 +7,55 @@ import com.shangmentiyu.sportscoach.data.db.ArchivedLessonDao
 import com.shangmentiyu.sportscoach.data.db.CoachDao
 import com.shangmentiyu.sportscoach.data.db.LessonDao
 import com.shangmentiyu.sportscoach.data.db.LessonPackageDao
-import com.shangmentiyu.sportscoach.data.db.ScheduleDao
 import com.shangmentiyu.sportscoach.data.db.StudentDao
-import com.shangmentiyu.sportscoach.data.db.TrainingCycleDao
 import com.shangmentiyu.sportscoach.data.model.ArchivedLesson
 import com.shangmentiyu.sportscoach.data.model.Coach
 import com.shangmentiyu.sportscoach.data.model.Lesson
 import com.shangmentiyu.sportscoach.data.model.LessonPackage
 import com.shangmentiyu.sportscoach.data.model.Schedule
 import com.shangmentiyu.sportscoach.data.model.TrainingCycle
-import com.shangmentiyu.sportscoach.data.model.WeeklyPlan
 import com.shangmentiyu.sportscoach.domain.scheduling.EffectiveRemainingCalculator
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import org.json.JSONArray
-import org.json.JSONObject
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * 运营管理 Repository（管理层）。
+ * 运营管理 Repository（协调器 / Facade）。
  *
  * 统一封装 LessonPackage / Coach / Schedule / TrainingCycle 四类实体的数据访问，
  * 对上层提供业务语义清晰的方法，并包含阶段性总结的聚合计算。
+ *
+ * 拆分说明（v48）：
+ * - 具体业务逻辑按领域下沉到独立 Repository，本类仅做方法委托（Facade），
+ *   保持对外 API 不变，老调用方（ViewModel / UseCase）无需改动：
+ *   - 训练周期 → [TrainingCycleRepository]
+ *   - 阶段汇总计算 → [StageSummaryRepository]
+ *   - 排课写操作 / 长期排课 / 历史修正 → [ScheduleQueryRepository]
+ *   - 排课简单查询 → [ScheduleRepository]（复用已存在的排课仓库）
+ *   - 课时包 / 消课 / 教练 / 归档 等逻辑仍留在本类
  *
  * v22 新增：冷热数据归档能力 [archiveLessonsBefore]，依赖 [db] 与 [archivedLessonDao]。
  */
 class OperationRepository(
     private val pkgDao: LessonPackageDao,
     private val coachDao: CoachDao,
-    private val scheduleDao: ScheduleDao,
-    private val cycleDao: TrainingCycleDao,
     private val lessonDao: LessonDao,
     /** v45：学员 DAO，用于"修正历史错误排课"获取活跃学员列表 */
     private val studentDao: StudentDao,
     /** v22 新增：归档 DAO，冷热数据归档时使用 */
     private val archivedLessonDao: ArchivedLessonDao? = null,
     /** v22 新增：数据库实例，用于归档事务 */
-    private val db: AppDatabase? = null
+    private val db: AppDatabase? = null,
+    // === v48 拆分：子 Repository 注入 ===
+    private val scheduleRepo: ScheduleRepository,
+    private val scheduleQueryRepo: ScheduleQueryRepository,
+    private val trainingCycleRepo: TrainingCycleRepository,
+    private val stageSummaryRepo: StageSummaryRepository
 ) {
 
     /**
@@ -89,6 +95,37 @@ class OperationRepository(
      */
     private val consumeMutex = Mutex()
 
+    // === 阶段性总结（v48 拆分：数据类保留在本协调器以兼容 OperationRepository.StageSummary 旧引用，
+    //    计算逻辑已下沉到 StageSummaryRepository） ===
+
+    /**
+     * 阶段总结数据：聚合指定学员在指定时间范围内的所有课时记录。
+     */
+    data class StageSummary(
+        val studentName: String,
+        val startDate: String,
+        val endDate: String,
+        val totalLessons: Int,
+        val attendedLessons: Int,          // 实到（非请假非旷课）
+        val attendanceRate: Float,         // 出勤率 0-1
+        val avgPerformance: Float,         // 平均表现评分 1-10
+        val avgDuration: Int,              // 平均课时时长
+        val attitudeDistribution: Map<String, Int>,  // 态度分布
+        val completedExerciseRate: Float,  // 训练动作完成率 0-1
+        val scoreProgress: List<ScoreProgressItem>,  // 各项成绩的进步对比
+        val firstLessonDate: String,
+        val lastLessonDate: String,
+        val summaryText: String            // 自动生成的总结文字
+    )
+
+    data class ScoreProgressItem(
+        val name: String,
+        val firstScore: Float,
+        val lastScore: Float,
+        val delta: Float,
+        val samples: Int
+    )
+
     // === 课程包 ===
     fun getAllPackages(): Flow<List<LessonPackage>> = pkgDao.getAll()
     fun getPackagesByStudent(name: String): Flow<List<LessonPackage>> = pkgDao.getByStudent(name)
@@ -120,17 +157,17 @@ class OperationRepository(
      * 签退时执行的事务化消课：在单事务内完成"扣减课时包 + 更新 Lesson 状态为已签退"，
      * 任一步失败整体回滚，保证数据绝对不会半途出错。
      *
-     * 与 [consumeLesson] 的区别：
-     * - 旧逻辑 [consumeLesson]：签到时直接扣减，签到成功即视为消课完成
-     * - 新逻辑 [consumeLessonForCheckOut]：签到时仅创建 status="已签到" 的 Lesson，不扣减课时包；
-     *   签退时（教练保存课后反馈时）才执行本方法，扣减课时包并更新 Lesson.status="已签退"
+     * 与旧逻辑（v27 前）的区别：
+     * - 旧逻辑：签到时直接扣减，签到成功即视为消课完成（该方法已于 v47 移除，
+     *   统一走本方法：签到时仅创建 status="已签到" 的 Lesson，不扣减课时包；
+     *   签退时（教练保存课后反馈时）才执行本方法，扣减课时包并更新 Lesson.status="已签退"）
      *
      * 执行流程（@Transaction 原子操作）：
-     * 1. 调用 [consumeLesson] 找到最早购买的活跃课时包并 usedLessons + 1
+     * 1. 调用 [doConsumeLessonInternal] 找到最早购买的活跃课时包并 usedLessons + 1
      * 2. 更新 Lesson：status="已签退"，signOutTime=当前时间，packageId=扣减的课时包ID
      * 3. 任一步失败整体回滚
      *
-     * 并发保护：复用 [consumeMutex]，与 [consumeLesson] / [undoCheckIn] 共享锁，
+     * 并发保护：复用 [consumeMutex]，与 [undoCheckIn] 共享锁，
      * 避免签退与撤销并发执行时余额计算错乱。
      *
      * @param lesson 待签退的课时记录（必须已存在，包含学员名、ID 等信息）
@@ -145,26 +182,29 @@ class OperationRepository(
 
         try {
             database.withTransaction {
-                // 1. 调用核心消课逻辑扣减课时包
-                val consume = doConsumeLessonInternal(lesson.studentName)
-                if (!consume.success) {
-                    // 抛异常触发事务回滚，Lesson 状态保持"已签到"
-                    throw RuntimeException("课时包扣减失败：${consume.message}")
-                }
-
-                // 2. 更新 Lesson：status="已签退" + signOutTime + packageId
+                // 1. 先更新 Lesson：status="已签退" + signOutTime（表访问顺序：lessons 先于 lesson_packages）
                 val nowTime = java.time.LocalTime.now().format(
                     java.time.format.DateTimeFormatter.ofPattern("HH:mm", Locale.getDefault())
                 )
                 val updatedLesson = lesson.copy(
                     status = "已签退",
                     signOutTime = nowTime,
-                    packageId = consume.packageId
+                    packageId = ""
                 )
                 val affected = lessonDao.update(updatedLesson)
                 if (affected != 1) {
                     throw RuntimeException("Lesson 更新未生效（affected=$affected）")
                 }
+
+                // 2. 调用核心消课逻辑扣减课时包
+                val consume = doConsumeLessonInternal(lesson.studentName)
+                if (!consume.success) {
+                    // 抛异常触发事务回滚，Lesson 状态保持"已签到"
+                    throw RuntimeException("课时包扣减失败：${consume.message}")
+                }
+
+                // 3. 回填扣减的课时包 ID
+                lessonDao.update(updatedLesson.copy(packageId = consume.packageId))
 
                 android.util.Log.i("CheckOut",
                     "签退成功：${lesson.studentName} lessonId=${lesson.id} " +
@@ -187,8 +227,9 @@ class OperationRepository(
     /**
      * 内部消课实现：不持锁，由 [consumeLessonForCheckOut] 在事务内调用。
      *
-     * 与 [consumeLesson] 的区别：本方法不获取 [consumeMutex]（已由外层调用方持有），
-     * 避免重入死锁。直接执行读 + 写 + 校验三步。
+     * 本方法是全项目消课的唯一实现（v47 起移除各仓库重复拷贝）；
+     * 不获取 [consumeMutex]（已由外层调用方持有），避免重入死锁。
+     * 直接执行读 + 写 + 校验三步。
      */
     private suspend fun doConsumeLessonInternal(studentName: String): ConsumeResult {
         val packages = pkgDao.getByStudent(studentName).first()
@@ -229,68 +270,6 @@ class OperationRepository(
         android.util.Log.d("ConsumeLesson",
             "扣减成功：${target.name} used ${target.usedLessons}->${updated.usedLessons} 剩余${updated.remainingLessons}")
         return ConsumeResult(
-            success = true,
-            packageId = target.id,
-            packageName = target.name,
-            remainingAfter = updated.remainingLessons,
-            message = "已扣减课时（${target.name}）"
-        )
-    }
-
-    /**
-     * 消耗一次课时：找到该学员最早购买且仍有余额的活跃课程包，usedLessons + 1。
-     *
-     * 使用 [consumeMutex] 互斥锁保护读 + 写临界区，防止并发签到时
-     * 多个协程同时读到相同余额并各自扣减，导致同一课时被扣多次或扣错包。
-     *
-     * 写库后通过 [pkgDao.update] 返回的受影响行数 + 重新查询双重校验，
-     * 确保扣减真正落库；任一校验失败均返回 success=false，避免"签到成功但课时未减"。
-     *
-     * v27 起本方法仅供旧路径调用；新签退流程请使用 [consumeLessonForCheckOut]。
-     *
-     * @return ConsumeResult.success=true 表示成功扣减；false 表示无可用课时包或扣减失败
-     */
-    suspend fun consumeLesson(studentName: String): ConsumeResult = consumeMutex.withLock {
-        val packages = pkgDao.getByStudent(studentName).first()
-        android.util.Log.d("ConsumeLesson",
-            "学员=$studentName 查询到课时包${packages.size}个: ${packages.map { "${it.name}(status=${it.status},used=${it.usedLessons}/${it.totalLessons},expire=${it.expireDate})" }}")
-        val active = packages.filter { it.status == "活跃" && !it.isExhausted && !it.isExpired }
-        android.util.Log.d("ConsumeLesson", "过滤后活跃包${active.size}个")
-        val target = active.minByOrNull { it.purchaseDate }
-            ?: return@withLock ConsumeResult(success = false, message = "无可用课时包")
-
-        val newUsed = (target.usedLessons + 1).coerceAtMost(target.totalLessons)
-        val updated = if (newUsed >= target.totalLessons) {
-            target.copy(usedLessons = target.totalLessons, status = "已用完")
-        } else {
-            target.copy(usedLessons = newUsed)
-        }
-        val affected = pkgDao.update(updated)
-
-        // 校验1：受影响行数必须为1，否则 update 未生效
-        if (affected != 1) {
-            android.util.Log.e("ConsumeLesson",
-                "update 受影响行数=$affected（预期1），扣减未落库！target.id=${target.id}")
-            return@withLock ConsumeResult(
-                success = false,
-                message = "课时扣减失败（更新未生效）"
-            )
-        }
-
-        // 校验2：重新查询验证 usedLessons 已更新
-        val recheck = pkgDao.getById(target.id)
-        if (recheck == null || recheck.usedLessons != updated.usedLessons) {
-            android.util.Log.e("ConsumeLesson",
-                "re-query 校验失败：期望used=${updated.usedLessons}，实际used=${recheck?.usedLessons}")
-            return@withLock ConsumeResult(
-                success = false,
-                message = "课时扣减失败（校验不一致）"
-            )
-        }
-
-        android.util.Log.d("ConsumeLesson",
-            "扣减成功：${target.name} used ${target.usedLessons}->${updated.usedLessons} 剩余${updated.remainingLessons}")
-        ConsumeResult(
             success = true,
             packageId = target.id,
             packageName = target.name,
@@ -344,8 +323,8 @@ class OperationRepository(
      * 4. 任意一步失败则整体回滚，保证数据一致性
      *
      * 设计要点：
-     * - 使用 [consumeMutex] 互斥锁保护读 + 写临界区，与 [consumeLesson] 共享锁，
-     *   避免"撤销"与"签到"并发执行时出现余额计算错乱
+     * - 使用 [consumeMutex] 互斥锁保护读 + 写临界区，
+     *   避免"撤销"与"签到/签退"并发执行时出现余额计算错乱
      * - 不允许 usedLessons 减为负数（coerceAtLeast(0)）
      * - 长期自动生成的课时（packageId = ""）仅删除 Lesson，不涉及课时包恢复
      *
@@ -509,312 +488,113 @@ class OperationRepository(
     suspend fun upsertCoach(coach: Coach) = coachDao.upsert(coach)
     suspend fun deleteCoach(name: String) = coachDao.deleteByName(name)
 
-    // === 排课 ===
-    fun getActiveSchedules(): Flow<List<Schedule>> = scheduleDao.getActive()
-    fun getAllSchedules(): Flow<List<Schedule>> = scheduleDao.getAll()
-    fun getSchedulesByStudent(name: String): Flow<List<Schedule>> = scheduleDao.getByStudent(name)
-    fun getSchedulesByCoach(name: String): Flow<List<Schedule>> = scheduleDao.getByCoach(name)
-    fun getSchedulesByDay(dayOfWeek: Int): Flow<List<Schedule>> = scheduleDao.getByDay(dayOfWeek)
-    suspend fun getScheduleById(id: String): Schedule? = scheduleDao.getById(id)
+    // === 排课（委托 ScheduleRepository / ScheduleQueryRepository） ===
+    fun getActiveSchedules(): Flow<List<Schedule>> = scheduleRepo.getActiveSchedules()
+    fun getAllSchedules(): Flow<List<Schedule>> = scheduleRepo.getAllSchedules()
+    fun getSchedulesByStudent(name: String): Flow<List<Schedule>> = scheduleRepo.getSchedulesByStudent(name)
+    fun getSchedulesByCoach(name: String): Flow<List<Schedule>> = scheduleRepo.getSchedulesByCoach(name)
+    fun getSchedulesByDay(dayOfWeek: Int): Flow<List<Schedule>> = scheduleRepo.getSchedulesByDay(dayOfWeek)
+    suspend fun getScheduleById(id: String): Schedule? = scheduleRepo.getById(id)
 
     /**
-     * v30：新增排课属于核心数据变更，触发自动备份防抖
+     * 新增排课（事务写入 + 自动备份防抖）。
      *
-     * v38 修复：用 [db.withTransaction] 包裹写入，确保主键冲突 / 约束违反 / JSON 序列化异常
-     * 时 [return@withTransaction] 能正确返回 false 失败状态，避免黑盒吞掉错误。
-     *
-     * 事务边界说明：
-     * - 当前仅 [scheduleDao.insert] 一条写入操作；若失败则数据未落库，return false 即可。
-     * - schedule_memory 表的写入由 ViewModel 层 [com.shangmentiyu.sportscoach.ui.operation.OperationViewModel]
-     *   通过 memoryRepo 独立完成。若未来需要将 schedules + schedule_memory 纳入同一事务，
-     *   应在本方法事务块内扩展 memoryDao 写入，并在失败分支 throw 异常以触发整体回滚。
+     * 委托 [ScheduleQueryRepository.addSchedule]。
      *
      * @return true 表示写入成功；false 表示事务内出现异常（schedule 未落库）
      */
-    suspend fun addSchedule(schedule: Schedule): Boolean {
-        val database = db ?: run {
-            // db 未注入（单元测试或旧路径）：降级到非事务写入，仍捕获异常返回状态
-            return try {
-                scheduleDao.insert(schedule)
-                AutoBackupScheduler.notifyDataChange()
-                true
-            } catch (e: Exception) {
-                android.util.Log.e("OperationRepo",
-                    "addSchedule（无事务降级）失败：${e.message}", e)
-                false
-            }
-        }
-        val success: Boolean = try {
-            database.withTransaction {
-                try {
-                    scheduleDao.insert(schedule)
-                    true
-                } catch (e: Exception) {
-                    // 主键冲突 / 约束违反 / 序列化异常等
-                    // 由于 insert 失败时无数据被修改，return false 即可（无需 throw 触发回滚）
-                    android.util.Log.e("OperationRepo",
-                        "addSchedule 事务内异常：${e.message}", e)
-                    return@withTransaction false
-                }
-            }
-        } catch (e: Exception) {
-            // withTransaction 自身异常（如死锁、磁盘满）
-            android.util.Log.e("OperationRepo",
-                "addSchedule 事务失败：${e.message}", e)
-            false
-        }
-        if (success) AutoBackupScheduler.notifyDataChange()
-        return success
-    }
+    suspend fun addSchedule(schedule: Schedule): Boolean = scheduleQueryRepo.addSchedule(schedule)
 
     /**
-     * v30：更新排课属于核心数据变更，触发自动备份防抖
+     * 更新排课（事务写入 + 自动备份防抖）。
      *
-     * v38 修复：用 [db.withTransaction] 包裹写入，确保主键冲突 / 约束违反 / JSON 序列化异常
-     * 时 [return@withTransaction] 能正确返回 false 失败状态，避免黑盒吞掉错误。
+     * 委托 [ScheduleQueryRepository.updateSchedule]。
      *
      * @return true 表示更新成功；false 表示事务内出现异常（schedule 未变更）
      */
-    suspend fun updateSchedule(schedule: Schedule): Boolean {
-        val database = db ?: run {
-            // db 未注入（单元测试或旧路径）：降级到非事务写入，仍捕获异常返回状态
-            return try {
-                scheduleDao.update(schedule)
-                AutoBackupScheduler.notifyDataChange()
-                true
-            } catch (e: Exception) {
-                android.util.Log.e("OperationRepo",
-                    "updateSchedule（无事务降级）失败：${e.message}", e)
-                false
-            }
-        }
-        val success: Boolean = try {
-            database.withTransaction {
-                try {
-                    scheduleDao.update(schedule)
-                    true
-                } catch (e: Exception) {
-                    android.util.Log.e("OperationRepo",
-                        "updateSchedule 事务内异常：${e.message}", e)
-                    return@withTransaction false
-                }
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("OperationRepo",
-                "updateSchedule 事务失败：${e.message}", e)
-            false
-        }
-        if (success) AutoBackupScheduler.notifyDataChange()
-        return success
-    }
+    suspend fun updateSchedule(schedule: Schedule): Boolean = scheduleQueryRepo.updateSchedule(schedule)
 
     /** v30：删除排课属于核心数据变更，触发自动备份防抖 */
-    suspend fun deleteSchedule(id: String) {
-        scheduleDao.deleteById(id)
-        AutoBackupScheduler.notifyDataChange()
-    }
-
-    /**
-     * === v33 数据流加固（模块 2 核心）：排课保存防重与异常抛出 ===
-     *
-     * 解决用户痛点："排课修改保存失败但没有报错"。
-     *
-     * 现有 [addSchedule] / [updateSchedule] 已分别处理新增 / 更新场景，
-     * 但调用方需先判断 schedule.id 是否存在再决定调用哪个方法。
-     * 如果调用方误判（如编辑模式 id 丢失走 [addSchedule]），
-     * 会触发主键冲突被静默吞掉，用户感知为"保存失败无报错"。
-     *
-     * 本方法封装"智能判断 + 异常归集"逻辑：
-     * 1. 通过 [scheduleDao.getById] 查询是否已存在同 id 的排课
-     * 2. 存在 → [scheduleDao.update]；不存在 → [scheduleDao.insert]
-     * 3. 整个流程包裹 try-catch，所有异常通过 [Log.e] 输出到 Logcat（tag=DataFlow）
-     * 4. 返回 true=保存成功；false=保存失败（调用方可读 Logcat 排查）
-     *
-     * 与 [addSchedule] / [updateSchedule] 的区别：
-     * - 自动判断新增/更新，调用方无需关心 schedule.id 是否为空
-     * - 失败时返回 false 而非吞掉异常，调用方据此向用户 Toast 提示
-     * - 异常全部通过 [Log.e]（tag=DataFlow）输出，便于 Logcat 过滤定位
-     *
-     * 事务边界说明：
-     * - 包裹在 [db.withTransaction] 内，确保查询+写入原子完成
-     * - 若 db 未注入（单元测试/旧路径），降级为非事务模式但仍捕获异常
-     *
-     * @param schedule 待保存的排课对象（id 必须正确传递，编辑模式由 UI 层填入原 id）
-     * @return true=保存成功；false=保存失败（异常已记录到 Logcat）
-     */
-    suspend fun saveSchedule(schedule: Schedule): Boolean {
-        // === Bug 1 修复：排课生效日期不得早于学员首次购买课时包日期 ===
-        // 校验放在事务与写入之前，异常向上抛给 ViewModel 层转为用户提示，
-        // 避免被下方 try-catch 吞掉（否则 UI 只会收到笼统的"保存失败"）。
-        if (schedule.startDate.isNotBlank()) {
-            val earliestPurchase = earliestPurchaseDateOf(schedule.studentName)
-            if (earliestPurchase != null && schedule.startDate < earliestPurchase) {
-                throw IllegalArgumentException("无法排课：所选日期早于该学员首次购买课时包的日期")
-            }
-        }
-        val database = db
-        return try {
-            if (database != null) {
-                // 有事务支持：查询+写入原子完成，避免并发保存期间出现"判断时不存在、写入时已存在"的竞态
-                database.withTransaction {
-                    val existing = scheduleDao.getById(schedule.id)
-                    if (existing != null) {
-                        // 已存在 → 更新
-                        val affected = scheduleDao.update(schedule)
-                        if (affected == 0) {
-                            // update 返回 0 表示记录在事务内被并发删除，回滚并返回 false
-                            throw IllegalStateException(
-                                "update 未生效（affected=0），schedule.id=${schedule.id} 可能已被删除"
-                            )
-                        }
-                        Log.i("DataFlow",
-                            "saveSchedule 更新成功：id=${schedule.id}, student=${schedule.studentName}")
-                    } else {
-                        // 不存在 → 新增
-                        scheduleDao.insert(schedule)
-                        Log.i("DataFlow",
-                            "saveSchedule 新增成功：id=${schedule.id}, student=${schedule.studentName}")
-                    }
-                }
-            } else {
-                // 降级：无事务支持，仍执行智能判断
-                val existing = scheduleDao.getById(schedule.id)
-                if (existing != null) {
-                    scheduleDao.update(schedule)
-                    Log.i("DataFlow",
-                        "saveSchedule 更新成功（无事务降级）：id=${schedule.id}")
-                } else {
-                    scheduleDao.insert(schedule)
-                    Log.i("DataFlow",
-                        "saveSchedule 新增成功（无事务降级）：id=${schedule.id}")
-                }
-            }
-            // 保存成功后触发自动备份
-            AutoBackupScheduler.notifyDataChange()
-            true
-        } catch (e: Exception) {
-            // 所有异常通过 Log.e 输出到 Logcat，tag=DataFlow，便于过滤定位
-            // 常见异常：
-            // - SQLitePrimaryKeyConstraintException：主键冲突（insert 时 id 已存在）
-            // - SQLiteConstraintException：外键/唯一约束违反
-            // - IllegalStateException：update 未生效（affected=0）
-            // - JSONException：content 字段 JSON 序列化异常（由 Converters 抛出）
-            Log.e("DataFlow",
-                "保存失败：schedule.id=${schedule.id}, student=${schedule.studentName}, " +
-                    "dayOfWeek=${schedule.dayOfWeek}, startTime=${schedule.startTime}, " +
-                    "contentLen=${schedule.content.length}, ${e.message}", e)
-            false
-        }
-    }
+    suspend fun deleteSchedule(id: String) = scheduleQueryRepo.deleteSchedule(id)
 
     /** 清空所有排课记录（课表管理"清空全部"功能） */
-    suspend fun deleteAllSchedules() {
-        scheduleDao.deleteAll()
-        AutoBackupScheduler.notifyDataChange()
-    }
+    suspend fun deleteAllSchedules() = scheduleQueryRepo.deleteAllSchedules()
 
     /**
-     * === v27：查询学员在指定日期的排课（用于课后反馈自动填充） ===
+     * 排课保存防重与异常抛出（v33 数据流加固）。
      *
-     * 排课按星期几（dayOfWeek）排期，无具体日期。
-     * 本方法将日期字符串转为周几后调用 [ScheduleDao.getByDay]，再过滤学员。
+     * 委托 [ScheduleQueryRepository.saveSchedule]。
      *
-     * 使用场景：教练在"课后反馈"选中学员后，自动调用本方法查询该学员今日的排课，
-     * 将 Schedule.startTime / durationMinutes / location 预填充到反馈表单输入框。
+     * @return true=保存成功；false=保存失败（异常已记录到 Logcat）
+     */
+    suspend fun saveSchedule(schedule: Schedule): Boolean = scheduleQueryRepo.saveSchedule(schedule)
+
+    /**
+     * 查询学员在指定日期的排课（用于课后反馈自动填充）。
      *
-     * @param studentName 学员姓名
-     * @param dateStr 日期 YYYY-MM-DD
-     * @return 该学员在该日期对应周几的活跃排课列表（按开始时间升序），无则空列表
+     * 委托 [ScheduleQueryRepository.getTodayScheduleForStudent]。
      */
     suspend fun getTodayScheduleForStudent(
         studentName: String,
         dateStr: String
-    ): List<Schedule> {
-        return try {
-            val date = LocalDate.parse(dateStr, DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault()))
-            // Calendar.DAY_OFOfWeek: 周日=1, 周六=7 → 转为 周一=1, 周日=7
-            val calendarDayOfWeek = date.dayOfWeek.value  // 1=Monday, 7=Sunday
-            val all = scheduleDao.getAllOnce()
-            all.filter { it.isActive && it.studentName == studentName && it.dayOfWeek == calendarDayOfWeek }
-                .sortedBy { it.startTime }
-        } catch (e: Exception) {
-            android.util.Log.e("OpRepo", "查询今日排课失败：${e.message}", e)
-            emptyList()
-        }
-    }
-
-    // === 长期排课：自动生成本周课时记录 ===
+    ): List<Schedule> = scheduleQueryRepo.getTodayScheduleForStudent(studentName, dateStr)
 
     /**
-     * 查重：指定学员+日期+时间是否已有课时记录。
-     * 长期排课自动生成时调用，避免重复插入。
+     * 查重：指定学员+日期+时间是否已有课时记录（长期排课自动生成时调用）。
+     *
+     * 委托 [ScheduleQueryRepository.hasLessonForScheduleOnDate]。
      */
-    suspend fun hasLessonForScheduleOnDate(studentName: String, date: String, time: String): Boolean {
-        // v46：双通道查重（studentId 优先、studentName 回退，兼容旧数据）
-        val sid = resolveStudentId(studentName)
-        return lessonDao.countByStudentDateTimeDual(sid, studentName, date, time) > 0
-    }
+    suspend fun hasLessonForScheduleOnDate(studentName: String, date: String, time: String): Boolean =
+        scheduleQueryRepo.hasLessonForScheduleOnDate(studentName, date, time)
 
     /**
-     * 检查学员是否还能排课：剩余课时包余额 > 未来未消课课时数时才允许继续排课。
+     * 检查学员是否还能排课：剩余课时包余额 > 未来未消课课时数。
      *
-     * 长期排课生成时调用，确保排课精确到最后一节课，避免超额排课。
-     *
-     * @param studentName 学员姓名
-     * @param fromDate 起始日期 YYYY-MM-DD（含）
-     * @return true=仍有余额可排课；false=余额已用完
+     * 委托 [ScheduleQueryRepository.canScheduleMoreLessons]。
      */
-    suspend fun canScheduleMoreLessons(studentName: String, fromDate: String): Boolean {
-        val summary = getRemainingSummary(studentName)
-        val pendingCount = lessonDao.countUnconsumedFrom(studentName, fromDate)
-        return summary.totalRemaining > pendingCount
-    }
+    suspend fun canScheduleMoreLessons(studentName: String, fromDate: String): Boolean =
+        scheduleQueryRepo.canScheduleMoreLessons(studentName, fromDate)
 
     /**
      * 统计学员从指定日期起未消课的课时数量。
-     * 用于长期排课生成时计算可用额度 = 课时包余额 - 未消课课时数。
      *
-     * @param studentName 学员姓名
-     * @param fromDate 起始日期 YYYY-MM-DD（含）
-     * @return 未消课的课时数量
+     * 委托 [ScheduleQueryRepository.countUnconsumedLessonsFrom]。
      */
-    suspend fun countUnconsumedLessonsFrom(studentName: String, fromDate: String): Int {
-        // v46：双通道统计（studentId 优先、studentName 回退，兼容旧数据）
-        val sid = resolveStudentId(studentName)
-        return lessonDao.countUnconsumedFromDual(sid, studentName, fromDate)
-    }
+    suspend fun countUnconsumedLessonsFrom(studentName: String, fromDate: String): Int =
+        scheduleQueryRepo.countUnconsumedLessonsFrom(studentName, fromDate)
 
     /**
-     * === v27：统计学员从指定日期起"长期自动未签退"的课时数量 ===
+     * 统计学员从指定日期起"长期自动未签退"的课时数量。
      *
-     * 用户需求："签退后消耗课时"重构后，余额计算应只统计：
-     * - status="已签退"（已消耗课时包）
-     * 或保留原 [countUnconsumedLessonsFrom] 逻辑，但需确保"已签到未签退"的课时
-     * 不被错误计入"未消费"。
-     *
-     * 本方法只统计长期自动生成的、尚未签退的课时（status != "已签退" 且 lessonType 含"(长期自动)"）。
-     *
-     * 用于 [com.shangmentiyu.sportscoach.ui.operation.OperationViewModel.ensureLongTermLessonsForWeek]
-     * 计算可用余额 = 有效课时包剩余 - 长期自动未签退课时数。
-     *
-     * @param studentName 学员姓名
-     * @param fromDate 起始日期 YYYY-MM-DD（含）
-     * @return 长期自动生成且未签退的课时数量
+     * 委托 [ScheduleQueryRepository.countLongTermPendingFrom]。
      */
-    suspend fun countLongTermPendingFrom(studentName: String, fromDate: String): Int {
-        return lessonDao.countLongTermPendingFrom(studentName, fromDate)
-    }
+    suspend fun countLongTermPendingFrom(studentName: String, fromDate: String): Int =
+        scheduleQueryRepo.countLongTermPendingFrom(studentName, fromDate)
+
+    /** v46：双通道统计长期自动未签退课时（studentId 优先、studentName 回退） */
+    suspend fun countLongTermPendingFromDual(studentId: String?, name: String, fromDate: String): Int =
+        scheduleQueryRepo.countLongTermPendingFromDual(studentId, name, fromDate)
 
     /**
-     * 一次性获取学员所有活跃课时包（非 Flow，用于长期排课批量计算）。
+     * 根据长期排课 Schedule 生成一条课时记录（Lesson）。
      *
-     * 活跃判定：status == "活跃" && !isExhausted && !isExpired
-     * 注意：此处不过滤 purchaseDate / expireDate，由调用方按日期判断是否生效，
-     * 因为同一学员可能在排课周内中途新增课时包（如周一买的课周五才生效）。
-     *
-     * @param studentName 学员姓名
-     * @return 活跃课时包列表（按购买日期升序）
+     * 委托 [ScheduleQueryRepository.generateLongTermLesson]。
      */
+    suspend fun generateLongTermLesson(sched: Schedule, dateStr: String) =
+        scheduleQueryRepo.generateLongTermLesson(sched, dateStr)
+
+    /**
+     * 一键修正历史错误排课（设置页入口，全量清理 + 重排）。
+     *
+     * 委托 [ScheduleQueryRepository.fixHistoricalScheduleErrors]。
+     *
+     * @return [ScheduleQueryRepository.ScheduleFixResult] 清理/重排统计
+     */
+    suspend fun fixHistoricalScheduleErrors(): ScheduleQueryRepository.ScheduleFixResult =
+        scheduleQueryRepo.fixHistoricalScheduleErrors()
+
+    // === v46：双通道辅助（studentId 优先、studentName 回退，兼容旧数据） ===
+
     /**
      * v46：解析学员姓名对应的 studentId（软关联外键，可能为 NULL）。
      *
@@ -878,200 +658,6 @@ class OperationRepository(
         } catch (_: Exception) {
             null
         }
-    }
-
-    /**
-     * 根据长期排课 Schedule 生成一条课时记录（Lesson）。
-     *
-     * 约定：
-     * - 自动生成的 Lesson 用 lessonType 标记为 "长期自动"
-     * - attendance = "准时"，但 packageId = "" 表示未扣减课时
-     * - content / contentImages 直接从 Schedule 复制，便于上课时引用
-     * - 学员可在课后反馈中编辑此 Lesson，结算时再扣减课时
-     *
-     * @param sched 长期排课实体
-     * @param dateStr 本周对应日期 YYYY-MM-DD
-     */
-    suspend fun generateLongTermLesson(sched: Schedule, dateStr: String) {
-        // === Bug 1 修复：生成日 / 生效日不得早于学员首次购买课时包日期 ===
-        // 兜底校验：正常路径下 ensureLongTermLessonsForWeek 已按 startDate /
-        // 有效课时包过滤，此处为数据边界防御，违规直接抛异常阻止写入。
-        val earliestPurchase = earliestPurchaseDateOf(sched.studentName)
-        if (earliestPurchase != null &&
-            (dateStr < earliestPurchase ||
-                (sched.startDate.isNotBlank() && sched.startDate < earliestPurchase))
-        ) {
-            throw IllegalArgumentException("无法排课：所选日期早于该学员首次购买课时包的日期")
-        }
-        val lesson = Lesson(
-            id = java.util.UUID.randomUUID().toString().take(8),
-            date = dateStr,
-            time = sched.startTime,
-            studentName = sched.studentName,
-            content = sched.content,
-            duration = sched.durationMinutes,
-            coach = sched.coachName,
-            location = sched.location,
-            lessonType = "${sched.lessonType}(长期自动)",
-            attendance = "准时",
-            packageId = ""
-        )
-        lessonDao.insert(lesson)
-    }
-
-    // === v45：一键修正历史错误排课 ===
-
-    /**
-     * 修正结果：携带清理/重排统计供 UI 反馈。
-     */
-    data class ScheduleFixResult(
-        val fixedStudents: Int = 0,
-        val deletedSchedules: Int = 0,
-        val deletedPlaceholders: Int = 0,
-        val regeneratedLessons: Int = 0
-    )
-
-    /**
-     * === v45：一键修正历史错误排课（设置页入口，全量清理 + 重排）===
-     *
-     * 背景：历史版本排课 Bug 已修复，但数据库中已积压大量错误排课：
-     * - 早于学员首次购买日期的长期排课模板（schedules.startDate < 最早 purchaseDate）
-     * - 超过课时包剩余额度的未来占位课时（lessons 占位数量 > 有效剩余）
-     *
-     * 执行流程（db 可用时整体包裹在单事务内，任一学员失败整体回滚）：
-     * A. 遍历所有活跃学员（students.isActive = 1）
-     * B. 删除 startDate 早于首次购买日的长期排课模板（仅 schedules 表）
-     * C. 按当天有效课时包计算未来最大可排节数（[getEffectiveRemainingLessons]）
-     * D. 未来占位课时超过额度时删除多余占位，优先删除日期靠后的（升序后 takeLast）
-     * E. 清理后在剩余额度内自动重新生成未来两周排课（[regenerateLessonsForStudent]）
-     *
-     * 绝对安全边界：
-     * - 仅删除 schedules 表的错误长期排课模板；仅删除 lessons 表中
-     *   "未来（date >= today）+ 长期自动 + 未签退（status != 已签退）"的未占用占位符
-     * - 已签退、已实际发生的课时记录与非长期排课一律保留，绝不影响历史数据
-     *
-     * @return [ScheduleFixResult] 清理/重排统计
-     */
-    suspend fun fixHistoricalScheduleErrors(): ScheduleFixResult {
-        var fixedStudents = 0
-        var deletedSchedules = 0
-        var deletedPlaceholders = 0
-        var regeneratedLessons = 0
-
-        val run: suspend () -> Unit = {
-            val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault())
-            val todayStr = LocalDate.now().format(formatter)
-            val activeStudents = studentDao.getAll().first()
-            for (student in activeStudents) {
-                val name = student.name
-                val earliestPurchase = earliestPurchaseDateOf(name)
-                var touched = false
-
-                // B. 删除 startDate 早于首次购买日的长期排课模板（仅 schedules 表）
-                if (earliestPurchase != null) {
-                    scheduleDao.getAllOnce()
-                        .filter {
-                            it.isActive && it.isLongTerm && it.studentName == name &&
-                                it.startDate.isNotBlank() && it.startDate < earliestPurchase
-                        }
-                        .forEach {
-                            scheduleDao.deleteById(it.id)
-                            deletedSchedules++
-                            touched = true
-                        }
-                }
-
-                // C/D. 清理未来多余占位课时（仅"长期自动 + 未签退 + date >= today"）
-                val placeholders = getLessonsByStudentOnce(name)
-                    .filter {
-                        it.date >= todayStr &&
-                            it.lessonType.contains("(长期自动)") &&
-                            it.status != "已签退"
-                    }
-                    .sortedBy { it.date }
-                if (placeholders.isNotEmpty()) {
-                    val totalRemaining = getEffectiveRemainingLessons(name, todayStr)
-                    val excess = placeholders.size - totalRemaining
-                    if (excess > 0) {
-                        // 优先删除日期靠后的多余占位
-                        placeholders.takeLast(excess).forEach {
-                            lessonDao.deleteById(it.id)
-                            deletedPlaceholders++
-                            touched = true
-                        }
-                    }
-                }
-
-                // E. 清理后在剩余额度内自动重新生成未来两周排课
-                val remainingLongTerm = scheduleDao.getAllOnce()
-                    .filter { it.isActive && it.isLongTerm && it.studentName == name }
-                val generated = regenerateLessonsForStudent(name, todayStr, remainingLongTerm)
-                regeneratedLessons += generated
-                if (generated > 0 || touched) fixedStudents++
-            }
-        }
-
-        val database = db
-        if (database != null) {
-            database.withTransaction { run() }
-        } else {
-            // 无 db 注入（单元测试/旧路径）：降级为非事务执行，逻辑不变
-            run()
-        }
-        return ScheduleFixResult(
-            fixedStudents = fixedStudents,
-            deletedSchedules = deletedSchedules,
-            deletedPlaceholders = deletedPlaceholders,
-            regeneratedLessons = regeneratedLessons
-        )
-    }
-
-    /**
-     * 重排：在剩余额度内为学员自动生成未来窗口内的长期课时。
-     *
-     * 与 [com.shangmentiyu.sportscoach.ui.operation.OperationViewModel.ensureLongTermLessonsForWeek]
-     * 的额度机制一致（Bug 2 修复后语义）：
-     * - totalRemaining = 当天有效课时包剩余（purchaseDate <= dateStr <= expireDate 才计入）
-     * - pending = 从 fromDate 起已生成未消课课时（含清理后剩余的占位）
-     * - pending >= totalRemaining 时不再生成；每生成一节 pending + 1
-     *
-     * @param studentName 学员姓名
-     * @param fromDate 起始日期 YYYY-MM-DD（含）
-     * @param activeLongTermSchedules 清理后剩余的活跃长期排课
-     * @return 本次新生成的课时数
-     */
-    private suspend fun regenerateLessonsForStudent(
-        studentName: String,
-        fromDate: String,
-        activeLongTermSchedules: List<Schedule>
-    ): Int {
-        if (activeLongTermSchedules.isEmpty()) return 0
-        val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault())
-        val from = LocalDate.parse(fromDate, formatter)
-        // 已占用的额度：清理后仍存在的未来未消课课时
-        var pending = countUnconsumedLessonsFrom(studentName, fromDate)
-        var generated = 0
-        // 未来 14 天窗口（约两周），受剩余额度控制，额度用完即自动停止
-        for (offset in 0 until 14) {
-            val date = from.plusDays(offset.toLong())
-            val dateStr = date.format(formatter)
-            val dow = date.dayOfWeek.value // 1=周一 ... 7=周日（与 Schedule.dayOfWeek 一致）
-            val totalRemaining = getEffectiveRemainingLessons(studentName, dateStr)
-            if (pending >= totalRemaining) continue // 额度已用完，该天及后续均不再生成
-            activeLongTermSchedules.filter { it.dayOfWeek == dow }.forEach { sched ->
-                // startDate / endDate 边界
-                if (sched.startDate.isNotBlank() && dateStr < sched.startDate) return@forEach
-                if (sched.endDate.isNotBlank() && dateStr > sched.endDate) return@forEach
-                // 查重：同一学员+日期+时间已有记录则跳过
-                if (hasLessonForScheduleOnDate(studentName, dateStr, sched.startTime)) return@forEach
-                // 额度边界（同日多时间段排课场景）
-                if (pending >= totalRemaining) return@forEach
-                generateLongTermLesson(sched, dateStr)
-                pending++
-                generated++
-            }
-        }
-        return generated
     }
 
     // === v22 冷热数据归档 ===
@@ -1319,17 +905,19 @@ class OperationRepository(
         }
     }
 
-    // === 训练周期 ===
-    fun getAllCycles(): Flow<List<TrainingCycle>> = cycleDao.getAll()
-    fun getActiveCycles(): Flow<List<TrainingCycle>> = cycleDao.getActive()
-    fun getCyclesByStudent(name: String): Flow<List<TrainingCycle>> = cycleDao.getByStudent(name)
-    suspend fun getCycleById(id: String): TrainingCycle? = cycleDao.getById(id)
-    suspend fun addCycle(cycle: TrainingCycle) = cycleDao.insert(cycle)
-    suspend fun updateCycle(cycle: TrainingCycle) = cycleDao.update(cycle)
-    suspend fun deleteCycle(id: String) = cycleDao.deleteById(id)
+    // === 训练周期（委托 TrainingCycleRepository） ===
+    fun getAllCycles(): Flow<List<TrainingCycle>> = trainingCycleRepo.getAllCycles()
+    fun getActiveCycles(): Flow<List<TrainingCycle>> = trainingCycleRepo.getActiveCycles()
+    fun getCyclesByStudent(name: String): Flow<List<TrainingCycle>> = trainingCycleRepo.getCyclesByStudent(name)
+    suspend fun getCycleById(id: String): TrainingCycle? = trainingCycleRepo.getCycleById(id)
+    suspend fun addCycle(cycle: TrainingCycle) = trainingCycleRepo.addCycle(cycle)
+    suspend fun updateCycle(cycle: TrainingCycle) = trainingCycleRepo.updateCycle(cycle)
+    suspend fun deleteCycle(id: String) = trainingCycleRepo.deleteCycle(id)
 
     /**
      * 创建周期并自动生成空的周计划列表。
+     *
+     * 委托 [TrainingCycleRepository.createCycle]。
      */
     suspend fun createCycle(
         studentName: String,
@@ -1337,74 +925,15 @@ class OperationRepository(
         goal: String,
         totalWeeks: Int,
         startDate: String
-    ): String {
-        val cycle = TrainingCycle(
-            studentName = studentName,
-            name = name,
-            goal = goal,
-            totalWeeks = totalWeeks,
-            startDate = startDate,
-            endDate = calcEndDate(startDate, totalWeeks)
-        ).withWeeklyPlans(emptyWeeklyPlans(totalWeeks))
-        cycleDao.insert(cycle)
-        return cycle.id
-    }
+    ): String = trainingCycleRepo.createCycle(studentName, name, goal, totalWeeks, startDate)
 
-    /** 生成空的周计划列表 */
-    private fun emptyWeeklyPlans(totalWeeks: Int): List<WeeklyPlan> =
-        (1..totalWeeks).map { i ->
-            WeeklyPlan(
-                weekIndex = i,
-                title = "第$i 周",
-                goal = "",
-                focus = "",
-                exercisesJson = "[]"
-            )
-        }
-
-    /** 计算周期结束日期（线程安全：基于 [LocalDate] 不可变对象，无 Calendar 状态污染） */
-    private fun calcEndDate(startDate: String, weeks: Int): String {
-        return try {
-            val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault())
-            val start = LocalDate.parse(startDate, formatter)
-            // +weeks 周 -1 天 = 周期最后一天
-            val end = start.plusWeeks(weeks.toLong()).minusDays(1)
-            end.format(formatter)
-        } catch (_: Exception) { "" }
-    }
-
-    // === 阶段性总结 ===
-
-    /**
-     * 阶段总结数据：聚合指定学员在指定时间范围内的所有课时记录。
-     */
-    data class StageSummary(
-        val studentName: String,
-        val startDate: String,
-        val endDate: String,
-        val totalLessons: Int,
-        val attendedLessons: Int,          // 实到（非请假非旷课）
-        val attendanceRate: Float,         // 出勤率 0-1
-        val avgPerformance: Float,         // 平均表现评分 1-10
-        val avgDuration: Int,              // 平均课时时长
-        val attitudeDistribution: Map<String, Int>,  // 态度分布
-        val completedExerciseRate: Float,  // 训练动作完成率 0-1
-        val scoreProgress: List<ScoreProgressItem>,  // 各项成绩的进步对比
-        val firstLessonDate: String,
-        val lastLessonDate: String,
-        val summaryText: String            // 自动生成的总结文字
-    )
-
-    data class ScoreProgressItem(
-        val name: String,
-        val firstScore: Float,
-        val lastScore: Float,
-        val delta: Float,
-        val samples: Int
-    )
+    // === 阶段性总结（委托 StageSummaryRepository） ===
 
     /**
      * 计算学员的阶段总结。
+     *
+     * 委托 [StageSummaryRepository.computeStageSummary]。
+     *
      * @param studentName 学员姓名
      * @param startDate 起始日期 YYYY-MM-DD（含）
      * @param endDate 结束日期 YYYY-MM-DD（含）
@@ -1414,102 +943,5 @@ class OperationRepository(
         startDate: String,
         endDate: String,
         allLessons: List<Lesson>
-    ): StageSummary {
-        val inRange = allLessons.filter { l ->
-            l.studentName == studentName && l.date in startDate..endDate
-        }.sortedBy { it.date }
-
-        val total = inRange.size
-        val attended = inRange.count { it.attendance !in listOf("请假", "旷课") }
-        val attendanceRate = if (total > 0) attended.toFloat() / total else 0f
-        val avgPerf = if (total > 0) inRange.map { it.performance }.average().toFloat() else 0f
-        val avgDur = if (total > 0) inRange.map { it.duration }.average().toInt() else 0
-        val attitudeDist = inRange.groupingBy { it.attitude }.eachCount()
-        val allExercises = inRange.flatMap { parseExercisesForStats(it.content) }
-        val doneEx = allExercises.count { it.first }
-        val totalEx = allExercises.size
-        val completionRate = if (totalEx > 0) doneEx.toFloat() / totalEx else 0f
-
-        // 成绩进步对比（首末对比）
-        val scoreProgress = computeScoreProgress(inRange)
-
-        val firstDate = inRange.firstOrNull()?.date ?: ""
-        val lastDate = inRange.lastOrNull()?.date ?: ""
-        val summaryText = buildSummaryText(
-            studentName, startDate, endDate, total, attended, attendanceRate,
-            avgPerf, avgDur, completionRate, scoreProgress
-        )
-
-        return StageSummary(
-            studentName = studentName,
-            startDate = startDate,
-            endDate = endDate,
-            totalLessons = total,
-            attendedLessons = attended,
-            attendanceRate = attendanceRate,
-            avgPerformance = avgPerf,
-            avgDuration = avgDur,
-            attitudeDistribution = attitudeDist,
-            completedExerciseRate = completionRate,
-            scoreProgress = scoreProgress,
-            firstLessonDate = firstDate,
-            lastLessonDate = lastDate,
-            summaryText = summaryText
-        )
-    }
-
-    /** 解析课时训练内容为 (done, name) 列表 */
-    private fun parseExercisesForStats(json: String): List<Pair<Boolean, String>> {
-        if (json.isBlank()) return emptyList()
-        return try {
-            val arr = JSONArray(json)
-            (0 until arr.length()).map { i ->
-                val obj = arr.getJSONObject(i)
-                obj.optBoolean("done", false) to obj.optString("name")
-            }
-        } catch (_: Exception) { emptyList() }
-    }
-
-    /** 计算各项成绩的首末对比 */
-    private fun computeScoreProgress(lessons: List<Lesson>): List<ScoreProgressItem> {
-        val scoreMap = mutableMapOf<String, MutableList<Float>>()
-        for (l in lessons) {
-            if (l.scores.isBlank() || l.scores == "{}") continue
-            try {
-                val obj = JSONObject(l.scores)
-                obj.keys().forEach { key ->
-                    val score = obj.optJSONObject(key)?.optDouble("score", 0.0) ?: 0.0
-                    scoreMap.getOrPut(key) { mutableListOf() }.add(score.toFloat())
-                }
-            } catch (_: Exception) { }
-        }
-        return scoreMap.map { (name, scores) ->
-            val first = scores.firstOrNull() ?: 0f
-            val last = scores.lastOrNull() ?: 0f
-            ScoreProgressItem(name, first, last, last - first, scores.size)
-        }.sortedByDescending { it.samples }
-    }
-
-    /** 生成阶段性总结文字 */
-    private fun buildSummaryText(
-        studentName: String, startDate: String, endDate: String,
-        total: Int, attended: Int, attendanceRate: Float,
-        avgPerf: Float, avgDur: Int, completionRate: Float,
-        scoreProgress: List<ScoreProgressItem>
-    ): String {
-        val sb = StringBuilder()
-        sb.append("【$studentName 阶段总结 $startDate ~ $endDate】\n\n")
-        sb.append("本阶段共安排 $total 节课，实到 $attended 节，")
-        sb.append("出勤率 ${"%.0f".format(attendanceRate * 100)}%。\n")
-        sb.append("平均课时时长 ${avgDur} 分钟，整体表现评分 ${"%.1f".format(avgPerf)}/10，")
-        sb.append("训练动作完成率 ${"%.0f".format(completionRate * 100)}%。\n\n")
-        if (scoreProgress.isNotEmpty()) {
-            sb.append("成绩进步：\n")
-            for (p in scoreProgress) {
-                val arrow = if (p.delta > 0) "↑" else if (p.delta < 0) "↓" else "→"
-                sb.append("· ${p.name}: ${"%.1f".format(p.firstScore)} → ${"%.1f".format(p.lastScore)} $arrow ${"%.1f".format(Math.abs(p.delta))}\n")
-            }
-        }
-        return sb.toString()
-    }
+    ): StageSummary = stageSummaryRepo.computeStageSummary(studentName, startDate, endDate, allLessons)
 }

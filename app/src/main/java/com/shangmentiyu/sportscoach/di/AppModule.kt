@@ -14,10 +14,13 @@ import com.shangmentiyu.sportscoach.data.repo.LessonRepository
 import com.shangmentiyu.sportscoach.data.repo.OperationRepository
 import com.shangmentiyu.sportscoach.data.repo.ParentReportRepository
 import com.shangmentiyu.sportscoach.data.repo.ScheduleMemoryRepository
+import com.shangmentiyu.sportscoach.data.repo.ScheduleQueryRepository
 import com.shangmentiyu.sportscoach.data.repo.ScheduleRepository
 import com.shangmentiyu.sportscoach.data.repo.ScriptRepository
 import com.shangmentiyu.sportscoach.data.repo.SettingsRepository
 import com.shangmentiyu.sportscoach.data.repo.StudentRepository
+import com.shangmentiyu.sportscoach.data.repo.StageSummaryRepository
+import com.shangmentiyu.sportscoach.data.repo.TrainingCycleRepository
 import com.shangmentiyu.sportscoach.domain.scheduling.CalculateRemainingLessonsUseCase
 import com.shangmentiyu.sportscoach.domain.scheduling.CanScheduleLessonsUseCase
 import com.shangmentiyu.sportscoach.ui.analytics.AnalyticsViewModel
@@ -77,13 +80,18 @@ val appModule = module {
     single { SettingsRepository(androidContext()) }
     single {
         OperationRepository(
-            get(), get(), get(), get(), get(), get(),
-            get<ArchivedLessonDao>(), get<AppDatabase>()
+            get(), get(), get(), get(),
+            get<ArchivedLessonDao>(), get<AppDatabase>(),
+            get<ScheduleRepository>(), get<ScheduleQueryRepository>(),
+            get<TrainingCycleRepository>(), get<StageSummaryRepository>()
         )
     }
     single { LessonPackageRepository(get(), get(), get()) }
     single { CoachRepository(get()) }
     single { ScheduleRepository(get(), get()) }
+    single { ScheduleQueryRepository(get(), get(), get(), get(), get()) }
+    single { TrainingCycleRepository(get()) }
+    single { StageSummaryRepository() }
     single { ScheduleMemoryRepository(get()) }
     single { ParentReportRepository(get(), get(), get()) }
     single { BodyMetricRepository(get(), get()) }
@@ -112,7 +120,7 @@ val appModule = module {
     viewModel { TrainingCycleViewModel(get(), get()) }
     viewModel { BodyMetricChartViewModel(get(), get()) }
     viewModel { CoachDailyReportViewModel(get(), get(), get()) }
-    viewModel { LessonCheckInViewModel(get(), get(), get(), get()) }
+    viewModel { LessonCheckInViewModel(get(), get(), get()) }
     viewModel { HeightPredictionViewModel(get()) }
     viewModel { DietViewModel(get(), get()) }
     viewModel { ScriptViewModel(get()) }

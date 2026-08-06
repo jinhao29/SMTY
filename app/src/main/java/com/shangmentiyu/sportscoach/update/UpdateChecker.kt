@@ -32,11 +32,11 @@ import java.util.concurrent.TimeUnit
  *   4. 上传 app/build/outputs/apk/release/app-release.apk 到 GitHub Release 附件
  *   5. 务必保持签名文件不变，避免与历史版本签名冲突导致无法升级
  *
- * === v46 修正（蓝图架构三：版本号解析对齐） ===
- * 1. 版本比对从"整数 versionCode"改为"浮点数 versionName"：
- *    - 云端 tag 统一为 v0.<run_number>（如 v0.33），用 tagName.replace("v","").toFloatOrNull() 解析
- *    - 本地 versionName（0.33）同样转浮点，两者直接大小比较，禁止字符串包含比对
- *    - 彻底解决旧整数解析对 "v0.33" 返回 0、永远不触发更新的"版本号无法识别"问题
+ * === v47 修正（版本号比对对齐） ===
+ * 1. 版本比对从"浮点数 versionName"改为"整型 versionCode（run_number）"：
+ *    - 云端 tag 统一为 v0.<run_number>（如 v0.33），extractRemoteVersionCode 提取整型 33
+ *    - 本地 BuildConfig.VERSION_CODE = CI 注入的 github.run_number，整型直接大小比较
+ *    - 规避 Float 精度缺陷：0.10f == 0.1f 导致 run_number 9→10 / 99→100 时漏更新
  * 2. 本地调试版防呆拦截：versionName 含 "-local" 或 versionCode >= 99999 时直接强制更新
  *
  * 异常兜底策略：
@@ -107,24 +107,23 @@ object UpdateChecker {
     ) : Exception(userMessage, cause)
 
     /**
-     * 从 GitHub Release tag_name 提取远端版本号（浮点数，与本地 versionName 对齐）。
+     * 从 GitHub Release tag_name 提取远端 versionCode（整型 run_number）。
      *
-     * === v46 修正（蓝图架构三核心） ===
-     * GitHub Release 的 tag_name 统一为 "v0.<run_number>"（如 "v0.33"），
-     * 本函数去除前缀 v 后转为浮点数：
-     * - "v0.33" → "0.33" → 0.33f
-     * - "v33"（旧格式）→ "33" → 33.0f（兼容历史 tag，仍能触发更新）
-     * - "v0.33-beta" → "0.33-beta" → null → 0.0f（无法解析视为 0，不触发更新）
-     *
-     * 设计依据：CI 注入的 VERSION_NAME = 0.<run_number>（如 "0.33"），
-     * 本地 versionName 同样转为浮点数后直接大小比对，杜绝字符串包含（contains）
-     * 比对带来的"明明有更新却提示无更新"问题。
+     * === v47 修正 ===
+     * 原实现 tagName.replace("v","").toFloatOrNull() 存在浮点精度缺陷：
+     * "v0.10".toFloat() == 0.1f，导致 run_number 从 9 → 10 时 0.9 设备
+     * 永远看不到 v0.10 更新（0.1 > 0.9 为 false），0.99 → 0.100 同理。
+     * 现改为提取整型 run_number，与本地 BuildConfig.VERSION_CODE 直接比较：
+     * - "v0.33" → 33
+     * - "v33"（旧格式）→ 33（兼容历史 tag）
+     * - "v0.33-beta" / "v1.0.5" 等非标准格式 → null（不触发更新）
      *
      * @param tagName GitHub Release tag_name（如 "v0.33"）
-     * @return 提取出的浮点版本号；无法解析返回 0.0f
+     * @return 提取出的整型 versionCode；无法解析返回 null
      */
-    private fun extractRemoteVersion(tagName: String): Float {
-        return tagName.replace("v", "").toFloatOrNull() ?: 0.0f
+    internal fun extractRemoteVersionCode(tagName: String): Int? {
+        val match = Regex("^v(?:0\\.)?(\\d+)$").find(tagName) ?: return null
+        return match.groupValues[1].toIntOrNull()
     }
 
     /**
@@ -232,20 +231,15 @@ object UpdateChecker {
                 }
                 Log.d(TAG, "✅ APK 下载链接: $apkUrl")
 
-                // === v46 修正（蓝图架构三）：tag_name 浮点数解析比对 ===
-                // 云端 tag 形如 "v0.33" → remoteVersion = 0.33f
-                // 本地 versionName 形如 "0.33" → localVersion = 0.33f
-                // 禁止字符串包含（contains）比对，统一浮点数大小对比
-                val remoteVersion = extractRemoteVersion(release.tagName)
-                val localVersion = BuildConfig.VERSION_NAME
-                    .replace("-local", "")
-                    .toFloatOrNull()
-                    ?: 0.0f
+                // === v47 修正：tag_name 整型 run_number 比对 ===
+                // 云端 tag 形如 "v0.33" → remoteCode = 33
+                // 本地 BuildConfig.VERSION_CODE = CI 注入的 github.run_number
+                // 整型大小比较，规避 Float 精度导致的 9→10 / 99→100 漏更新
+                val remoteVersionCode = extractRemoteVersionCode(release.tagName)
                 val localVersionCode = BuildConfig.VERSION_CODE
                 Log.d(
                     TAG,
-                    "版本对比：远端 tag=${release.tagName} → remoteVersion=$remoteVersion, " +
-                            "本地 versionName=${BuildConfig.VERSION_NAME} → localVersion=$localVersion, " +
+                    "版本对比：远端 tag=${release.tagName} → remoteCode=$remoteVersionCode, " +
                             "本地 versionCode=$localVersionCode"
                 )
 
@@ -275,12 +269,12 @@ object UpdateChecker {
                     )
                 }
 
-                // === 正常版本比对（浮点数大小比较） ===
-                if (remoteVersion > localVersion) {
+                // === 正常版本比对（整型 run_number 大小比较） ===
+                if (remoteVersionCode != null && remoteVersionCode > localVersionCode) {
                     Log.d(
                         TAG,
-                        "✅ 发现新版本：remoteVersion($remoteVersion) > " +
-                                "localVersion($localVersion)"
+                        "✅ 发现新版本：remoteCode($remoteVersionCode) > " +
+                                "localCode($localVersionCode)"
                     )
                     Log.d(TAG, "========== 检查结束（有更新）==========")
                     UpdateResult.NewVersionAvailable(
@@ -291,8 +285,8 @@ object UpdateChecker {
                 } else {
                     Log.d(
                         TAG,
-                        "ℹ️ 当前已是最新：remoteVersion($remoteVersion) <= " +
-                                "localVersion($localVersion)"
+                        "ℹ️ 当前已是最新：remoteCode($remoteVersionCode) <= " +
+                                "localCode($localVersionCode)"
                     )
                     Log.d(TAG, "========== 检查结束（已是最新）==========")
                     UpdateResult.UpToDate

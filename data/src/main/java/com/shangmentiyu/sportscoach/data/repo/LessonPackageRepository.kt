@@ -10,8 +10,6 @@ import com.shangmentiyu.sportscoach.domain.scheduling.EffectiveRemainingCalculat
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 /**
  * 课时包 Repository（管理层）。
@@ -20,13 +18,13 @@ import kotlinx.coroutines.sync.withLock
  *
  * 职责：
  * - 课时包 CRUD
- * - 消课并发保护（[consumeMutex] 保证读 + 写原子性）
  * - 续费提醒流（剩余不足 / 即将过期 / 已用完 / 已过期）
  * - 余额汇总与"按日期有效课时"计算（长期排课使用）
  *
  * 设计要点：
- * - 消课时使用 [consumeMutex] 互斥锁 + 受影响行数校验 + 重新查询校验，
- *   三重保护避免并发签到导致同一课时被扣多次。
+ * - 消课（扣减课时）统一收敛在 [OperationRepository.consumeLessonForCheckOut]，
+ *   本仓库不持有消课逻辑（v47 起移除重复拷贝与私有 consumeMutex，
+ *   避免绕过 OperationRepository 的调用方与它并发扣减同一课时包时互不互斥）。
  * - "有效课时包"按日期过滤：purchaseDate <= dateStr <= expireDate，
  *   修复了"7.24 买的课被排到 7.20"的数据流错误。
  */
@@ -37,17 +35,6 @@ class LessonPackageRepository(
     private val db: AppDatabase? = null,
     private val scheduleDao: ScheduleDao? = null
 ) {
-
-    /**
-     * 消课结果：携带扣减的课时包信息，供上层记录到 Lesson 表与 UI 反馈。
-     */
-    data class ConsumeResult(
-        val success: Boolean,
-        val packageId: String = "",
-        val packageName: String = "",
-        val remainingAfter: Int = 0,
-        val message: String = ""
-    )
 
     /**
      * 续费提醒：聚合单个学员单个课时包的提醒信息。
@@ -68,12 +55,6 @@ class LessonPackageRepository(
         val totalRemaining: Int,
         val activePackageName: String  // 最早购买的活跃包名（用于卡片显示）
     )
-
-    /**
-     * 消课并发保护锁：确保读 + 写在同一临界区内完成，
-     * 避免并发签到时多协程读到相同余额并各自扣减，导致同一课时被扣多次。
-     */
-    private val consumeMutex = Mutex()
 
     // === 基本 CRUD ===
     fun getAllPackages(): Flow<List<LessonPackage>> = pkgDao.getAll()
@@ -111,73 +92,13 @@ class LessonPackageRepository(
             return
         }
         database.withTransaction {
-            pkgDao.deleteById(id)
-            // 仅当能查到学员姓名时才级联清理，避免空删除
+            // 表访问顺序：schedules 先于 lesson_packages
             pkg?.studentName?.takeIf { it.isNotBlank() }?.let { studentName ->
                 scheduleDaoLocal.deleteByStudent(studentName)
             }
+            pkgDao.deleteById(id)
         }
         AutoBackupScheduler.notifyDataChange()
-    }
-
-    /**
-     * 消耗一次课时：找到该学员最早购买且仍有余额的活跃课程包，usedLessons + 1。
-     *
-     * 使用 [consumeMutex] 互斥锁保护读 + 写临界区，防止并发签到时
-     * 多个协程同时读到相同余额并各自扣减，导致同一课时被扣多次或扣错包。
-     *
-     * 写库后通过 [pkgDao.update] 返回的受影响行数 + 重新查询双重校验，
-     * 确保扣减真正落库；任一校验失败均返回 success=false，避免"签到成功但课时未减"。
-     *
-     * @return ConsumeResult.success=true 表示成功扣减；false 表示无可用课时包或扣减失败
-     */
-    suspend fun consumeLesson(studentName: String): ConsumeResult = consumeMutex.withLock {
-        val packages = pkgDao.getByStudent(studentName).first()
-        android.util.Log.d("ConsumeLesson",
-            "学员=$studentName 查询到课时包${packages.size}个: ${packages.map { "${it.name}(status=${it.status},used=${it.usedLessons}/${it.totalLessons},expire=${it.expireDate})" }}")
-        val active = packages.filter { it.status == "活跃" && !it.isExhausted && !it.isExpired }
-        android.util.Log.d("ConsumeLesson", "过滤后活跃包${active.size}个")
-        val target = active.minByOrNull { it.purchaseDate }
-            ?: return@withLock ConsumeResult(success = false, message = "无可用课时包")
-
-        val newUsed = (target.usedLessons + 1).coerceAtMost(target.totalLessons)
-        val updated = if (newUsed >= target.totalLessons) {
-            target.copy(usedLessons = target.totalLessons, status = "已用完")
-        } else {
-            target.copy(usedLessons = newUsed)
-        }
-        val affected = pkgDao.update(updated)
-
-        // 校验1：受影响行数必须为1，否则 update 未生效
-        if (affected != 1) {
-            android.util.Log.e("ConsumeLesson",
-                "update 受影响行数=$affected（预期1），扣减未落库！target.id=${target.id}")
-            return@withLock ConsumeResult(
-                success = false,
-                message = "课时扣减失败（更新未生效）"
-            )
-        }
-
-        // 校验2：重新查询验证 usedLessons 已更新
-        val recheck = pkgDao.getById(target.id)
-        if (recheck == null || recheck.usedLessons != updated.usedLessons) {
-            android.util.Log.e("ConsumeLesson",
-                "re-query 校验失败：期望used=${updated.usedLessons}，实际used=${recheck?.usedLessons}")
-            return@withLock ConsumeResult(
-                success = false,
-                message = "课时扣减失败（校验不一致）"
-            )
-        }
-
-        android.util.Log.d("ConsumeLesson",
-            "扣减成功：${target.name} used ${target.usedLessons}->${updated.usedLessons} 剩余${updated.remainingLessons}")
-        ConsumeResult(
-            success = true,
-            packageId = target.id,
-            packageName = target.name,
-            remainingAfter = updated.remainingLessons,
-            message = "已扣减课时（${target.name}）"
-        )
     }
 
     /**

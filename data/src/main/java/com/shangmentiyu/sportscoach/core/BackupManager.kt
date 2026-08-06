@@ -397,7 +397,7 @@ object BackupManager {
      * @param onProgress 进度回调（可选，null 表示不回调）
      * @return true=恢复成功；false=恢复失败（IO 异常、备份格式错误、完整性校验失败等）
      */
-    fun restore(
+    suspend fun restore(
         context: Context,
         inputStream: InputStream,
         onProgress: OnProgress? = null
@@ -406,15 +406,22 @@ object BackupManager {
     /**
      * 执行完整恢复并返回详细结果（含 PRAGMA integrity_check 校验报告）。
      *
+     * v47 安全不变量（下沉到本入口，不再依赖调用方自备安全备份）：
+     * - 恢复前自动在 App 缓存目录创建当前数据的完整安全备份
+     * - 恢复失败（完整性校验失败 / 备份格式错误 / 任何异常）后自动从安全备份回滚，
+     *   恢复前的旧数据真实还原，杜绝"先删旧库再解压、失败后旧数据永久丢失"窗口
+     * - 回滚成功后同样返回 success=true + needRestart=true（数据已替换，必须重启）
+     * - 安全备份仅在恢复与回滚都成功时删除；双失败时保留并提示用户手动找回
+     *
      * 完整流程：
-     * 1. 关闭数据库单例（释放文件锁，避免覆盖失败）
-     * 2. 清空当前数据库文件与照片目录（避免残留旧数据混入）
-     * 3. 从 ZIP 解包数据库文件到原位置
-     * 4. 从 ZIP 解包签到照片到原位置
-     * 5. **执行 PRAGMA integrity_check** 校验数据库完整性
+     * 1. 创建恢复前安全备份（仅当本地已有数据）
+     * 2. 关闭数据库单例（释放文件锁，避免覆盖失败）
+     * 3. 清空当前数据库文件与照片目录（避免残留旧数据混入）
+     * 4. 从 ZIP 解包数据库文件到原位置
+     * 5. 从 ZIP 解包签到照片到原位置
+     * 6. **执行 PRAGMA integrity_check** 校验数据库完整性
      *    - 通过：返回 success=true + integrityOk=true，调用方应重启 App
-     *    - 失败：返回 success=false + integrityOk=false + integrityReport=错误详情，
-     *      并自动删除已解压的损坏 db 文件，避免下次启动加载损坏数据
+     *    - 失败：自动回滚到恢复前安全备份
      *
      * 注意：调用方必须在恢复成功后重启 App，让 ViewModel 重新初始化，
      * 否则旧的 Dao 引用会指向已关闭的数据库，导致 NPE 或脏读。
@@ -424,10 +431,73 @@ object BackupManager {
      * @param onProgress 进度回调（可选，null 表示不回调）
      * @return [RestoreResult] 携带成功标志 + 完整性校验报告
      */
-    fun restoreDetailed(
+    suspend fun restoreDetailed(
         context: Context,
         inputStream: InputStream,
         onProgress: OnProgress? = null
+    ): RestoreResult {
+        val hasExistingData = context.getDatabasePath(AppDatabase.DATABASE_NAME).exists() ||
+            File(context.filesDir, PHOTOS_DIR_NAME).listFiles()?.isNotEmpty() == true
+        val safetyFile = if (hasExistingData) {
+            onProgress?.onProgress("safety", 0, 0, "正在创建恢复前安全备份…")
+            val file = File(
+                context.cacheDir,
+                "smty_pre_restore_safety_${System.currentTimeMillis()}.smty_backup"
+            )
+            val ok = runCatching {
+                file.parentFile?.mkdirs()
+                FileOutputStream(file).use { fos -> backup(context, fos) }
+            }.getOrDefault(false)
+            if (!ok) {
+                file.delete()
+                return RestoreResult(
+                    success = false,
+                    message = "恢复已中止：恢复前自动安全备份失败，现有数据未受影响",
+                    needRestart = false,
+                    integrityOk = false,
+                    integrityReport = "safety backup failed"
+                )
+            }
+            file
+        } else null
+
+        val result = restoreInternal(context, inputStream, onProgress)
+
+        if (!result.success && safetyFile != null) {
+            onProgress?.onProgress("rollback", 0, 0, "恢复失败，正在回滚到恢复前数据…")
+            Log.w(TAG, "恢复失败，尝试从安全备份回滚：${result.message}")
+            val rollback = runCatching {
+                FileInputStream(safetyFile).use { restoreInternal(context, it, onProgress) }
+            }.getOrNull()
+            if (rollback != null && rollback.success) {
+                safetyFile.delete()
+                Log.w(TAG, "回滚成功：恢复前数据已还原")
+                return RestoreResult(
+                    success = true,
+                    message = "恢复失败，已自动回滚到恢复前数据，应用将重启。\n\n失败原因：${result.message}",
+                    needRestart = true,
+                    integrityOk = true,
+                    integrityReport = result.integrityReport
+                )
+            }
+            return RestoreResult(
+                success = false,
+                message = "恢复失败且自动回滚失败：${result.message}\n" +
+                    "恢复前的完整数据已保留在应用缓存目录 ${safetyFile.name}，请尽快导出保存",
+                needRestart = false,
+                integrityOk = false,
+                integrityReport = result.integrityReport
+            )
+        }
+
+        safetyFile?.delete()
+        return result
+    }
+
+    private fun restoreInternal(
+        context: Context,
+        inputStream: InputStream,
+        onProgress: OnProgress?
     ): RestoreResult {
         // 1. 关闭数据库，释放文件锁
         onProgress?.onProgress("prepare", 0, 0, "正在准备恢复…")
@@ -532,7 +602,7 @@ object BackupManager {
             //
             // 通过 PRAGMA integrity_check 主动校验：
             // - 通过（返回 "ok"）：允许调用方重启 App
-            // - 失败：返回多行错误描述，删除已解压的损坏 db，回滚到恢复前状态
+            // - 失败：删除已解压的损坏 db（v47 起由 restoreDetailed 包装层从安全备份回滚旧数据）
             if (dbExtracted) {
                 onProgress?.onProgress("verify", 0, 0, "正在校验数据库完整性…")
                 val report = verifyIntegrity(context)

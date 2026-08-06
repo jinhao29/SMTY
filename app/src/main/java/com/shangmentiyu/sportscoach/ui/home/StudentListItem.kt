@@ -34,6 +34,7 @@ import com.shangmentiyu.sportscoach.data.model.Student
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
+import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
 import com.shangmentiyu.sportscoach.ui.theme.appOutline
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 
@@ -119,7 +120,7 @@ internal fun StudentListItem(
                     .padding(bottom = Spacing.md)
                     .height(0.5.dp)
                     .fillMaxWidth()
-                    .background(Color(0xFFE5E5EA))
+                    .background(appDividerColor())
             )
         }
         // === 第一行：头像 + 姓名 + 剩余课时徽章 ===

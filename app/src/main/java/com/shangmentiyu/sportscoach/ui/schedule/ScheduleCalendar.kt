@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
@@ -34,6 +35,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shangmentiyu.sportscoach.ui.theme.LightOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
+import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
+import com.shangmentiyu.sportscoach.ui.theme.appOutline
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
@@ -100,12 +103,11 @@ fun ScheduleCalendar(
                 text = "${currentMonth.year}年${currentMonth.monthValue}月",
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF1A1A1A)
+                color = MaterialTheme.colorScheme.primary
             )
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(50))
-                    .clickable { /* 预留：月份切换下拉 */ }
                     .padding(horizontal = 12.dp, vertical = 6.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -118,7 +120,7 @@ fun ScheduleCalendar(
                     Spacer(Modifier.size(4.dp))
                     Icon(
                         imageVector = Icons.Outlined.ExpandMore,
-                        contentDescription = "切换月份",
+                        contentDescription = null,
                         tint = LightOnSurfaceVariant,
                         modifier = Modifier.size(18.dp)
                     )
@@ -138,7 +140,7 @@ fun ScheduleCalendar(
                 Text(
                     text = day,
                     fontSize = 11.sp,
-                    color = Color(0xFF9B9B9B),
+                    color = appOnSurfaceVariant(),
                     modifier = Modifier.weight(1f),
                     textAlign = TextAlign.Center
                 )
@@ -252,7 +254,7 @@ private fun CalendarDayCell(
     modifier: Modifier = Modifier
 ) {
     val bgColor = when {
-        data.isSelected -> Color(0xFF1A1A1A)
+        data.isSelected -> MaterialTheme.colorScheme.primary
         data.isToday -> LightPrimary.copy(alpha = 0.12f)
         else -> Color.Transparent
     }
@@ -260,8 +262,8 @@ private fun CalendarDayCell(
     val textColor = when {
         data.isSelected -> Color.White
         data.isToday -> LightPrimary
-        data.isCurrentMonth -> Color(0xFF1A1A1A)
-        else -> Color(0xFFBDBDBD)
+        data.isCurrentMonth -> MaterialTheme.colorScheme.primary
+        else -> appOutline()
     }
 
     val interactionSource = remember { MutableInteractionSource() }

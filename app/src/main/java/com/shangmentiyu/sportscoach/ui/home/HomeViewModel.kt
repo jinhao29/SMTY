@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -138,6 +139,19 @@ class HomeViewModel(
 
     val students: StateFlow<List<Student>> = studentRepo.getAllStudents()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // === v48 终极打磨：学员列表首帧加载标记（骨架屏） ===
+    // Room Flow 首帧异步到达，之前 UI 无法区分"加载中"与"无学员"，
+    // 首帧到达后置 true，UI 据此从骨架屏切换到真实列表/空状态。
+    private val _studentsLoaded = MutableStateFlow(false)
+    val studentsLoaded: StateFlow<Boolean> = _studentsLoaded.asStateFlow()
+
+    init {
+        viewModelScope.launch(appExceptionHandler) {
+            students.first()
+            _studentsLoaded.value = true
+        }
+    }
 
     val todayCount: StateFlow<Int> = lessonRepo.getTodayCount()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
@@ -579,14 +593,15 @@ class HomeViewModel(
                         if (db.studentDao().getByName(newName) != null) {
                             throw IllegalArgumentException("学员「$newName」已存在")
                         }
-                        // 级联改名 7 张表
+                        // 级联改名 7 张表（表访问顺序：students → lessons → schedules →
+                        // lesson_packages → training_cycles → body_metric_history → parent_reports）
                         db.studentDao().renameStudent(original.name, newName)
                         db.lessonDao().renameStudent(original.name, newName)
-                        db.lessonPackageDao().renameStudent(original.name, newName)
                         db.scheduleDao().renameStudent(original.name, newName)
+                        db.lessonPackageDao().renameStudent(original.name, newName)
+                        db.trainingCycleDao().renameStudent(original.name, newName)
                         db.bodyMetricHistoryDao().renameStudent(original.name, newName)
                         db.parentReportDao().renameStudent(original.name, newName)
-                        db.trainingCycleDao().renameStudent(original.name, newName)
                         // 更新 students 表其他字段（此时姓名已是 newName）
                         db.studentDao().update(
                             original.copy(
@@ -954,11 +969,11 @@ class HomeViewModel(
                     }
                     db.studentDao().renameStudent(oldName, newName)
                     db.lessonDao().renameStudent(oldName, newName)
-                    db.lessonPackageDao().renameStudent(oldName, newName)
                     db.scheduleDao().renameStudent(oldName, newName)
+                    db.lessonPackageDao().renameStudent(oldName, newName)
+                    db.trainingCycleDao().renameStudent(oldName, newName)
                     db.bodyMetricHistoryDao().renameStudent(oldName, newName)
                     db.parentReportDao().renameStudent(oldName, newName)
-                    db.trainingCycleDao().renameStudent(oldName, newName)
                 }
                 toast("已将「$oldName」改名为「$newName」，全局数据已同步")
                 onDone(true, "改名成功")

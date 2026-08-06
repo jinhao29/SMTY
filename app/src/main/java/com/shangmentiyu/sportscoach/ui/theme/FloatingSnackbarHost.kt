@@ -54,7 +54,7 @@ fun FloatingSnackbarHost(
     ) { data ->
         Snackbar(
             snackbarData = data,
-            containerColor = Color(0xFF1C1C1E),
+            containerColor = NightGlassSurface,
             contentColor = Color.White,
             shape = RoundedCornerShape(12.dp)
         )

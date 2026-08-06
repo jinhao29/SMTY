@@ -34,6 +34,8 @@ import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
 import com.shangmentiyu.sportscoach.ui.theme.ScoreFail
 import com.shangmentiyu.sportscoach.ui.theme.ScorePass
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
+import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
+import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 
@@ -55,6 +57,7 @@ internal fun IosCard(
             .shadow(
                 elevation = 4.dp,
                 shape = RoundedCornerShape(10.dp),
+                // ponytail: 投影色保持 M3 默认黑（0x1A000000），明暗主题通用，无对应令牌
                 ambientColor = Color(0x1A000000),
                 spotColor = Color(0x1A000000)
             )
@@ -150,7 +153,7 @@ internal fun RemainingBadge(remaining: Int) {
         remaining > 5 -> ScoreExcellent.copy(alpha = 0.15f) to ScoreExcellent
         remaining in 1..5 -> ScorePass.copy(alpha = 0.15f) to ScorePass
         remaining == 0 -> ScoreFail.copy(alpha = 0.15f) to ScoreFail
-        else -> Color(0xFF8E8E93).copy(alpha = 0.15f) to Color(0xFF8E8E93)
+        else -> appOnSurfaceVariant().copy(alpha = 0.15f) to appOnSurfaceVariant()
     }
     Text(
         text = if (remaining >= 0) "剩 $remaining" else "无课时",
@@ -198,8 +201,8 @@ internal fun TodayOverviewHeader(scheduleCount: Int) {
             .shadow(
                 elevation = 8.dp,
                 shape = RoundedCornerShape(24.dp),
-                ambientColor = Color(0x1AFF6B47),
-                spotColor = Color(0x29FF6B47)
+                ambientColor = appPrimary().copy(alpha = 0.10f),
+                spotColor = appPrimary().copy(alpha = 0.16f)
             )
             .clip(RoundedCornerShape(24.dp))
             .background(
@@ -284,7 +287,7 @@ internal fun FloatingStatCard(
     ) {
         Text(
             text = value,
-            color = Color(0xFF1A1A1A),
+            color = appOnSurface(),
             fontSize = 28.sp,
             fontWeight = FontWeight.Black,
             letterSpacing = (-0.5).sp
@@ -292,7 +295,7 @@ internal fun FloatingStatCard(
         Spacer(Modifier.height(6.dp))
         Text(
             text = label,
-            color = Color(0xFF6B6B6B),
+            color = appOnSurfaceVariant(),
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium
         )
@@ -402,14 +405,14 @@ private fun WeeklyDayDot(
     // 今天有课/已上课：珊瑚橙圆点
     // 其他：浅灰
     val circleColor = when {
-        isCurrentSelected -> Color(0xFF1A1A1A)
+        isCurrentSelected -> MaterialTheme.colorScheme.inverseSurface
         hasSchedule || isCompleted -> LightPrimary
-        else -> Color(0xFFE0E0E0)
+        else -> appDividerColor()
     }
     val textColor = when {
-        isCurrentSelected -> Color.White
+        isCurrentSelected -> MaterialTheme.colorScheme.inverseOnSurface
         isToday -> LightPrimary
-        else -> Color(0xFF6B6B6B)
+        else -> appOnSurfaceVariant()
     }
     Column(
         horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
@@ -417,7 +420,7 @@ private fun WeeklyDayDot(
     ) {
         Text(
             text = dayLabel,
-            color = Color(0xFF9B9B9B),
+            color = appOnSurfaceVariant(),
             fontSize = 10.sp
         )
         Box(

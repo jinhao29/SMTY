@@ -77,11 +77,15 @@ import com.shangmentiyu.sportscoach.ui.theme.LightOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.IOSCard
 import com.shangmentiyu.sportscoach.ui.theme.FloatingSnackbarHost
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
+import com.shangmentiyu.sportscoach.ui.theme.ScheduleListSkeleton
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
+import com.shangmentiyu.sportscoach.ui.theme.appOnWarningContainer
 import com.shangmentiyu.sportscoach.ui.theme.appOutline
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
+import com.shangmentiyu.sportscoach.ui.theme.appSurfaceVariant
+import com.shangmentiyu.sportscoach.ui.theme.appWarningContainer
 import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
 import java.time.LocalDate
 import java.time.ZoneId
@@ -133,6 +137,8 @@ fun ScheduleScreen(
     val editing by vm.editingSchedule.collectAsStateWithLifecycle()
     // v24 优化2：余额不足警告（顶部 Alert Banner 显示）
     val noBalanceWarnings by vm.noBalanceWarnings.collectAsStateWithLifecycle()
+    // === v48 终极打磨：排课列表首帧加载标记（骨架屏） ===
+    val schedulesLoaded by vm.schedulesLoaded.collectAsStateWithLifecycle()
 
     var showEditDialog by remember { mutableStateOf(false) }
     var isCreate by remember { mutableStateOf(true) }
@@ -143,8 +149,6 @@ fun ScheduleScreen(
     // === 按课时包自动排课对话框状态 ===
     var showAutoScheduleDialog by remember { mutableStateOf(false) }
 
-    // 长按课程卡片弹出的操作菜单状态
-    var actionTargetSchedule by remember { mutableStateOf<Schedule?>(null) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var pendingDeleteSchedule by remember { mutableStateOf<Schedule?>(null) }
 
@@ -488,8 +492,14 @@ fun ScheduleScreen(
                     )
                 }
 
-                // === 课程列表 + 日历（日历作为 LazyColumn 第一个 item，随列表滚动）===
-                if (daySchedules.isEmpty()) {
+                // === v48 终极打磨：首帧骨架屏（替代转圈/闪空态） ===
+                if (!schedulesLoaded) {
+                    ScheduleListSkeleton(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = Spacing.screenH, vertical = Spacing.md)
+                    )
+                } else if (daySchedules.isEmpty()) {
                     // 空状态：日历 + 概览卡 + 空提示
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
@@ -527,13 +537,13 @@ fun ScheduleScreen(
                                             "今日无排课",
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF1A1A1A)
+                                            color = appOnSurface()
                                         )
                                         Spacer(Modifier.height(Spacing.sm))
                                         Text(
                                             "点击右下角 + 添加课程",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = Color(0xFF6B6B6B)
+                                            color = appOnSurfaceVariant()
                                         )
                                     }
                                 }
@@ -635,26 +645,6 @@ fun ScheduleScreen(
                 )
             }
         }
-    }
-
-    // 长按课程卡片弹出的操作菜单（修改 / 删除该节课）
-    actionTargetSchedule?.let { target ->
-        ScheduleActionMenuDialog(
-            schedule = target,
-            onEdit = {
-                actionTargetSchedule = null
-                isCreate = false
-                prefillDay = null
-                vm.startEdit(target.id)
-                showEditDialog = true
-            },
-            onDelete = {
-                pendingDeleteSchedule = target
-                actionTargetSchedule = null
-                showDeleteConfirmDialog = true
-            },
-            onDismiss = { actionTargetSchedule = null }
-        )
     }
 
     // 删除课程二次确认对话框
@@ -767,7 +757,7 @@ private fun NoBalanceWarningBanner(
             .fillMaxWidth()
             .padding(horizontal = Spacing.screenH, vertical = Spacing.xs)
             .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFFFFF3E0))   // 浅橙色背景
+            .background(appWarningContainer())
             .padding(Spacing.md)
     ) {
         Column {
@@ -778,7 +768,7 @@ private fun NoBalanceWarningBanner(
                 Icon(
                     Icons.Outlined.Warning,
                     contentDescription = null,
-                    tint = Color(0xFFE65100),   // 深橙色
+                    tint = appOnWarningContainer(),
                     modifier = Modifier.size(20.dp)
                 )
                 Spacer(Modifier.width(Spacing.sm))
@@ -786,7 +776,7 @@ private fun NoBalanceWarningBanner(
                     text = "余额不足提醒",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFFE65100)
+                    color = appOnWarningContainer()
                 )
                 Spacer(Modifier.weight(1f))
                 IconButton(
@@ -796,7 +786,7 @@ private fun NoBalanceWarningBanner(
                     Icon(
                         Icons.Outlined.Close,
                         contentDescription = "关闭",
-                        tint = Color(0xFFE65100),
+                        tint = appOnWarningContainer(),
                         modifier = Modifier.size(16.dp)
                     )
                 }
@@ -806,7 +796,7 @@ private fun NoBalanceWarningBanner(
                 Text(
                     text = "• $warning",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF6B4E00),   // 深棕色文字
+                    color = appOnWarningContainer(),
                     modifier = Modifier.padding(vertical = 2.dp)
                 )
             }
@@ -954,7 +944,10 @@ private fun DaySelector(
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = Spacing.screenH),
         horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
     ) {
-        items(days, key = { it.dayOfWeek }) { day ->
+        // key 使用日期字符串（dateLabel）而非 dayOfWeek：
+        // 切周时新旧两天序列 key 全相同（1~7），LazyRow 会把 7 个项原地复用并套用旧状态，
+        // 出现"数字消失/渲染空洞"；改用日期字符串后切周即整组重建，保证显示与数据一致。
+        items(days, key = { it.dateLabel }) { day ->
             val isSelected = day.dayOfWeek == selectedDayOfWeek
             val isToday = remember(day.date) {
                 val d = Calendar.getInstance().apply { time = day.date }
@@ -963,9 +956,9 @@ private fun DaySelector(
             }
             val displayDayName = if (isToday) "今天" else day.dayName
 
-            // 选中 = 珊瑚橙 #FF6B47 背景 + 白色文字；未选中 = 浅灰 #F0F0F0 背景 + 深灰文字
+            // 选中 = 珊瑚橙 #FF6B47 背景 + 白色文字；未选中 = 浅灰背景 + 深灰文字
             val selectedBg = appPrimary()
-            val unselectedBg = Color(0xFFF0F0F0)
+            val unselectedBg = appSurfaceVariant()
             val selectedText = Color.White
             val unselectedText = appOnSurface().copy(alpha = 0.7f)
 

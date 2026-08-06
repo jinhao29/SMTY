@@ -34,7 +34,18 @@ import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
 import com.shangmentiyu.sportscoach.ui.theme.BrandGradientEnd
 import com.shangmentiyu.sportscoach.ui.theme.BrandGradientStart
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
+import com.shangmentiyu.sportscoach.ui.theme.appBackground
+import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
+import com.shangmentiyu.sportscoach.ui.theme.appOnPrimary
+import com.shangmentiyu.sportscoach.ui.theme.appOnPrimaryContainer
+import com.shangmentiyu.sportscoach.ui.theme.appOnSecondary
+import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
+import com.shangmentiyu.sportscoach.ui.theme.appOutline
+import com.shangmentiyu.sportscoach.ui.theme.appPrimary
+import com.shangmentiyu.sportscoach.ui.theme.appPrimaryContainer
+import com.shangmentiyu.sportscoach.ui.theme.appSecondary
+import com.shangmentiyu.sportscoach.ui.theme.appSurfaceVariant
 import androidx.compose.foundation.Canvas
 import kotlin.math.PI
 import kotlin.math.cos
@@ -64,6 +75,7 @@ fun AbilityRadarCard(radar: AbilityAnalyzer.AbilityRadar) {
             .shadow(
                 elevation = 4.dp,
                 shape = RoundedCornerShape(10.dp),
+                // ponytail: 投影色保持 M3 默认黑（0x1A000000），明暗主题通用，无对应令牌
                 ambientColor = Color(0x1A000000),
                 spotColor = Color(0x1A000000)
             )
@@ -81,7 +93,7 @@ fun AbilityRadarCard(radar: AbilityAnalyzer.AbilityRadar) {
                     "能力画像",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1A1A1A)
+                    color = appOnSurface()
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
@@ -119,7 +131,7 @@ fun AbilityRadarCard(radar: AbilityAnalyzer.AbilityRadar) {
                         "暂无足够成绩数据",
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium,
-                        color = Color(0xFF8A8A8A)
+                        color = appOnSurfaceVariant()
                     )
                     Spacer(Modifier.height(Spacing.xs))
                     Text(
@@ -142,10 +154,10 @@ fun AbilityRadarCard(radar: AbilityAnalyzer.AbilityRadar) {
 @Composable
 private fun RadarCanvasWithLabels(values: List<Float>) {
     val dimensions = AbilityAnalyzer.DIMENSIONS
-    val gridColor = Color(0xFFE8E8EA)
-    val axisColor = Color(0xFFD8D8DC)
+    val gridColor = appDividerColor()
+    val axisColor = appOutline()
     val polygonStroke = LightPrimary
-    val labelColor = Color(0xFF4A4A4A)
+    val labelColor = appOnSurfaceVariant()
     val scoreColor = LightPrimary
 
     BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -279,11 +291,11 @@ private fun RadarCanvasWithLabels(values: List<Float>) {
 @Composable
 private fun OverallBadge(overall: Float) {
     val (label, bg, fg) = when {
-        overall >= 85 -> Triple("优秀", Color(0xFFFF6B47), Color.White)
-        overall >= 70 -> Triple("良好", Color(0xFFFF9E7A), Color.White)
-        overall >= 60 -> Triple("及格", Color(0xFFFFD4C2), Color(0xFF7A3A1F))
-        overall > 0 -> Triple("待提升", Color(0xFFF2F2F5), Color(0xFF8A8A8A))
-        else -> Triple("无数据", Color(0xFFF2F2F5), Color(0xFFB0B0B0))
+        overall >= 85 -> Triple("优秀", appPrimary(), appOnPrimary())
+        overall >= 70 -> Triple("良好", appSecondary(), appOnSecondary())
+        overall >= 60 -> Triple("及格", appPrimaryContainer(), appOnPrimaryContainer())
+        overall > 0 -> Triple("待提升", appSurfaceVariant(), appOnSurfaceVariant())
+        else -> Triple("无数据", appSurfaceVariant(), appOnSurfaceVariant())
     }
     Box(
         modifier = Modifier
@@ -329,12 +341,12 @@ private fun DimChip(name: String, score: Float, modifier: Modifier = Modifier) {
         score >= 85 -> BrandGradientStart
         score >= 70 -> LightPrimary
         score >= 60 -> BrandGradientEnd
-        score > 0 -> Color(0xFFFFD4C2)
-        else -> Color(0xFFE8E8EA)
+        score > 0 -> appPrimaryContainer()
+        else -> appDividerColor()
     }
     Column(
         modifier = modifier
-            .background(Color(0xFFFAFAFA), RoundedCornerShape(8.dp))
+            .background(appBackground(), RoundedCornerShape(8.dp))
             .padding(horizontal = 6.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -349,7 +361,7 @@ private fun DimChip(name: String, score: Float, modifier: Modifier = Modifier) {
             if (score > 0f) "$scoreInt" else "—",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
-            color = if (score > 0f) progressColor else Color(0xFFB0B0B0)
+            color = if (score > 0f) progressColor else appOnSurfaceVariant()
         )
         Spacer(Modifier.height(6.dp))
         // 进度条底色
@@ -357,7 +369,7 @@ private fun DimChip(name: String, score: Float, modifier: Modifier = Modifier) {
             modifier = Modifier
                 .fillMaxWidth()
                 .height(3.dp)
-                .background(Color(0xFFEDEDED), RoundedCornerShape(1.5.dp))
+                .background(appSurfaceVariant(), RoundedCornerShape(1.5.dp))
         ) {
             // 按分数比例填充（0-100 映射到 0-100%）
             val ratio = (score.coerceIn(0f, 100f) / 100f)

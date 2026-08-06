@@ -42,11 +42,11 @@ jobs:
       - name: 授予 gradlew 执行权限
         run: chmod +x ./gradlew
 
-      # === 架构一/二：注入云端版本号（与 UpdateChecker 的 float 比对对齐） ===
+      # === 架构一/二：注入云端版本号（与 UpdateChecker 的整型比对对齐） ===
       # VERSION_CODE = github.run_number（严格递增 1, 2, 3...）
       # VERSION_NAME = 0.<run_number>（0.1, 0.2, 0.33...）
       # Release tag 统一为 v0.<run_number>，App 端通过
-      #   tagName.replace("v", "").toFloatOrNull() 解析为 0.33 与本地 versionName 比对
+      #   extractRemoteVersionCode 提取整型 run_number 与本地 versionCode 比对
       - name: 注入云端版本号
         run: |
           echo "VERSION_CODE=${{ github.run_number }}" >> $GITHUB_ENV
@@ -80,8 +80,6 @@ jobs:
           printf 'storePassword=%s\n' "$KEYSTORE_PASSWORD" >> app/keystore.properties
           printf 'keyAlias=%s\n' "$KEY_ALIAS" >> app/keystore.properties
           printf 'keyPassword=%s\n' "$KEY_PASSWORD" >> app/keystore.properties
-          echo "==== keystore.properties 内容（密码已脱敏） ===="
-          sed 's/=\(.\{4\}\).*/=\1***/' app/keystore.properties
           echo "==== app/keystore.jks 文件信息 ===="
           ls -la app/keystore.jks
           file app/keystore.jks
@@ -99,6 +97,10 @@ jobs:
           zipStorePath=wrapper/dists
           EOF
           echo "已切换 Gradle wrapper 为官方源（gradle-8.13-all.zip）"
+
+      - name: 执行单元测试
+        # v47：发布前先跑全部单元测试，防止算法回归（版本比对/消课/身高预测等）流入 Release
+        run: ./gradlew testDebugUnitTest --no-daemon --stacktrace --no-configuration-cache
 
       - name: 执行 Release 打包
         # 通过 GITHUB_ENV 注入的 VERSION_CODE / VERSION_NAME 会被 build.gradle.kts 自动读取
@@ -121,8 +123,8 @@ jobs:
           retention-days: 30
 
       # === 架构二：自动发布 Release 并上传 APK ===
-      # tag_name = v0.<run_number>，与 VERSION_NAME（0.<run_number>）一一对应
-      # App 端 UpdateChecker 解析 v0.33 → 0.33，与本地 versionName 0.33 float 比对
+      # tag_name = v0.<run_number>，与 VERSION_CODE（github.run_number）一一对应
+      # App 端 UpdateChecker 提取 v0.33 → 33，与本地 versionCode 整型比对
       - name: 自动发布 Release 并上传 APK
         uses: softprops/action-gh-release@v2
         with:

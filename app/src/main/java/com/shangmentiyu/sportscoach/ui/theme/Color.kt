@@ -1,6 +1,8 @@
 package com.shangmentiyu.sportscoach.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
@@ -18,12 +20,17 @@ import androidx.compose.ui.graphics.Color
  * 4. 文字：主 #1A1A1A（≥12:1）/ 次 #6B6B6B（≥4.6:1 WCAG AA）
  * 5. 分割：Black 6% alpha（极浅，无感分割）
  *
- * 跟随系统 Dark Mode 自动切换至暗色版色板。
+ * 亮色 / 暗色两套色板统一收敛为 [LightColorScheme] / [DarkColorScheme]
+ * Material 3 ColorScheme，跟随系统 Dark Mode 或「设置 → 深色模式」开关切换。
  *
  * 命名规范（v39 重构：清理冗余别名，统一语义命名）：
  * - 所有令牌以 Light 或 Night 前缀区分主题
  * - 废弃别名（GlowCyan/GlowBlue/FeatureIconBlue/Indigo80 等）已删除
  * - 历史渐变名（VitalOrangeStart 等）已合并为 BrandGradientStart / BrandGradientEnd
+ *
+ * v48 终极打磨：主题感知访问器（appBackground() 等）不再自行判断
+ * isSystemInDarkTheme()，统一读取 MaterialTheme.colorScheme 令牌，
+ * 手动「深色模式」开关与系统切换都能即时生效。
  */
 
 // === 1. 亮色主题（Light）===
@@ -72,6 +79,18 @@ val NightDivider = Color(0x33FFFFFF)                 // White 20%
 val NightGlassSurface = Color(0xFF1C1C1E)
 val NightGlassSurfaceStrong = Color(0xFF2C2C2E)
 
+// === 2. 语义色令牌（v48 补充：信息横幅/状态提示，M3 无对应字段）===
+val LightSuccessContainer = Color(0xFFE8F5E9)        // 成功/健康建议容器（浅绿）
+val LightOnSuccessContainer = Color(0xFF2E7D32)      // 容器上的文字（深绿）
+val NightSuccessContainer = Color(0xFF1E3320)        // 暗色容器（墨绿）
+val NightOnSuccessContainer = Color(0xFF81C784)      // 暗色容器文字（亮绿）
+val LightWarningContainer = Color(0xFFFFF3E0)        // 警示容器（浅橙）
+val LightOnWarningContainer = Color(0xFFE65100)      // 容器上的文字（深橙）
+val NightWarningContainer = Color(0xFF33271A)        // 暗色容器（深棕橙）
+val NightOnWarningContainer = Color(0xFFFFB74D)      // 暗色容器文字（亮金橙）
+val LightInfoBlue = Color(0xFF42A5F5)                // 数据分级：偏低（蓝）
+val NightInfoBlue = Color(0xFF90CAF9)                // 暗色板：柔和亮蓝
+
 // === 3. 语义色（数据可视化/状态指示）===
 // 成绩等级（暖色系递进，避免冷色）
 val ScoreExcellent = Color(0xFFFF6B47)               // 优秀 = 主珊瑚橙
@@ -97,45 +116,91 @@ val MedalBronzeEnd = Color(0xFF8B4513)
 // v39 已全局替换所有历史引用，废弃别名已全部删除。
 // 新代码请直接使用 Light*/Night*/BrandGradient* 语义令牌。
 
-// === 5. 主题感知 @Composable 颜色访问器 ===
+// === 5. Material 3 ColorScheme 定义（亮 / 暗）===
+// 由 Theme.kt 的 SportsCoachTheme(darkTheme) 选择，所有界面通过
+// MaterialTheme.colorScheme.* 或下方 app*() 访问器读取，自动随主题切换。
+val LightColorScheme = lightColorScheme(
+    primary = LightPrimary,
+    onPrimary = LightOnPrimary,
+    primaryContainer = LightPrimaryContainer,
+    onPrimaryContainer = LightOnPrimaryContainer,
+    secondary = LightSecondary,
+    onSecondary = LightOnPrimary,
+    tertiary = LightTertiary,
+    onTertiary = LightOnPrimary,
+    background = LightBackground,
+    onBackground = LightOnBackground,
+    surface = LightSurface,
+    onSurface = LightOnSurface,
+    surfaceVariant = LightSurfaceVariant,
+    onSurfaceVariant = LightOnSurfaceVariant,
+    outline = LightOutline,
+    // 无感分割线（极浅），appDividerColor() 直接映射本令牌
+    outlineVariant = LightDivider,
+)
+
+val DarkColorScheme = darkColorScheme(
+    primary = NightPrimary,
+    onPrimary = NightOnPrimary,
+    primaryContainer = NightPrimaryContainer,
+    onPrimaryContainer = NightOnPrimaryContainer,
+    secondary = NightSecondary,
+    onSecondary = NightOnSecondary,
+    tertiary = NightTertiary,
+    onTertiary = NightOnPrimary,
+    background = NightBackground,
+    onBackground = NightOnBackground,
+    surface = NightSurface,
+    onSurface = NightOnSurface,
+    surfaceVariant = NightSurfaceVariant,
+    onSurfaceVariant = NightOnSurfaceVariant,
+    outline = NightOutline,
+    outlineVariant = NightDivider,
+)
+
+// === 6. 主题感知 @Composable 颜色访问器 ===
 // 在 Compose 中调用：appBackground() / appSurface() / appPrimary() 等，
-// 系统切换 Dark Mode 时自动返回对应色板。
+// 统一读取 MaterialTheme.colorScheme 令牌：手动「深色模式」开关或系统切换
+// Dark Mode 时自动返回对应色板，与 SportsCoachTheme 保持同步。
 
 @Composable
-fun appBackground(): Color = if (isSystemInDarkTheme()) NightBackground else LightBackground
+fun appBackground(): Color = MaterialTheme.colorScheme.background
 
 @Composable
-fun appGroupedBackground(): Color = if (isSystemInDarkTheme()) NightGroupedBackground else LightGroupedBackground
+fun appGroupedBackground(): Color = MaterialTheme.colorScheme.surfaceVariant
 
 @Composable
-fun appSurface(): Color = if (isSystemInDarkTheme()) NightSurface else LightSurface
+fun appSurface(): Color = MaterialTheme.colorScheme.surface
 
 @Composable
-fun appSurfaceVariant(): Color = if (isSystemInDarkTheme()) NightSurfaceVariant else LightSurfaceVariant
+fun appSurfaceVariant(): Color = MaterialTheme.colorScheme.surfaceVariant
 
 @Composable
-fun appPrimary(): Color = if (isSystemInDarkTheme()) NightPrimary else LightPrimary
+fun appPrimary(): Color = MaterialTheme.colorScheme.primary
 
 @Composable
-fun appOnPrimary(): Color = if (isSystemInDarkTheme()) NightOnPrimary else LightOnPrimary
+fun appOnPrimary(): Color = MaterialTheme.colorScheme.onPrimary
 
 @Composable
-fun appPrimaryContainer(): Color = if (isSystemInDarkTheme()) NightPrimaryContainer else LightPrimaryContainer
+fun appPrimaryContainer(): Color = MaterialTheme.colorScheme.primaryContainer
 
 @Composable
-fun appOnPrimaryContainer(): Color = if (isSystemInDarkTheme()) NightOnPrimaryContainer else LightOnPrimaryContainer
+fun appOnPrimaryContainer(): Color = MaterialTheme.colorScheme.onPrimaryContainer
 
 @Composable
-fun appSecondary(): Color = if (isSystemInDarkTheme()) NightSecondary else LightSecondary
+fun appSecondary(): Color = MaterialTheme.colorScheme.secondary
 
 @Composable
-fun appTertiary(): Color = if (isSystemInDarkTheme()) NightTertiary else LightTertiary
+fun appOnSecondary(): Color = MaterialTheme.colorScheme.onSecondary
 
 @Composable
-fun appOnBackground(): Color = if (isSystemInDarkTheme()) NightOnBackground else LightOnBackground
+fun appTertiary(): Color = MaterialTheme.colorScheme.tertiary
 
 @Composable
-fun appOnSurface(): Color = if (isSystemInDarkTheme()) NightOnSurface else LightOnSurface
+fun appOnBackground(): Color = MaterialTheme.colorScheme.onBackground
+
+@Composable
+fun appOnSurface(): Color = MaterialTheme.colorScheme.onSurface
 
 /**
  * 次级文字色（副标题、辅助说明、未选中导航栏、占位文字、空状态提示）。
@@ -145,20 +210,42 @@ fun appOnSurface(): Color = if (isSystemInDarkTheme()) NightOnSurface else Light
  * 消除"占位文字 #9E9E9E → 次级文字 #6B6B6B"的视觉断层。
  */
 @Composable
-fun appOnSurfaceVariant(): Color = if (isSystemInDarkTheme()) NightOnSurfaceVariant else LightOnSurfaceVariant
+fun appOnSurfaceVariant(): Color = MaterialTheme.colorScheme.onSurfaceVariant
 
 /**
  * 极浅分割线色（替代彩色粗线，符合"无感分割"高级感设计）。
  * 亮色 Black 6% alpha / 暗色 White 20% alpha，0.5dp 厚度使用。
  */
 @Composable
-fun appDividerColor(): Color = if (isSystemInDarkTheme()) NightDivider else LightDivider
+fun appDividerColor(): Color = MaterialTheme.colorScheme.outlineVariant
 
 @Composable
-fun appOutline(): Color = if (isSystemInDarkTheme()) NightOutline else LightOutline
+fun appOutline(): Color = MaterialTheme.colorScheme.outline
 
 @Composable
-fun appGlassSurface(): Color = if (isSystemInDarkTheme()) NightGlassSurface else LightSurface
+fun appGlassSurface(): Color = MaterialTheme.colorScheme.surface
 
 @Composable
-fun appGlassSurfaceStrong(): Color = if (isSystemInDarkTheme()) NightGlassSurfaceStrong else LightSurface
+fun appGlassSurfaceStrong(): Color = MaterialTheme.colorScheme.surface
+
+// === 7. 语义色访问器（v48：信息横幅/状态提示，随主题切换）===
+// M3 1.3.1 无 success/warning 字段，按当前生效色板（三态开关已收敛到
+// colorScheme）选择亮/暗语义色。
+
+@Composable
+private fun isDarkScheme(): Boolean = MaterialTheme.colorScheme.background == NightBackground
+
+@Composable
+fun appSuccessContainer(): Color = if (isDarkScheme()) NightSuccessContainer else LightSuccessContainer
+
+@Composable
+fun appOnSuccessContainer(): Color = if (isDarkScheme()) NightOnSuccessContainer else LightOnSuccessContainer
+
+@Composable
+fun appWarningContainer(): Color = if (isDarkScheme()) NightWarningContainer else LightWarningContainer
+
+@Composable
+fun appOnWarningContainer(): Color = if (isDarkScheme()) NightOnWarningContainer else LightOnWarningContainer
+
+@Composable
+fun appInfoBlue(): Color = if (isDarkScheme()) NightInfoBlue else LightInfoBlue

@@ -121,8 +121,9 @@ class GrowthViewModel(
     /** 加载学员的全部数据 */
     fun load(studentName: String) {
         viewModelScope.launch(appExceptionHandler) {
-            _student.value = studentRepo.getByName(studentName)
-            lessonRepo.getLessonsByStudent(studentName).collect { lessonList ->
+            val student = studentRepo.getByName(studentName)
+            _student.value = student
+            lessonRepo.getLessonsByStudentDual(student?.studentId, studentName).collect { lessonList ->
                 _lessons.value = lessonList
                 val scoreList = AbilityAnalyzer.extractScores(lessonList)
                 _scores.value = scoreList

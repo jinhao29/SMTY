@@ -71,7 +71,7 @@ import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
  * 排课规则：
  * - 每个选中的周几创建一条 Schedule（isLongTerm=true）
  * - endDate 由 [com.shangmentiyu.sportscoach.core.AutoScheduleCalculator] 计算
- * - 课时消耗依赖签到时的 [com.shangmentiyu.sportscoach.data.repo.LessonPackageRepository.consumeLesson]
+ * - 课时消耗依赖签退时的 [com.shangmentiyu.sportscoach.data.repo.OperationRepository.consumeLessonForCheckOut]
  *
  * @param vm 运营管理 ViewModel
  * @param preselectedPackageId 预选中的课时包 ID（从课时包管理页进入时传入），空字符串表示不预选

@@ -4,8 +4,10 @@ import android.util.Log
 
 import android.content.Context
 import android.net.Uri
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -60,6 +62,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextFieldColors
@@ -85,6 +90,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.shangmentiyu.sportscoach.data.model.ExerciseItem
+import com.shangmentiyu.sportscoach.data.model.ScheduleMemory
 import com.shangmentiyu.sportscoach.data.repo.CoachConflictException
 import com.shangmentiyu.sportscoach.ui.operation.OperationViewModel
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
@@ -95,9 +101,11 @@ import com.shangmentiyu.sportscoach.ui.theme.PrimaryButton
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
+import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appOutline
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 import com.shangmentiyu.sportscoach.ui.theme.appSurface
+import com.shangmentiyu.sportscoach.ui.theme.appSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -155,6 +163,19 @@ fun ScheduleEditDialog(
     val locationMemories by vm.locationMemories.collectAsStateWithLifecycle()
     // === v24 优化6：最近操作的上课周几记忆（新建模式默认选中） ===
     val dayOfWeekMemories by vm.dayOfWeekMemories.collectAsStateWithLifecycle()
+    // === 修复：弹窗内独立消费 vm.toast 并显示 Snackbar ===
+    // 历史问题：保存失败/校验提示通过 vm.toast 推送，但 ScheduleEditDialog 是全屏 Dialog，
+    // 宿主页（ScheduleScreen/PreClassTab/OperationScreen）的 SnackbarHost 被遮挡在 Dialog 之下，
+    // 导致"保存失败：数据库写入异常"等错误提示用户完全看不到，误以为点击无反应。
+    val snackbarHostState = remember { SnackbarHostState() }
+    val toast by vm.toast.collectAsStateWithLifecycle()
+    LaunchedEffect(toast) {
+        val msg = toast
+        if (!msg.isNullOrBlank()) {
+            snackbarHostState.showSnackbar(message = msg, duration = SnackbarDuration.Short)
+            vm.clearToast()
+        }
+    }
     // === 焦点管理器：从下拉菜单选择项目后立即清除焦点，关闭软键盘 ===
     // 用户痛点：从历史记录选择学员/上课地点后，OutlinedTextField 仍保持焦点，
     // 导致系统自动弹出软键盘遮挡视线。选择后 clearFocus() 即可关闭键盘。
@@ -278,7 +299,8 @@ fun ScheduleEditDialog(
             decorFitsSystemWindows = false
         )
     ) {
-        Column(
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
             modifier = Modifier.fillMaxSize()
                 .imePadding()
         ) {
@@ -408,14 +430,14 @@ fun ScheduleEditDialog(
                                 Icon(
                                     Icons.Outlined.CalendarToday,
                                     contentDescription = null,
-                                    tint = Color(0xFF6B6B6B),
+                                    tint = appOnSurfaceVariant(),
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Spacer(Modifier.width(Spacing.sm))
                                 Text(
                                     "选择周几",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = Color(0xFF1A1A1A)
+                                    color = appOnSurface()
                                 )
                             }
                             Spacer(Modifier.height(Spacing.sm))
@@ -534,13 +556,18 @@ fun ScheduleEditDialog(
                                         )
                                     } else {
                                         timeMemories.forEach { mem ->
-                                            DropdownMenuItem(
-                                                text = { Text(mem.value) },
-                                                onClick = {
+                                            ScheduleMemoryMenuItem(
+                                                mem = mem,
+                                                onSelect = {
                                                     startTime = mem.value
                                                     timeExpanded = false
                                                     // 选择历史时间后立即清除焦点，关闭软键盘
                                                     focusManager.clearFocus()
+                                                },
+                                                onDelete = {
+                                                    // 长按删除该条历史记忆，删除后下拉列表经 Room Flow 自动刷新
+                                                    vm.deleteMemory(mem)
+                                                    timeExpanded = false
                                                 }
                                             )
                                         }
@@ -623,13 +650,18 @@ fun ScheduleEditDialog(
                                     )
                                 } else {
                                     locationMemories.forEach { mem ->
-                                        DropdownMenuItem(
-                                            text = { Text(mem.value) },
-                                            onClick = {
+                                        ScheduleMemoryMenuItem(
+                                            mem = mem,
+                                            onSelect = {
                                                 location = mem.value
                                                 locExpanded = false
                                                 // 选择历史地点后立即清除焦点，关闭软键盘
                                                 focusManager.clearFocus()
+                                            },
+                                            onDelete = {
+                                                // 长按删除该条历史记忆，删除后下拉列表经 Room Flow 自动刷新
+                                                vm.deleteMemory(mem)
+                                                locExpanded = false
                                             }
                                         )
                                     }
@@ -679,7 +711,7 @@ fun ScheduleEditDialog(
                         Text(
                             "卡片颜色",
                             style = MaterialTheme.typography.labelMedium,
-                            color = Color(0xFF1A1A1A)
+                            color = appOnSurface()
                         )
                         Spacer(Modifier.height(Spacing.sm))
                         IOSColorPillSelector(
@@ -956,6 +988,49 @@ fun ScheduleEditDialog(
                 )
             }
         }
+
+        // === 修复：弹窗内 SnackbarHost（显示保存失败/校验提示，不再被宿主页遮挡）===
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 96.dp)
+        )
+        }
+    }
+}
+
+/**
+ * 排课记忆下拉项：点击选中该历史值，长按删除该条记忆。
+ * 自定义 Row + combinedClickable（DropdownMenuItem 不支持长按），视觉与菜单项一致。
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ScheduleMemoryMenuItem(
+    mem: ScheduleMemory,
+    onSelect: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = onSelect,
+                onLongClick = onDelete
+            )
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            mem.value,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyLarge
+        )
+        Text(
+            "长按删除",
+            style = MaterialTheme.typography.labelSmall,
+            color = appOutline()
+        )
     }
 }
 
@@ -1227,9 +1302,9 @@ private fun loadImageBitmapFromFile(path: String): androidx.compose.ui.graphics.
  */
 @Composable
 private fun editDialogFieldColors(): TextFieldColors {
-    val container = Color(0xFFF0F0F0)
-    val labelDark = Color(0xFF1A1A1A)
-    val accent = Color(0xFFFF6B47)
+    val container = appSurfaceVariant()
+    val labelDark = appOnSurface()
+    val accent = appPrimary()
     return OutlinedTextFieldDefaults.colors(
         focusedContainerColor = container,
         unfocusedContainerColor = container,

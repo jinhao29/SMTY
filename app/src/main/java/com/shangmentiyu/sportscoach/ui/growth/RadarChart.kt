@@ -3,6 +3,7 @@ package com.shangmentiyu.sportscoach.ui.growth
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -20,8 +21,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
-import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
-import com.shangmentiyu.sportscoach.ui.theme.LightSecondary
+import com.shangmentiyu.sportscoach.ui.theme.appPrimary
+import com.shangmentiyu.sportscoach.ui.theme.appSecondary
 
 /**
  * 银河星空风格五维雷达图。
@@ -37,7 +38,10 @@ fun RadarChart(
     modifier: Modifier = Modifier
 ) {
     val textMeasurer = rememberTextMeasurer()
-    val labelStyle = TextStyle(color = Color(0xFFE2E8F0), fontSize = 11.sp)
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    val primaryColor = appPrimary()
+    val secondaryColor = appSecondary()
+    val labelStyle = TextStyle(color = onSurface.copy(alpha = 0.85f), fontSize = 11.sp)
 
     Box(modifier = modifier.size(240.dp), contentAlignment = Alignment.Center) {
         Canvas(modifier = Modifier.size(240.dp)) {
@@ -47,7 +51,7 @@ fun RadarChart(
             val angleStep = (2 * Math.PI / sides).toFloat()
 
             // === 1. 绘制同心网格（5层） ===
-            val gridColor = Color.White.copy(alpha = 0.12f)
+            val gridColor = onSurface.copy(alpha = 0.12f)
             for (layer in 1..5) {
                 val r = radius * layer / 5f
                 val path = Path()
@@ -67,7 +71,7 @@ fun RadarChart(
                 val x = center.x + radius * Math.cos(angle).toFloat()
                 val y = center.y + radius * Math.sin(angle).toFloat()
                 drawLine(
-                    color = Color.White.copy(alpha = 0.15f),
+                    color = onSurface.copy(alpha = 0.15f),
                     start = center,
                     end = Offset(x, y),
                     strokeWidth = 1f
@@ -75,7 +79,7 @@ fun RadarChart(
             }
 
             // === 3. 绘刻度数字（20/40/60/80/100） ===
-            val scaleStyle = TextStyle(color = Color.White.copy(alpha = 0.35f), fontSize = 9.sp)
+            val scaleStyle = TextStyle(color = onSurface.copy(alpha = 0.35f), fontSize = 9.sp)
             for (layer in 1..5) {
                 val value = layer * 20
                 val r = radius * layer / 5f
@@ -101,11 +105,11 @@ fun RadarChart(
             }
             dataPath.close()
 
-            // 渐变填充（青蓝→紫色）
+            // 渐变填充（珊瑚橙）
             drawPath(
                 path = dataPath,
                 brush = Brush.radialGradient(
-                    colors = listOf(LightPrimary.copy(alpha = 0.45f), LightSecondary.copy(alpha = 0.25f)),
+                    colors = listOf(primaryColor.copy(alpha = 0.45f), secondaryColor.copy(alpha = 0.25f)),
                     center = center,
                     radius = radius
                 )
@@ -113,14 +117,14 @@ fun RadarChart(
             // 边线
             drawPath(
                 path = dataPath,
-                color = LightPrimary,
+                color = primaryColor,
                 style = Stroke(width = 2f)
             )
 
             // === 5. 顶点圆点 ===
             for (point in vertexPoints) {
                 drawCircle(
-                    color = LightPrimary,
+                    color = primaryColor,
                     radius = 4f,
                     center = point
                 )
@@ -147,7 +151,7 @@ fun RadarChart(
                 )
                 // 标签下方显示数值
                 val valueText = "${values[i].toInt()}"
-                val valueStyle = TextStyle(color = LightPrimary, fontSize = 10.sp)
+                val valueStyle = TextStyle(color = primaryColor, fontSize = 10.sp)
                 val valueMeasured = textMeasurer.measure(AnnotatedString(valueText), valueStyle)
                 drawText(
                     textLayoutResult = valueMeasured,

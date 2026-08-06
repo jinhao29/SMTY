@@ -66,12 +66,14 @@ import com.shangmentiyu.sportscoach.ui.dailyplan.DailyPlanViewModel
 import com.shangmentiyu.sportscoach.ui.operation.OperationViewModel
 import com.shangmentiyu.sportscoach.ui.schedule.ScheduleEditDialog
 import com.shangmentiyu.sportscoach.ui.theme.PrimaryButton
+import com.shangmentiyu.sportscoach.ui.theme.ScheduleListSkeleton
 import com.shangmentiyu.sportscoach.ui.theme.SecondaryButton
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appBackground
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
+import com.shangmentiyu.sportscoach.ui.theme.appPrimaryContainer
 
 /**
  * 课前准备 Tab：展示选定日期的排课时间线。
@@ -100,6 +102,8 @@ fun PreClassTab(
     val schedules by dailyVm.schedules.collectAsStateWithLifecycle()
     val lessons by dailyVm.lessons.collectAsStateWithLifecycle()
     val dayOfWeek by dailyVm.dayOfWeek.collectAsStateWithLifecycle()
+    // === v48 终极打磨：排课列表首帧加载标记（骨架屏） ===
+    val loaded by dailyVm.loaded.collectAsStateWithLifecycle()
 
     var editingScheduleId by remember { mutableStateOf<String?>(null) }
     // 收集编辑中的排课数据：仅当数据加载完成（editing != null）时才渲染编辑对话框，
@@ -175,6 +179,12 @@ fun PreClassTab(
         contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 160.dp),
         verticalArrangement = Arrangement.spacedBy(Spacing.md)
     ) {
+        // === v48 终极打磨：首帧骨架屏（替代转圈/闪空态） ===
+        if (!loaded) {
+            item(key = "skeleton") {
+                ScheduleListSkeleton()
+            }
+        } else {
         // 日期切换器
         item(key = "date_switcher") {
             IosCard {
@@ -192,11 +202,11 @@ fun PreClassTab(
                         IconButton(onClick = { dailyVm.previousDay() }) {
                             Icon(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, contentDescription = "前一天")
                         }
-                        // 日期胶囊：浅珊瑚橙背景 #FFEBE6 + 珊瑚橙文字 #FF6B47
+                        // 日期胶囊：浅珊瑚橙背景 + 珊瑚橙文字
                         Box(
                             modifier = Modifier
                                 .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
-                                .background(Color(0xFFFFEBE6))
+                                .background(appPrimaryContainer())
                                 .padding(horizontal = 24.dp, vertical = 8.dp),
                             contentAlignment = Alignment.Center
                         ) {
@@ -229,7 +239,7 @@ fun PreClassTab(
                         Box(
                             modifier = Modifier
                                 .clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
-                                .background(Color(0xFFFFEBE6))
+                                .background(appPrimaryContainer())
                                 .clickable { dailyVm.goToday() }
                                 .padding(horizontal = 16.dp, vertical = 8.dp)
                         ) {
@@ -245,7 +255,7 @@ fun PreClassTab(
                         Box(
                             modifier = Modifier
                                 .clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
-                                .background(Color(0xFFFFEBE6))
+                                .background(appPrimaryContainer())
                                 .clickable { onSchedule() }
                                 .padding(horizontal = 16.dp, vertical = 8.dp)
                         ) {
@@ -440,6 +450,7 @@ fun PreClassTab(
                     }
                 }
             }
+        }
         }
     }
 

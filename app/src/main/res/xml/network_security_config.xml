@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    v47 修复：放行局域网明文 HTTP（MomentUploader / pingDesktop 依赖）。
+    Android 9+ 默认禁止 cleartext，导致手机→PC 局域网同步（http://192.168.x.x）
+    静默失败（CleartextNotPermittedException）。
+    网络安全配置不支持 IP 段/CIDR，只能按域名放行，而桌面端 IP 由用户在设置中
+    自行填写（任意局域网 IP），无法在构建期枚举——故全局放行 cleartext。
+    风险权衡：App 的全部网络请求仅两类——GitHub（HTTPS，不受影响）与
+    用户显式配置的局域网同步（可选 token 鉴权），全局放行不扩大实际攻击面。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

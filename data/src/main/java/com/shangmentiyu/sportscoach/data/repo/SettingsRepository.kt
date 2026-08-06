@@ -52,6 +52,13 @@ class SettingsRepository(private val context: Context) {
 
         // === 悬浮窗开关（默认关闭） ===
         private val KEY_FLOATING_WINDOW_ENABLED = booleanPreferencesKey("floating_window_enabled")
+
+        // === 深色模式（v48 新增，默认跟随系统） ===
+        // 三态："system" 跟随系统 / "dark" 强制深色 / "light" 强制亮色
+        private val KEY_DARK_THEME = stringPreferencesKey("dark_theme")
+        private const val DARK_THEME_SYSTEM = "system"
+        private const val DARK_THEME_DARK = "dark"
+        private const val DARK_THEME_LIGHT = "light"
     }
 
     val coach: Flow<String> = context.dataStore.data.map { it[KEY_COACH] ?: "" }
@@ -161,6 +168,53 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setFloatingWindowEnabled(value: Boolean) {
         context.dataStore.edit { it[KEY_FLOATING_WINDOW_ENABLED] = value }
+    }
+
+    // === 深色模式（v48 新增） ===
+
+    /**
+     * 深色模式偏好（Flow 形式）。
+     *
+     * - null：跟随系统（默认，DataStore 中未配置或为 "system"）
+     * - true：强制深色
+     * - false：强制亮色
+     *
+     * UI 通过 [com.shangmentiyu.sportscoach.ui.theme.SportsCoachTheme]
+     * 的 darkTheme 参数消费本值，切换即时生效并持久化。
+     */
+    val darkTheme: Flow<Boolean?> =
+        context.dataStore.data.map {
+            when (it[KEY_DARK_THEME] ?: DARK_THEME_SYSTEM) {
+                DARK_THEME_DARK -> true
+                DARK_THEME_LIGHT -> false
+                else -> null
+            }
+        }
+
+    /** 同步读取深色模式偏好（null = 跟随系统） */
+    suspend fun getDarkTheme(): Boolean? =
+        context.dataStore.data.map {
+            when (it[KEY_DARK_THEME] ?: DARK_THEME_SYSTEM) {
+                DARK_THEME_DARK -> true
+                DARK_THEME_LIGHT -> false
+                else -> null
+            }
+        }.first()
+
+    /**
+     * 设置深色模式偏好。
+     *
+     * - null：跟随系统（默认）
+     * - true：强制深色
+     * - false：强制亮色
+     */
+    suspend fun setDarkTheme(value: Boolean?) {
+        val stored = when (value) {
+            true -> DARK_THEME_DARK
+            false -> DARK_THEME_LIGHT
+            null -> DARK_THEME_SYSTEM
+        }
+        context.dataStore.edit { it[KEY_DARK_THEME] = stored }
     }
 }
 

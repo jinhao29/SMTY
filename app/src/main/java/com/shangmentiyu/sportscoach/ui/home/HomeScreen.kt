@@ -50,7 +50,10 @@ import com.shangmentiyu.sportscoach.data.model.LessonPackage
 import com.shangmentiyu.sportscoach.data.model.Student
 import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
+import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
+import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
+import com.shangmentiyu.sportscoach.ui.theme.appSurfaceVariant
 
 /**
  * 主页：4 Tab 结构（课前准备 / 课时管理 / 课后反馈 / 学员列表）。
@@ -194,12 +197,12 @@ private fun RowScope.HomeTabItem(
     // === 动画优化：Tab 切换颜色用 animateColorAsState 平滑过渡 ===
     // 原实现硬切换，切换瞬间有闪烁感；200ms tween 让选中/未选中过渡更丝滑
     val bgColor by androidx.compose.animation.animateColorAsState(
-        targetValue = if (isSelected) appPrimary() else Color(0xFFF0F0F0),
+        targetValue = if (isSelected) appPrimary() else appSurfaceVariant(),
         animationSpec = androidx.compose.animation.core.tween(durationMillis = 200),
         label = "tab_bg"
     )
     val textColor by androidx.compose.animation.animateColorAsState(
-        targetValue = if (isSelected) Color.White else Color(0xFF6B6B6B),
+        targetValue = if (isSelected) Color.White else appOnSurfaceVariant(),
         animationSpec = androidx.compose.animation.core.tween(durationMillis = 200),
         label = "tab_text"
     )
@@ -282,7 +285,7 @@ private fun ExpiryBanner(
             Text(
                 text = bannerText,
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFF1A1A1A),    // v40 任务2c：深黑文字（高对比度）
+                color = appOnSurface(),    // v40 任务2c：深黑文字（高对比度）
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.weight(1f, fill = false)
             )

@@ -64,6 +64,9 @@ import com.shangmentiyu.sportscoach.ui.theme.ScoreGood
 import com.shangmentiyu.sportscoach.ui.theme.ScorePass
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
+import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
+import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
+import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 
 /**
  * 查看成绩 Tab：学员选择 + 概览统计 + 成绩对比 + 按项目分组的历史成绩（含进步/退步趋势 + 编辑/删除）。
@@ -214,16 +217,16 @@ private fun StudentPicker(
             Spacer(Modifier.width(Spacing.md))
             Column(modifier = Modifier.weight(1f)) {
                 Text("当前学员", style = MaterialTheme.typography.labelMedium,
-                    color = Color(0xFF6B6B6B))
+                    color = appOnSurfaceVariant())
                 Text(selected ?: "未选择", style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF1A1A1A))
+                    color = appOnSurface())
             }
             // 灰色指示箭头（展开时向下，收起时向右）
             Icon(
                 if (expanded) Icons.Outlined.ExpandMore else Icons.Outlined.ChevronRight,
                 contentDescription = null,
-                tint = Color(0xFF6B6B6B),
+                tint = appOnSurfaceVariant(),
                 modifier = Modifier.size(22.dp)
             )
         }
@@ -305,10 +308,10 @@ private fun StatCell(
             style = if (small) MaterialTheme.typography.titleMedium
                    else MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFF1A1A1A)
+            color = appOnSurface()
         )
         Text(label, style = MaterialTheme.typography.labelSmall,
-            color = Color(0xFF6B6B6B))
+            color = appOnSurfaceVariant())
     }
 }
 
@@ -588,10 +591,10 @@ private fun EmptyHint(
             }
             Spacer(Modifier.height(Spacing.md))
             Text(title, style = MaterialTheme.typography.titleMedium,
-                color = Color(0xFF1A1A1A))
+                color = appOnSurface())
             Spacer(Modifier.height(Spacing.xs))
             Text(subtitle, style = MaterialTheme.typography.labelMedium,
-                color = Color(0xFF6B6B6B))
+                color = appOnSurfaceVariant())
         }
     }
 }

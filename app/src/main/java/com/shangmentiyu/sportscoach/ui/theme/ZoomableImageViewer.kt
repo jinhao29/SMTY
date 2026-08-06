@@ -117,7 +117,7 @@ fun ZoomableImageViewer(
                 Icon(
                     imageVector = Icons.Filled.Close,
                     contentDescription = "关闭",
-                    tint = Color(0xFFFF6B47),  // 珊瑚橙，与主题主色一致
+                    tint = appPrimary(),  // 珊瑚橙，与主题主色一致
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -259,7 +259,7 @@ private fun ZoomableImageContent(
                 // === 加载中：珊瑚橙 CircularProgressIndicator ===
                 CircularProgressIndicator(
                     modifier = Modifier.size(36.dp),
-                    color = Color(0xFFFF6B47),  // 珊瑚橙
+                    color = appPrimary(),  // 珊瑚橙
                     strokeWidth = 2.dp
                 )
             }

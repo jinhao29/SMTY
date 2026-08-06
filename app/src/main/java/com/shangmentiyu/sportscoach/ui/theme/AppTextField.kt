@@ -31,9 +31,10 @@ import androidx.compose.ui.unit.dp
  */
 @Composable
 fun appTextFieldColors(): TextFieldColors {
-    val container = if (isSystemInDarkTheme()) NightSurfaceVariant else Color(0xFFF0F0F0)
-    val label = if (isSystemInDarkTheme()) NightOnSurfaceVariant else LightOnSurfaceVariant
-    val accent = if (isSystemInDarkTheme()) NightPrimary else LightPrimary
+    // v48：统一读取主题令牌，跟随手动深色模式开关
+    val container = appSurfaceVariant()
+    val label = appOnSurfaceVariant()
+    val accent = appPrimary()
     return OutlinedTextFieldDefaults.colors(
         // 背景浅灰（设计系统指定 #F0F0F0）
         focusedContainerColor = container,
