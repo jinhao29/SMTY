@@ -38,6 +38,9 @@ class StudentRepository(
     /** 活跃学员列表（已过滤 isActive=0 的软删除学员） */
     fun getAllStudents(): Flow<List<Student>> = dao.getAll()
 
+    /** 活跃学员列表（显式命名，语义同 [getAllStudents]：WHERE isActive = 1） */
+    fun getActiveStudents(): Flow<List<Student>> = dao.getAll()
+
     /** 全量学员列表（含已软删除的），用于历史报表 / 数据完整性核对 */
     fun getAllStudentsIncludeDeleted(): Flow<List<Student>> = dao.getAllIncludeDeleted()
 

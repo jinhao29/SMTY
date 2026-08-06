@@ -37,6 +37,7 @@ import com.shangmentiyu.sportscoach.ui.theme.LightOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appOutline
+import com.shangmentiyu.sportscoach.ui.theme.appSurface
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
@@ -90,7 +91,7 @@ fun ScheduleCalendar(
                 spotColor = Color(0x14000000)
             )
             .clip(RoundedCornerShape(24.dp))
-            .background(Color.White)
+            .background(appSurface())
             .padding(horizontal = 16.dp, vertical = 20.dp)
     ) {
         // === 1. 顶部头部：月份 + 下拉指示 ===

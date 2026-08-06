@@ -15,8 +15,7 @@ import com.shangmentiyu.sportscoach.data.repo.OperationRepository
 import com.shangmentiyu.sportscoach.data.repo.ScheduleMemoryRepository
 import com.shangmentiyu.sportscoach.data.repo.ScheduleRepository
 import com.shangmentiyu.sportscoach.data.repo.StudentRepository
-import com.shangmentiyu.sportscoach.domain.scheduling.CanScheduleLessonsUseCase
-import com.shangmentiyu.sportscoach.domain.scheduling.SchedulingDecision
+import com.shangmentiyu.sportscoach.domain.scheduling.ValidateScheduleUseCase
 import com.shangmentiyu.sportscoach.ui.schedule.ScheduleForm
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -64,8 +63,8 @@ class OperationViewModel(
     private val memoryRepo: ScheduleMemoryRepository,
     private val pkgRepo: LessonPackageRepository,
     private val coachRepo: CoachRepository,
-    // v46 架构层二：排课三段硬决策 UseCase（从 ViewModel 抽离的领域逻辑）
-    private val schedulingDecision: CanScheduleLessonsUseCase
+    // 排课校验唯一入口：isDateValid（购买日期）+ hasRemainingCapacity（额度）
+    private val validateSchedule: ValidateScheduleUseCase
 ) : ViewModel() {
 
     /**
@@ -305,6 +304,37 @@ class OperationViewModel(
     fun cancelEdit() { _editingSchedule.value = null }
 
     /**
+     * 保存前统一校验（dialog 与 saveSchedule 共用同一入口）：
+     * 日期不得早于今天 / 早于购买日期 / 额度已满，任一不满足返回用户可读错误文案。
+     */
+    suspend fun validateScheduleForSave(form: ScheduleForm): String? {
+        if (form.studentName.isBlank()) return null
+        val zone = java.time.ZoneId.systemDefault()
+        val todayStr = LocalDate.now().format(dateFormatter)
+        val weekStartLocal = _weekStart.value.toInstant().atZone(zone).toLocalDate()
+        val days = if (form.daysOfWeek.isNotEmpty()) form.daysOfWeek.sorted() else listOf(form.dayOfWeek)
+        val isEdit = _editingSchedule.value != null
+        for (dow in days) {
+            val dateStr = weekStartLocal.plusDays((dow - 1).toLong()).format(dateFormatter)
+            if (dateStr < todayStr) {
+                return "排课生效日期不能早于今天，请在未来的日期排课。"
+            }
+            if (!validateSchedule.isDateValid(form.studentName, dateStr)) {
+                return "无法排课：所选日期早于购买日期"
+            }
+            val capacityOk = if (isEdit) {
+                pkgRepo.getEffectiveRemainingLessons(form.studentName, dateStr) > 0
+            } else {
+                validateSchedule.hasRemainingCapacity(form.studentName, dateStr)
+            }
+            if (!capacityOk) {
+                return "无法排课：该学员在排课日期前尚未拥有有效课时包或额度已满。"
+            }
+        }
+        return null
+    }
+
+    /**
      * 保存排课（新建或更新），支持训练内容/颜色/上课器材完整字段。
      *
      * 多选周几支持（新建模式）：
@@ -335,50 +365,11 @@ class OperationViewModel(
                 val editing = _editingSchedule.value
                 val coachKey = form.coachName.ifBlank { "默认教练" }
 
-                // === Bug 1 修复：排课日期校验（从源头杜绝过去日期的排课）===
-                // 用户明确要求：若用户选择的 startDate 小于今天，直接拦截并提示
-                // "排课生效日期不能早于今天，请在未来的日期排课。"
-                //
-                // 与原"自动顺延到下周"逻辑相比，本实现改为"直接拦截"：
-                // - 原逻辑：本周日期已过则顺延到下周同 dayOfWeek（隐性纠正用户输入）
-                // - 新逻辑：本周日期已过则直接拒绝，由用户主动切到未来周再排
-                //   → 避免用户在历史周查看时误排过去日期
-                //
-                // 同时保留课时包生效日期校验：
-                // 学员在排课日期必须拥有有效课时包（purchaseDate <= dateStr && 未过期 && 剩余 > 0）
-                val targetDaysForCheck = if (form.daysOfWeek.isNotEmpty()) {
-                    form.daysOfWeek.sorted()
-                } else {
-                    listOf(form.dayOfWeek)
-                }
-                val todayLocal = LocalDate.now()
-                val zone = java.time.ZoneId.systemDefault()
-                val weekStartLocal = _weekStart.value.toInstant().atZone(zone).toLocalDate()
-                for (dow in targetDaysForCheck) {
-                    // weekStart 是周一，dayOfWeek 1=周一 ... 7=周日
-                    val scheduleDate = weekStartLocal.plusDays((dow - 1).toLong())
-                    val dateStr = scheduleDate.format(dateFormatter)
-                    // === 强制边界校验：排课生效日期不能早于今天 ===
-                    if (scheduleDate.isBefore(todayLocal)) {
-                        _toast.value = "排课生效日期不能早于今天，请在未来的日期排课。"
-                        return@safeLaunch
-                    }
-                    // === v46 综合整治：购买日期前置拦截 ===
-                    // 排课日期早于学员最早购买课时包日期 → 直接中断保存，绝不入库
-                    val earliestPurchase = withContext(Dispatchers.IO) {
-                        opRepo.earliestPurchaseDateOf(form.studentName)
-                    }
-                    if (earliestPurchase != null && dateStr < earliestPurchase) {
-                        _toast.value = "无法排课：该日期早于购买日期"
-                        return@safeLaunch
-                    }
-                    val effectiveRemaining = withContext(Dispatchers.IO) {
-                        pkgRepo.getEffectiveRemainingLessons(form.studentName, dateStr)
-                    }
-                    if (effectiveRemaining <= 0) {
-                        _toast.value = "无法排课：该学员在排课日期前尚未拥有有效课时包。"
-                        return@safeLaunch
-                    }
+                // 统一校验：ValidateScheduleUseCase（购买日期前置 / 额度封顶），失败直接拦截不入库
+                val validationError = validateScheduleForSave(form)
+                if (validationError != null) {
+                    _toast.value = validationError
+                    return@safeLaunch
                 }
 
                 // 保存时间/地点记忆（重复则更新 updatedAt）
@@ -584,11 +575,21 @@ class OperationViewModel(
                 // 周几中文映射，用于生成可读警告文案
                 val dayNames = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
 
-                // === v46 综合整治：三段绝对硬逻辑（余额 / 额度封顶 / 购买日前置） ===
-                // 每步实时查询（studentId 双通道），不再依赖跨周累计缓存：
-                // - 有 endDate 的排课由 endDate 边界控制，不参与额度跟踪
-                // - 无 endDate 的永久长期排课走下方三段硬校验，杜绝超额排课
+                // 逐周生成前预计算每学员可用额度：futureAvailable = totalRemaining - pendingConsumed
+                // （pastConsumed 已体现在 remainingLessons 中，不重复扣减）
+                val students = longTerm.map { it.studentName }.distinct()
+                val futureAvailableByStudent = students.associateWith { name ->
+                    validateSchedule.futureAvailableLessons(name, todayStr)
+                }
+                val totalRemainingByStudent = students.associateWith { name ->
+                    opRepo.getEffectiveRemainingLessons(name, todayStr)
+                }
+                val weekGenerated = mutableMapOf<String, Int>()
 
+                // 超限停止：每学员可用额度 = futureAvailable（totalRemaining - 已占用）。
+                // 学员额度用尽（本周已生成 + 已占用 >= futureAvailable）后立即截断该学员
+                // 本周剩余日期的生成，坚决不再往后排一周；其他学员额度未满则继续正常生成。
+                val exhausted = mutableSetOf<String>()
                 // 遍历本周 7 天
                 for (offset in 0..6) {
                     val dayCal = Calendar.getInstance().apply {
@@ -596,80 +597,39 @@ class OperationViewModel(
                         add(Calendar.DATE, offset)
                     }
                     val dayOfWeek = dayCal.get(Calendar.DAY_OF_WEEK).let { if (it == 1) 7 else it - 1 }
-                    // 修复：原代码使用未定义的 sdf，改为用 dateFormatter 格式化 LocalDate
                     val dateStr = dayCal.toInstant().atZone(zone).toLocalDate().format(dateFormatter)
-                    // === 强制绝对边界校验（用户明确要求）===
-                    // 第一行必须是日期边界过滤：绝对禁止为任何已过去的日期生成或重生成 Lesson 记录。
-                    // 此处用 continue 跳过整个过去日期，比原 forEach 内 return@forEach 更早地截断流程，
-                    // 避免对过去日期执行 hasLessonForScheduleOnDate 查重 / 余额查询 / 警告收集等无效操作。
+                    // 绝对禁止为已过去的日期生成或重生成 Lesson 记录
                     if (dateStr < todayStr) continue
 
-                    // === Bug 2 修复（防御性）===
-                    // longTerm 列表虽已过滤 isLongTerm=true，但为防止未来重构时
-                    // 误把非长期排课纳入循环（导致"不勾选长期排课也生成课时"的 Bug 复现），
-                    // 在循环第一行强制判断 isLongTerm，非长期排课直接 continue。
-                    // 同时这也是用户明确要求的修复点。
                     longTerm.filter { it.dayOfWeek == dayOfWeek }.forEach { sched ->
-                        if (!sched.isLongTerm) return@forEach  // Bug 2 核心修复点
+                        val name = sched.studentName
+                        // 该学员额度已用尽：本周剩余日期全部截断，不补排
+                        if (name in exhausted) return@forEach
+                        if (!sched.isLongTerm) return@forEach
 
-                        // === endDate 边界检查（按课时包排课的终止日期）===
-                        // AutoScheduleFromPackage 创建的 Schedule 携带 endDate 字段，
-                        // 表示"排到课时上完那一周为止"。超过 endDate 后必须停止生成新课时，
-                        // 否则课时包已用尽但排课无限继续（用户报告的"排课依旧无限次数"Bug）。
-                        // endDate 为空表示永久长期排课（原行为，不受影响）。
-                        if (sched.endDate.isNotBlank() && dateStr > sched.endDate) {
-                            return@forEach
-                        }
-
-                        // === startDate 购买日检查（购买当日之前不允许排课）===
-                        // AutoScheduleFromPackage 创建的 Schedule 携带 startDate 字段（=购买日），
-                        // 购买日之前的日期不生成 Lesson，确保"购买当日之前所有日期不允许排课"。
-                        // startDate 为空表示旧数据或手动排课，不受此约束（向后兼容）。
-                        if (sched.startDate.isNotBlank() && dateStr < sched.startDate) {
-                            return@forEach
-                        }
-
-                        // 查重：同一学员+日期+时间已有记录则跳过
+                        if (sched.endDate.isNotBlank() && dateStr > sched.endDate) return@forEach
+                        if (sched.startDate.isNotBlank() && dateStr < sched.startDate) return@forEach
                         if (opRepo.hasLessonForScheduleOnDate(sched.studentName, dateStr, sched.startTime)) {
                             return@forEach
                         }
 
-                        // === 有 endDate 的 Schedule：跳过余额检查，直接生成 ===
-                        // AutoScheduleFromPackage 创建的 Schedule 携带 endDate 字段，
-                        // endDate 已通过 AutoScheduleCalculator 基于剩余课时精确计算，
-                        // endDate 之前生成的 Lesson 数量 = 创建时的 remainingLessons。
-                        // 跳过余额检查的原因：
-                        //   1. 余额检查中的 activePkgs 是缓存值，签退后不更新，
-                        //      可能错误阻止 endDate 之前生成 Lesson
-                        //   2. endDate 已保证数量正确，无需余额检查二次限制
-                        //   3. "每排一天自动少一节课"由 endDate 边界检查实现：
-                        //      超过 endDate 后不再生成 = 课时用完
-                        // 无 endDate 的 Schedule（永久长期排课）继续使用余额检查。
-                        if (sched.endDate.isNotBlank()) {
-                            opRepo.generateLongTermLesson(sched, dateStr)
+                        // 超限停止：本周已生成 + 已占用 >= 可用额度时，截断该学员后续所有排课
+                        val dayLabel = dayNames.getOrElse(dayOfWeek - 1) { "周$dayOfWeek" }
+                        val usedBudget = weekGenerated[name] ?: 0
+                        val futureAvailable = futureAvailableByStudent[name] ?: 0
+                        if (usedBudget >= futureAvailable) {
+                            warnings.add("${name} $dayLabel 余额不足（剩余${totalRemainingByStudent[name] ?: 0} 节）")
+                            exhausted += name
                             return@forEach
                         }
 
-                        // === 无 endDate 的永久长期排课：领域 UseCase 三段决策（v46 架构层二）===
-                        // 三段硬逻辑已抽离到 domain/scheduling/CanScheduleLessonsUseCase，
-                        // ViewModel 只依据决策结果生成课时或提示文案，不再持有计算细节
-                        val dayLabel = dayNames.getOrElse(dayOfWeek - 1) { "周$dayOfWeek" }
-                        when (val decision = schedulingDecision.invoke(sched.studentName, dateStr, todayStr)) {
-                            is SchedulingDecision.Allowed ->
-                                opRepo.generateLongTermLesson(sched, dateStr)
-                            is SchedulingDecision.NoPackage ->
-                                if (dateStr >= todayStr) warnings.add("${sched.studentName} $dayLabel 无有效课时包")
-                            is SchedulingDecision.QuotaExhausted ->
-                                if (dateStr >= todayStr) warnings.add("${sched.studentName} $dayLabel 余额不足（剩余${decision.totalRemaining} 节）")
-                            is SchedulingDecision.BeforePurchase ->
-                                Unit // 购买日前置：静默跳过，不生成
-                        }
+                        opRepo.generateLongTermLesson(sched, dateStr)
+                        weekGenerated[name] = usedBudget + 1
                     }
                 }
 
                 // v24 优化2：将收集到的余额不足警告推送给 UI
                 if (warnings.isNotEmpty()) {
-                    // 去重：同一学员同一天可能因多个时间段的排课触发多次
                     _noBalanceWarnings.value = warnings.distinct()
                 }
             }

@@ -52,7 +52,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.shangmentiyu.sportscoach.data.db.AppDatabase
@@ -132,7 +134,7 @@ internal fun PreClassScheduleCard(
     var showLessonDetail by remember { mutableStateOf(false) }
 
     IosCard {
-        Column(modifier = Modifier.padding(Spacing.md)) {
+        Column(modifier = Modifier.padding(Spacing.cardPadding)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -145,8 +147,10 @@ internal fun PreClassScheduleCard(
                 )
                 Text(
                     "${schedule.startTime} - ${schedule.endTime()}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
                     color = primaryColor
                 )
                 Spacer(Modifier.weight(1f))
@@ -172,21 +176,29 @@ internal fun PreClassScheduleCard(
                     )
                 }
             }
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(Spacing.sm))
             Text(
                 schedule.studentName,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                ),
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
             )
 
             if (schedule.location.isNotBlank()) {
-                Spacer(Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Spacer(Modifier.height(Spacing.sm))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Icon(Icons.Outlined.LocationOn, contentDescription = null,
                         tint = onSurfaceVariantColor,
                         modifier = Modifier.size(14.dp).padding(end = 4.dp))
                     Text("地点：${schedule.location}",
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 14.sp),
                         color = onSurfaceVariantColor)
                 }
             }
@@ -195,9 +207,11 @@ internal fun PreClassScheduleCard(
                 append(schedule.lessonType)
                 if (schedule.coachName.isNotBlank()) append(" · ${schedule.coachName}")
             }
-            Spacer(Modifier.height(4.dp))
-            Text(info, style = MaterialTheme.typography.bodySmall,
-                color = onSurfaceVariantColor)
+            Spacer(Modifier.height(Spacing.sm))
+            Text(info, style = MaterialTheme.typography.bodySmall.copy(fontSize = 14.sp),
+                color = onSurfaceVariantColor,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center)
 
             if (contentItems.isNotEmpty()) {
                 Spacer(Modifier.height(Spacing.sm))

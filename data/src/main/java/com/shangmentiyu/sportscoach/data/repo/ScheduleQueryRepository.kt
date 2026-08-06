@@ -12,6 +12,8 @@ import com.shangmentiyu.sportscoach.data.model.Lesson
 import com.shangmentiyu.sportscoach.data.model.LessonPackage
 import com.shangmentiyu.sportscoach.data.model.Schedule
 import com.shangmentiyu.sportscoach.domain.scheduling.EffectiveRemainingCalculator
+import com.shangmentiyu.sportscoach.domain.scheduling.ScheduleValidationSource
+import com.shangmentiyu.sportscoach.domain.scheduling.ValidateScheduleUseCase
 import kotlinx.coroutines.flow.first
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -37,7 +39,13 @@ class ScheduleQueryRepository(
     private val pkgDao: LessonPackageDao,
     private val studentDao: StudentDao,
     private val db: AppDatabase?
-) {
+) : ScheduleValidationSource {
+
+    /** 集中校验：手动保存 / 长期生成统一走 ValidateScheduleUseCase */
+    private val validate = ValidateScheduleUseCase(this)
+
+    private fun todayStr(): String =
+        LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault()))
 
     /**
      * === v45：一键修正历史错误排课 ===
@@ -180,11 +188,10 @@ class ScheduleQueryRepository(
         // === Bug 1 修复：排课生效日期不得早于学员首次购买课时包日期 ===
         // 校验放在事务与写入之前，异常向上抛给 ViewModel 层转为用户提示，
         // 避免被下方 try-catch 吞掉（否则 UI 只会收到笼统的"保存失败"）。
-        if (schedule.startDate.isNotBlank()) {
-            val earliestPurchase = earliestPurchaseDateOf(schedule.studentName)
-            if (earliestPurchase != null && schedule.startDate < earliestPurchase) {
-                throw IllegalArgumentException("无法排课：所选日期早于该学员首次购买课时包的日期")
-            }
+        if (schedule.startDate.isNotBlank() &&
+            !validate.isDateValid(schedule.studentName, schedule.startDate)
+        ) {
+            throw IllegalArgumentException("无法排课：所选日期早于该学员首次购买课时包的日期")
         }
         val database = db
         return try {
@@ -204,25 +211,40 @@ class ScheduleQueryRepository(
                         Log.i("DataFlow",
                             "saveSchedule 更新成功：id=${schedule.id}, student=${schedule.studentName}")
                     } else {
-                        // 不存在 → 新增
+                        // 不存在 → 新增。集中校验（步骤一）：新增前强制额度校验，
+                        // 额度已满直接拦截，绝不落库
+                        if (!validate.hasRemainingCapacity(
+                                schedule.studentName,
+                                schedule.startDate.ifBlank { todayStr() }
+                            )
+                        ) {
+                            throw IllegalStateException("无法排课：该学员课时额度已满")
+                        }
                         scheduleDao.insert(schedule)
                         Log.i("DataFlow",
                             "saveSchedule 新增成功：id=${schedule.id}, student=${schedule.studentName}")
                     }
                 }
-            } else {
-                // 降级：无事务支持，仍执行智能判断
-                val existing = scheduleDao.getById(schedule.id)
-                if (existing != null) {
-                    scheduleDao.update(schedule)
-                    Log.i("DataFlow",
-                        "saveSchedule 更新成功（无事务降级）：id=${schedule.id}")
                 } else {
-                    scheduleDao.insert(schedule)
-                    Log.i("DataFlow",
-                        "saveSchedule 新增成功（无事务降级）：id=${schedule.id}")
+                    // 降级：无事务支持，仍执行智能判断 + 集中校验
+                    val existing = scheduleDao.getById(schedule.id)
+                    if (existing != null) {
+                        scheduleDao.update(schedule)
+                        Log.i("DataFlow",
+                            "saveSchedule 更新成功（无事务降级）：id=${schedule.id}")
+                    } else {
+                        if (!validate.hasRemainingCapacity(
+                                schedule.studentName,
+                                schedule.startDate.ifBlank { todayStr() }
+                            )
+                        ) {
+                            throw IllegalStateException("无法排课：该学员课时额度已满")
+                        }
+                        scheduleDao.insert(schedule)
+                        Log.i("DataFlow",
+                            "saveSchedule 新增成功（无事务降级）：id=${schedule.id}")
+                    }
                 }
-            }
             // 保存成功后触发自动备份
             AutoBackupScheduler.notifyDataChange()
             true
@@ -298,11 +320,10 @@ class ScheduleQueryRepository(
      * @param fromDate 起始日期 YYYY-MM-DD（含）
      * @return true=仍有余额可排课；false=余额已用完
      */
-    suspend fun canScheduleMoreLessons(studentName: String, fromDate: String): Boolean {
-        val summary = getRemainingSummary(studentName)
-        val pendingCount = lessonDao.countUnconsumedFrom(studentName, fromDate)
-        return summary.totalRemaining > pendingCount
-    }
+    suspend fun canScheduleMoreLessons(studentName: String, fromDate: String): Boolean =
+        // 集中校验：与手动保存 / 长期生成统一走 ValidateScheduleUseCase，
+        // 消除原先分散在仓库内的余额计算歧义（getRemainingSummary + lessonDao.countUnconsumedFrom）
+        validate.hasRemainingCapacity(studentName, fromDate)
 
     /**
      * 统计学员从指定日期起未消课的课时数量。
@@ -312,7 +333,7 @@ class ScheduleQueryRepository(
      * @param fromDate 起始日期 YYYY-MM-DD（含）
      * @return 未消课的课时数量
      */
-    suspend fun countUnconsumedLessonsFrom(studentName: String, fromDate: String): Int {
+    override suspend fun countUnconsumedLessonsFrom(studentName: String, fromDate: String): Int {
         // v46：双通道统计（studentId 优先、studentName 回退，兼容旧数据）
         val sid = resolveStudentId(studentName)
         return lessonDao.countUnconsumedFromDual(sid, studentName, fromDate)
@@ -335,7 +356,7 @@ class ScheduleQueryRepository(
      * @param fromDate 起始日期 YYYY-MM-DD（含）
      * @return 长期自动生成且未签退的课时数量
      */
-    suspend fun countLongTermPendingFrom(studentName: String, fromDate: String): Int {
+    override suspend fun countLongTermPendingFrom(studentName: String, fromDate: String): Int {
         return lessonDao.countLongTermPendingFrom(studentName, fromDate)
     }
 
@@ -360,10 +381,8 @@ class ScheduleQueryRepository(
         // === Bug 1 修复：生成日 / 生效日不得早于学员首次购买课时包日期 ===
         // 兜底校验：正常路径下 ensureLongTermLessonsForWeek 已按 startDate /
         // 有效课时包过滤，此处为数据边界防御，违规直接抛异常阻止写入。
-        val earliestPurchase = earliestPurchaseDateOf(sched.studentName)
-        if (earliestPurchase != null &&
-            (dateStr < earliestPurchase ||
-                (sched.startDate.isNotBlank() && sched.startDate < earliestPurchase))
+        if (!validate.isDateValid(sched.studentName, dateStr) ||
+            (sched.startDate.isNotBlank() && !validate.isDateValid(sched.studentName, sched.startDate))
         ) {
             throw IllegalArgumentException("无法排课：所选日期早于该学员首次购买课时包的日期")
         }
@@ -392,10 +411,13 @@ class ScheduleQueryRepository(
      *
      * 执行流程（db 可用时整体包裹在单事务内，任一学员失败整体回滚）：
      * A. 遍历所有活跃学员（students.isActive = 1）
-     * B. 删除 startDate 早于首次购买日的长期排课模板（仅 schedules 表）
-     * C. 按当天有效课时包计算未来最大可排节数（[getEffectiveRemainingLessons]）
-     * D. 未来占位课时超过额度时删除多余占位，优先删除日期靠后的（升序后 takeLast）
-     * E. 清理后在剩余额度内自动重新生成未来两周排课（[regenerateLessonsForStudent]）
+     * B. 双通道 SQL 清理：
+     *    通道1：DELETE 该学员所有 startDate < 首次购买日的无效排课
+     *    通道2：DELETE 超出课时包总额的多余长排（仅保留按 startDate 升序的前 totalQuota 条）
+     * C. 按当天有效课时包计算未来最大可排节数（[getEffectiveRemainingLessons]），
+     *    未来占位课时（长期自动 + 未签退 + date >= today）超过额度时删除多余占位，优先删除日期靠后的
+     * D. 清理后在剩余额度内自动重新生成未来两周排课（[regenerateLessonsForStudent]，
+     *    等价于 ensureLongTermLessonsForWeek 的按周生成），用户可立即看到正确结果
      *
      * 绝对安全边界：
      * - 仅删除 schedules 表的错误长期排课模板；仅删除 lessons 表中
@@ -416,11 +438,12 @@ class ScheduleQueryRepository(
             val activeStudents = studentDao.getAll().first()
             for (student in activeStudents) {
                 val name = student.name
+                val sid = student.studentId
                 val earliestPurchase = earliestPurchaseDateOf(name)
+                val totalRemaining = getEffectiveRemainingLessons(name, todayStr)
                 var touched = false
 
-                // C/D. 清理未来多余占位课时（仅"长期自动 + 未签退 + date >= today"）
-                // 表访问顺序：lessons 先于 schedules，与全局约定保持一致
+                // 占位课时超额清理：仅"长期自动 + 未签退 + date >= today"，优先删除日期靠后的
                 val placeholders = getLessonsByStudentOnce(name)
                     .filter {
                         it.date >= todayStr &&
@@ -429,10 +452,8 @@ class ScheduleQueryRepository(
                     }
                     .sortedBy { it.date }
                 if (placeholders.isNotEmpty()) {
-                    val totalRemaining = getEffectiveRemainingLessons(name, todayStr)
                     val excess = placeholders.size - totalRemaining
                     if (excess > 0) {
-                        // 优先删除日期靠后的多余占位
                         placeholders.takeLast(excess).forEach {
                             lessonDao.deleteById(it.id)
                             deletedPlaceholders++
@@ -441,21 +462,28 @@ class ScheduleQueryRepository(
                     }
                 }
 
-                // B. 删除 startDate 早于首次购买日的长期排课模板（仅 schedules 表）
+                // 通道1：删除所有 startDate 早于首次购买日期的无效排课
                 if (earliestPurchase != null) {
-                    scheduleDao.getAllOnce()
-                        .filter {
-                            it.isActive && it.isLongTerm && it.studentName == name &&
-                                it.startDate.isNotBlank() && it.startDate < earliestPurchase
-                        }
-                        .forEach {
-                            scheduleDao.deleteById(it.id)
-                            deletedSchedules++
-                            touched = true
-                        }
+                    val c1 = scheduleDao.deleteSchedulesBeforeDateDual(sid, name, earliestPurchase)
+                    if (c1 > 0) {
+                        deletedSchedules += c1
+                        touched = true
+                    }
                 }
 
-                // E. 清理后在剩余额度内自动重新生成未来两周排课
+                // 通道2：删除超出课时包总额的多余长排（仅保留按 startDate 升序的前 totalQuota 条）。
+                // keep 取"所有活跃包剩余总额"（不按今天是否生效过滤），避免未来才生效的课时包
+                // 被当作额度=0 误删全部排课；无任何活跃包时跳过（额度语义未定义，不粗暴清空模板）
+                val totalQuota = totalRemainingQuota(name, sid)
+                if (totalQuota > 0) {
+                    val c2 = scheduleDao.deleteLongTermSchedulesBeyondQuotaDual(sid, name, totalQuota)
+                    if (c2 > 0) {
+                        deletedSchedules += c2
+                        touched = true
+                    }
+                }
+
+                // 清理后在剩余额度内重新生成正确排课（用户可立即看到正确结果）
                 val remainingLongTerm = scheduleDao.getAllOnce()
                     .filter { it.isActive && it.isLongTerm && it.studentName == name }
                 val generated = regenerateLessonsForStudent(name, todayStr, remainingLongTerm)
@@ -552,7 +580,7 @@ class ScheduleQueryRepository(
      * @param studentName 学员姓名
      * @return 最早 purchaseDate（YYYY-MM-DD），无则 null
      */
-    private suspend fun earliestPurchaseDateOf(studentName: String): String? {
+    override suspend fun earliestPurchaseDateOf(studentName: String): String? {
         return try {
             // v46：双通道查询（studentId 优先、studentName 回退）
             val sid = resolveStudentId(studentName)
@@ -573,7 +601,7 @@ class ScheduleQueryRepository(
      * @param studentName 学员姓名
      * @return 活跃课时包列表（按购买日期升序）
      */
-    private suspend fun getActivePackagesByStudent(studentName: String): List<LessonPackage> {
+    override suspend fun getActivePackagesByStudent(studentName: String): List<LessonPackage> {
         // v46：双通道查询（studentId 优先、studentName 回退），杜绝改名断链
         val sid = resolveStudentId(studentName)
         return pkgDao.getByStudentDual(sid, studentName).first()
@@ -598,16 +626,16 @@ class ScheduleQueryRepository(
         return EffectiveRemainingCalculator.calculate(getActivePackagesByStudent(studentName), dateStr)
     }
 
-    /** 学员剩余课时汇总（仅 totalRemaining 用于排课额度判断） */
-    private suspend fun getRemainingSummary(studentName: String): RemainingSummaryLike {
-        val packages = pkgDao.getByStudent(studentName).first()
-        val active = packages.filter { it.status == "活跃" && !it.isExhausted && !it.isExpired }
-        val total = active.sumOf { it.remainingLessons }
-        return RemainingSummaryLike(total)
+    /**
+     * 学员所有活跃课时包剩余总额（不按日期生效过滤，用于修正历史排课通道2的 keep 值）。
+     * 与"今天生效额度"的区别：未来才生效的课时包同样计入总额度，
+     * 避免其已排好的长期模板被通道2误删。
+     */
+    private suspend fun totalRemainingQuota(studentName: String, studentId: String?): Int {
+        return pkgDao.getByStudentDual(studentId, studentName).first()
+            .filter { it.status == "活跃" && !it.isExhausted && !it.isExpired }
+            .sumOf { it.remainingLessons }
     }
-
-    /** 轻量余额载体（避免依赖 OperationRepository.RemainingSummary 造成循环依赖） */
-    private data class RemainingSummaryLike(val totalRemaining: Int)
 
     /**
      * 一次性获取学员全部 lessons 记录（非 Flow，按日期升序）。

@@ -68,7 +68,7 @@ fun ScoreInputTab() {
 
     val students by vm.students.collectAsStateWithLifecycle()
     // === v46 数据流诊断：Logcat 过滤 DataFlow 查看学员列表是否加载成功 ===
-    Log.d("DataFlow", "下拉列表加载到的学员数量: ${students.size}")
+    Log.d("StudentPicker", "列表加载数量: ${students.size}")
     val selectedStudent by vm.selectedStudent.collectAsStateWithLifecycle()
     val standards by vm.standards.collectAsStateWithLifecycle()
     val scoreInputs by vm.scoreInputs.collectAsStateWithLifecycle()

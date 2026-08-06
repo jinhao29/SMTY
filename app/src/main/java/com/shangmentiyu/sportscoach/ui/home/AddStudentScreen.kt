@@ -137,7 +137,7 @@ fun AddStudentScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = appSurface(),
-                    scrolledContainerColor = Color.White,
+                    scrolledContainerColor = appSurface(),
                     titleContentColor = MaterialTheme.colorScheme.onBackground,
                     navigationIconContentColor = MaterialTheme.colorScheme.primary,
                     actionIconContentColor = MaterialTheme.colorScheme.primary
@@ -517,7 +517,7 @@ private fun IosFormCard(content: @Composable () -> Unit) {
                 ambientColor = Color(0x1A000000),
                 spotColor = Color(0x1A000000)
             )
-            .background(Color.White, RoundedCornerShape(10.dp))
+            .background(appSurface(), RoundedCornerShape(10.dp))
     ) {
         content()
     }

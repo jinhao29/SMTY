@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shangmentiyu.sportscoach.data.model.Lesson
@@ -183,7 +184,7 @@ fun LessonCheckInScreen(
                     color = MaterialTheme.colorScheme.onBackground) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = appSurface(),
-                    scrolledContainerColor = Color.White,
+                    scrolledContainerColor = appSurface(),
                     titleContentColor = MaterialTheme.colorScheme.onBackground,
                     navigationIconContentColor = MaterialTheme.colorScheme.primary
                 ),
@@ -322,7 +323,7 @@ private fun TodaySignedCard(lesson: Lesson, onClick: () -> Unit) {
                 ambientColor = Color(0x1A000000),
                 spotColor = Color(0x1A000000)
             )
-            .background(Color.White, RoundedCornerShape(10.dp))
+            .background(appSurface(), RoundedCornerShape(10.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = Spacing.md, vertical = Spacing.md),
         verticalAlignment = Alignment.CenterVertically,
@@ -406,7 +407,8 @@ private fun SignRow(
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                         ) {
                             Text("已签到", style = MaterialTheme.typography.labelSmall,
-                                color = AttendanceOnTime, fontWeight = FontWeight.Medium)
+                                fontSize = 14.sp,
+                                color = AttendanceOnTime, fontWeight = FontWeight.Normal)
                         }
                     }
                 }

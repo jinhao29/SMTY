@@ -57,6 +57,7 @@ import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
+import com.shangmentiyu.sportscoach.ui.theme.appSurface
 
 /**
  * 话术列表页（UI 层）。
@@ -182,7 +183,7 @@ private fun ScriptItemCard(
                 ambientColor = Color.Black.copy(alpha = 0.04f),
                 spotColor = Color.Black.copy(alpha = 0.06f)
             )
-            .background(Color.White, RoundedCornerShape(20.dp))
+            .background(appSurface(), RoundedCornerShape(20.dp))
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick

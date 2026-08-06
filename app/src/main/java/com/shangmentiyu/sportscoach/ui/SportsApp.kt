@@ -125,7 +125,7 @@ private fun UpdateProgressOverlay(onDownloadComplete: (version: String) -> Unit)
                 ) {
                     Surface(
                         shape = RoundedCornerShape(16.dp),
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.surface,
                         tonalElevation = 6.dp
                     ) {
                         Column(
@@ -142,14 +142,14 @@ private fun UpdateProgressOverlay(onDownloadComplete: (version: String) -> Unit)
                             Text(
                                 text = "正在下载新版本 ${downloading.version}",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = Color.Black
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(Modifier.height(4.dp))
                             Text(
                                 text = "${downloading.percent}%",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold,
-                                color = Color.Black
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }
@@ -172,7 +172,7 @@ private fun UpdateProgressOverlay(onDownloadComplete: (version: String) -> Unit)
             ) {
                 Surface(
                     shape = RoundedCornerShape(16.dp),
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.surface,
                     tonalElevation = 6.dp
                 ) {
                     Column(
@@ -188,7 +188,7 @@ private fun UpdateProgressOverlay(onDownloadComplete: (version: String) -> Unit)
                         Text(
                             text = "新版本 ${done.version} 下载完成",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Color.Black
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
@@ -209,7 +209,7 @@ private fun UpdateProgressOverlay(onDownloadComplete: (version: String) -> Unit)
             ) {
                 Surface(
                     shape = RoundedCornerShape(16.dp),
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.surface,
                     tonalElevation = 6.dp
                 ) {
                     Column(

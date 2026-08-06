@@ -44,6 +44,7 @@ import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appOutline
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 import com.shangmentiyu.sportscoach.ui.theme.appPrimaryContainer
+import com.shangmentiyu.sportscoach.ui.theme.appSurface
 import com.shangmentiyu.sportscoach.ui.theme.appSecondary
 import com.shangmentiyu.sportscoach.ui.theme.appSurfaceVariant
 import androidx.compose.foundation.Canvas
@@ -79,7 +80,7 @@ fun AbilityRadarCard(radar: AbilityAnalyzer.AbilityRadar) {
                 ambientColor = Color(0x1A000000),
                 spotColor = Color(0x1A000000)
             )
-            .background(Color.White, RoundedCornerShape(10.dp))
+            .background(appSurface(), RoundedCornerShape(10.dp))
             .padding(horizontal = 20.dp, vertical = 18.dp)
     ) {
         // 标题行：能力画像 + 数据来源说明 + 综合等级徽章

@@ -67,6 +67,7 @@ import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
+import com.shangmentiyu.sportscoach.ui.theme.appSurface
 
 /**
  * 查看成绩 Tab：学员选择 + 概览统计 + 成绩对比 + 按项目分组的历史成绩（含进步/退步趋势 + 编辑/删除）。
@@ -83,7 +84,7 @@ fun ScoreViewTab(onEditScore: (String) -> Unit = {}) {
     val loading by vm.loading.collectAsStateWithLifecycle()
     val students by vm.students.collectAsStateWithLifecycle()
     // === v46 数据流诊断：Logcat 过滤 DataFlow 查看学员列表是否加载成功 ===
-    Log.d("DataFlow", "下拉列表加载到的学员数量: ${students.size}")
+    Log.d("StudentPicker", "列表加载数量: ${students.size}")
     val selectedStudent by vm.selectedStudent.collectAsStateWithLifecycle()
     val recordsByProject by vm.recordsByProject.collectAsStateWithLifecycle()
     val overview by vm.overview.collectAsStateWithLifecycle()
@@ -192,7 +193,7 @@ private fun StudentPicker(
                 ambientColor = Color(0x1A000000),
                 spotColor = Color(0x1A000000)
             )
-            .background(Color.White, RoundedCornerShape(20.dp))
+            .background(appSurface(), RoundedCornerShape(20.dp))
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle)
@@ -274,7 +275,7 @@ private fun OverviewStats(overview: AnalyticsViewModel.OverviewStats) {
                 ambientColor = Color(0x1A000000),
                 spotColor = Color(0x1A000000)
             )
-            .background(Color.White, RoundedCornerShape(20.dp))
+            .background(appSurface(), RoundedCornerShape(20.dp))
             .padding(vertical = Spacing.lg),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -366,7 +367,7 @@ private fun ProjectSection(
                     ambientColor = Color(0x1A000000),
                     spotColor = Color(0x1A000000)
                 )
-                .background(Color.White, RoundedCornerShape(10.dp))
+                .background(appSurface(), RoundedCornerShape(10.dp))
         ) {
             Box(
                 modifier = Modifier.fillMaxWidth().height(4.dp).background(
@@ -414,7 +415,7 @@ private fun ScoreCompareCard(records: List<AnalyticsViewModel.ScoreRecord>) {
         modifier = Modifier.fillMaxWidth()
             .background(
                 Brush.linearGradient(
-                    colors = listOf(trendColor.copy(alpha = 0.08f), Color.White)
+                    colors = listOf(trendColor.copy(alpha = 0.08f), MaterialTheme.colorScheme.surface)
                 ),
                 RoundedCornerShape(10.dp)
             )
@@ -576,7 +577,7 @@ private fun EmptyHint(
                     ambientColor = Color(0x1A000000),
                     spotColor = Color(0x1A000000)
                 )
-                .background(Color.White, RoundedCornerShape(24.dp))
+                .background(appSurface(), RoundedCornerShape(24.dp))
                 .padding(vertical = Spacing.xxl),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {

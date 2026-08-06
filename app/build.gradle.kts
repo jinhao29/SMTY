@@ -203,6 +203,9 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.navigation.compose)
+    // Google Fonts 可下载字体（Inter 等现代无衬线字体，运行时经 GMS 下载）
+    // 证书资源已在本地 res/values/font_certs.xml，无需 play-services-basement
+    implementation(libs.androidx.compose.ui.googlefonts)
 
     // Room 数据库（2.7.1 原生支持 KSP2，解决 Kotlin 2.2.10 + KSP 2.3.2 兼容性问题）
     implementation(libs.androidx.room.runtime)

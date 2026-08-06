@@ -65,7 +65,7 @@ class AnalyticsViewModel(
     private fun loadStudents() {
         viewModelScope.launch(appExceptionHandler) {
             try {
-                studentRepo.getAllStudents().collectLatest { list ->
+                studentRepo.getActiveStudents().collectLatest { list ->
                     _students.value = list
                     _loading.value = false
                     if (_selectedStudent.value == null && list.isNotEmpty()) {

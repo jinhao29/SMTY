@@ -943,9 +943,19 @@ fun ScheduleEditDialog(
                             vm.showToast("请至少选择一个周几")
                             return@PrimaryButton
                         }
-                        // v25 优化5：不再立即 onSaved()
-                        // 由 vm.saveSuccessEvent 触发关闭，由 vm.coachConflictEvent 触发冲突确认框
-                        vm.saveSchedule(buildForm())
+                        // 保存前强制走 ValidateScheduleUseCase 校验（购买日期 / 额度），
+                        // 校验失败直接弹窗拦截，绝不走数据库流程
+                        val form = buildForm()
+                        scope.launch {
+                            val error = withContext(Dispatchers.IO) {
+                                vm.validateScheduleForSave(form)
+                            }
+                            if (error != null) {
+                                vm.showToast(error)
+                            } else {
+                                vm.saveSchedule(form)
+                            }
+                        }
                     },
                     modifier = Modifier.fillMaxWidth()
                 )

@@ -38,6 +38,7 @@ import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
+import com.shangmentiyu.sportscoach.ui.theme.appSurface
 
 /**
  * 主页共用 iOS 风格组件集合。
@@ -62,7 +63,7 @@ internal fun IosCard(
                 spotColor = Color(0x1A000000)
             )
             .background(
-                color = Color.White,
+                color = appSurface(),
                 shape = RoundedCornerShape(10.dp)
             )
     ) {
@@ -86,7 +87,7 @@ internal fun IosGroupedListCard(
                 spotColor = Color(0x1A000000)
             )
             .background(
-                color = Color.White,
+                color = appSurface(),
                 shape = RoundedCornerShape(10.dp)
             )
     ) {
@@ -94,13 +95,14 @@ internal fun IosGroupedListCard(
     }
 }
 
-/** iOS 列表分组头：13pt SemiBold 活力珊瑚橙大写标题 */
+/** iOS 列表分组头：20pt Bold 活力珊瑚橙大写标题（标题层级） */
 @Composable
 internal fun IosSectionHeader(text: String) {
     Text(
         text = text.uppercase(),
         style = MaterialTheme.typography.labelLarge,
-        fontWeight = FontWeight.SemiBold,
+        fontSize = 20.sp,
+        fontWeight = FontWeight.Bold,
         color = appPrimary(),
         modifier = Modifier.padding(
             start = Spacing.screenH,
@@ -234,8 +236,9 @@ internal fun TodayOverviewHeader(scheduleCount: Int) {
                     text = "$scheduleCount",
                     color = Color.White,
                     fontSize = 32.sp,
-                    fontWeight = FontWeight.Black,
-                    letterSpacing = (-1).sp
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.2.sp,
+                    lineHeight = 38.sp
                 )
                 Text(
                     text = " 节",
@@ -281,7 +284,7 @@ internal fun FloatingStatCard(
                 spotColor = Color(0x14000000)
             )
             .clip(RoundedCornerShape(24.dp))
-            .background(Color.White)
+            .background(appSurface())
             .padding(vertical = 20.dp, horizontal = 8.dp),
         horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
     ) {
@@ -289,8 +292,9 @@ internal fun FloatingStatCard(
             text = value,
             color = appOnSurface(),
             fontSize = 28.sp,
-            fontWeight = FontWeight.Black,
-            letterSpacing = (-0.5).sp
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.2.sp,
+            lineHeight = 34.sp
         )
         Spacer(Modifier.height(6.dp))
         Text(
@@ -352,7 +356,7 @@ internal fun WeeklyProgressDots(
                 spotColor = Color(0x14000000)
             )
             .clip(RoundedCornerShape(24.dp))
-            .background(Color.White)
+            .background(appSurface())
             .padding(horizontal = 20.dp, vertical = 20.dp)
     ) {
         Row(

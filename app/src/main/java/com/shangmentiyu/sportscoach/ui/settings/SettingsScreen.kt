@@ -90,6 +90,7 @@ import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 import com.shangmentiyu.sportscoach.ui.theme.appBackground
+import com.shangmentiyu.sportscoach.ui.theme.appSurface
 import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
 import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
@@ -1387,7 +1388,7 @@ private fun IosGroupedListCard(content: @Composable () -> Unit) {
                 ambientColor = Color.Black.copy(alpha = 0.04f),
                 spotColor = Color.Black.copy(alpha = 0.06f)
             )
-            .background(Color.White, RoundedCornerShape(24.dp))
+            .background(appSurface(), RoundedCornerShape(24.dp))
     ) {
         // v45：移除顶部 4dp 渐变装饰条，保持卡片简洁统一
         content()

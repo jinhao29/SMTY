@@ -51,6 +51,7 @@ import com.shangmentiyu.sportscoach.ui.theme.appBackground
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
+import com.shangmentiyu.sportscoach.ui.theme.appSurface
 import com.shangmentiyu.sportscoach.ui.theme.appTertiary
 import com.shangmentiyu.sportscoach.ui.theme.appInfoBlue
 import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
@@ -119,7 +120,7 @@ fun BmiCalculatorScreen(
                         spotColor = Color(0x14000000)
                     )
                     .clip(RoundedCornerShape(24.dp))
-                    .background(Color.White)
+                    .background(appSurface())
                     .padding(Spacing.lg),
                 verticalArrangement = Arrangement.spacedBy(Spacing.md)
             ) {
@@ -224,8 +225,10 @@ private fun BmiResultCard(
         )
         Text(
             text = BmiProcessor.format(bmi),
-            fontSize = 56.sp,
+            fontSize = 32.sp,
             fontWeight = FontWeight.Bold,
+            letterSpacing = 0.2.sp,
+            lineHeight = 38.sp,
             color = textColor
         )
         Box(
@@ -259,7 +262,7 @@ private fun BmiStandardCard() {
                 spotColor = Color(0x14000000)
             )
             .clip(RoundedCornerShape(24.dp))
-            .background(Color.White)
+            .background(appSurface())
             .padding(Spacing.lg),
         verticalArrangement = Arrangement.spacedBy(Spacing.sm)
     ) {

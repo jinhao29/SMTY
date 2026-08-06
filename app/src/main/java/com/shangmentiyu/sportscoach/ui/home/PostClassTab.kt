@@ -484,7 +484,7 @@ private fun PostClassLessonCard(
     }
 
     IosCard {
-        Column(modifier = Modifier.padding(Spacing.md)) {
+        Column(modifier = Modifier.padding(Spacing.cardPadding)) {
             // 头部：姓名 + 签到/签退时间 + 删除按钮
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -592,18 +592,16 @@ private fun PostClassLessonCard(
             Spacer(Modifier.height(Spacing.sm))
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.SpaceEvenly
             ) {
                 TextButton(
                     onClick = onOpenLesson,
-                    modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Text("查看详情", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 }
                 TextButton(
                     onClick = onToggleExpand,
-                    modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Icon(Icons.Outlined.Edit, contentDescription = null,
@@ -625,7 +623,6 @@ private fun PostClassLessonCard(
                             }
                         }
                     },
-                    modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     if (sharing) {

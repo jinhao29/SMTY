@@ -15,6 +15,7 @@ import com.shangmentiyu.sportscoach.data.model.LessonPackage
 import com.shangmentiyu.sportscoach.data.model.Schedule
 import com.shangmentiyu.sportscoach.data.model.TrainingCycle
 import com.shangmentiyu.sportscoach.domain.scheduling.EffectiveRemainingCalculator
+import com.shangmentiyu.sportscoach.domain.scheduling.ScheduleValidationSource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -56,7 +57,7 @@ class OperationRepository(
     private val scheduleQueryRepo: ScheduleQueryRepository,
     private val trainingCycleRepo: TrainingCycleRepository,
     private val stageSummaryRepo: StageSummaryRepository
-) {
+) : ScheduleValidationSource {
 
     /**
      * 消课结果：携带扣减的课时包信息，供上层记录到 Lesson 表与 UI 反馈。
@@ -560,7 +561,7 @@ class OperationRepository(
      *
      * 委托 [ScheduleQueryRepository.countUnconsumedLessonsFrom]。
      */
-    suspend fun countUnconsumedLessonsFrom(studentName: String, fromDate: String): Int =
+    override suspend fun countUnconsumedLessonsFrom(studentName: String, fromDate: String): Int =
         scheduleQueryRepo.countUnconsumedLessonsFrom(studentName, fromDate)
 
     /**
@@ -568,7 +569,7 @@ class OperationRepository(
      *
      * 委托 [ScheduleQueryRepository.countLongTermPendingFrom]。
      */
-    suspend fun countLongTermPendingFrom(studentName: String, fromDate: String): Int =
+    override suspend fun countLongTermPendingFrom(studentName: String, fromDate: String): Int =
         scheduleQueryRepo.countLongTermPendingFrom(studentName, fromDate)
 
     /** v46：双通道统计长期自动未签退课时（studentId 优先、studentName 回退） */
@@ -609,7 +610,7 @@ class OperationRepository(
         }
     }
 
-    suspend fun getActivePackagesByStudent(studentName: String): List<LessonPackage> {
+    override suspend fun getActivePackagesByStudent(studentName: String): List<LessonPackage> {
         // v46：双通道查询（studentId 优先、studentName 回退），杜绝改名断链
         val sid = resolveStudentId(studentName)
         return pkgDao.getByStudentDual(sid, studentName).first()
@@ -647,7 +648,7 @@ class OperationRepository(
      * @param studentName 学员姓名
      * @return 最早 purchaseDate（YYYY-MM-DD），无则 null
      */
-    suspend fun earliestPurchaseDateOf(studentName: String): String? {
+    override suspend fun earliestPurchaseDateOf(studentName: String): String? {
         return try {
             // v46：双通道查询（studentId 优先、studentName 回退）
             val sid = resolveStudentId(studentName)

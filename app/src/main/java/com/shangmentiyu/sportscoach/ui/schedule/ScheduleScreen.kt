@@ -79,6 +79,7 @@ import com.shangmentiyu.sportscoach.ui.theme.FloatingSnackbarHost
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.ScheduleListSkeleton
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
+import com.shangmentiyu.sportscoach.ui.theme.appSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appOnWarningContainer
@@ -833,7 +834,7 @@ private fun OverviewCard(
                 spotColor = Color.Black.copy(alpha = 0.08f)
             )
             .clip(RoundedCornerShape(16.dp))
-            .background(Color.White)
+            .background(appSurface())
             .padding(vertical = 16.dp)
     ) {
         Row(
@@ -889,8 +890,10 @@ private fun OverviewStatItem(
     ) {
         Text(
             text = value,
-            fontSize = 24.sp,
+            fontSize = 28.sp,
             fontWeight = FontWeight.Bold,
+            letterSpacing = 0.2.sp,
+            lineHeight = 34.sp,
             color = valueColor
         )
         Spacer(Modifier.height(4.dp))
@@ -1157,7 +1160,7 @@ private fun MultiSelectBottomBar(
                     spotColor = Color.Black.copy(alpha = 0.10f)
                 )
                 .clip(RoundedCornerShape(24.dp))
-                .background(Color.White)
+                .background(appSurface())
                 .padding(horizontal = Spacing.md, vertical = Spacing.sm),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween

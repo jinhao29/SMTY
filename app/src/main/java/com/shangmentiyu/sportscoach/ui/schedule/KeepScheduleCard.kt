@@ -159,8 +159,8 @@ fun KeepScheduleCard(
                 ) {
                     Text(
                         text = schedule.studentName,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
                         color = appOnSurface(),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -215,15 +215,15 @@ fun KeepScheduleCard(
                 ) {
                     Text(
                         text = timeText,
-                        fontSize = 12.sp,
+                        fontSize = 14.sp,
                         color = appPrimary(),
-                        fontWeight = FontWeight.Medium,
+                        fontWeight = FontWeight.Normal,
                         maxLines = 1
                     )
                     if (metaText.isNotBlank()) {
                         Text(
                             text = "· $metaText",
-                            fontSize = 12.sp,
+                            fontSize = 14.sp,
                             color = appOnSurfaceVariant(),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -244,9 +244,9 @@ fun KeepScheduleCard(
                 ) {
                     Text(
                         text = schedule.lessonType,
-                        fontSize = 11.sp,
+                        fontSize = 14.sp,
                         color = appPrimary(),
-                        fontWeight = FontWeight.Medium,
+                        fontWeight = FontWeight.Normal,
                         maxLines = 1
                     )
                 }

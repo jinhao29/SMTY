@@ -54,7 +54,7 @@ class ScoringViewModel(
 
     init {
         viewModelScope.launch(appExceptionHandler) {
-            studentRepo.getAllStudents().collect { _students.value = it }
+            studentRepo.getActiveStudents().collect { _students.value = it }
         }
     }
 

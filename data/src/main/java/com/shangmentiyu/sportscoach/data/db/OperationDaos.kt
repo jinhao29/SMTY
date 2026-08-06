@@ -199,4 +199,12 @@ interface ScheduleDao {
      */
     @Query("DELETE FROM schedules WHERE studentName = :name AND startDate < :dateStr AND isActive = 1")
     suspend fun deleteSchedulesBeforeDate(name: String, dateStr: String): Int
+
+    /** 双通道：删除该学员 startDate 早于指定日期的全部排课（修正历史排课通道1） */
+    @Query("DELETE FROM schedules WHERE (studentId = :studentId OR (studentId IS NULL AND studentName = :name)) AND startDate < :dateStr")
+    suspend fun deleteSchedulesBeforeDateDual(studentId: String?, name: String, dateStr: String): Int
+
+    /** 双通道：删除超出额度的多余长排，仅保留按 startDate 升序的前 keep 条（修正历史排课通道2） */
+    @Query("DELETE FROM schedules WHERE isLongTerm = 1 AND (studentId = :studentId OR (studentId IS NULL AND studentName = :name)) AND id NOT IN (SELECT id FROM schedules WHERE isLongTerm = 1 AND (studentId = :studentId OR (studentId IS NULL AND studentName = :name)) ORDER BY startDate LIMIT :keep)")
+    suspend fun deleteLongTermSchedulesBeyondQuotaDual(studentId: String?, name: String, keep: Int): Int
 }

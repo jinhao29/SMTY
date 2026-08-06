@@ -400,8 +400,10 @@ private fun PredictionResultCard(r: HeightPredictionResult) {
         ) {
             Text(
                 "%.1f".format(r.adjustedHeight),
-                fontSize = 40.sp,
+                fontSize = 32.sp,
                 fontWeight = FontWeight.Bold,
+                letterSpacing = 0.2.sp,
+                lineHeight = 38.sp,
                 color = appPrimary()
             )
             Text(

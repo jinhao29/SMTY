@@ -22,7 +22,7 @@ import com.shangmentiyu.sportscoach.data.repo.StudentRepository
 import com.shangmentiyu.sportscoach.data.repo.StageSummaryRepository
 import com.shangmentiyu.sportscoach.data.repo.TrainingCycleRepository
 import com.shangmentiyu.sportscoach.domain.scheduling.CalculateRemainingLessonsUseCase
-import com.shangmentiyu.sportscoach.domain.scheduling.CanScheduleLessonsUseCase
+import com.shangmentiyu.sportscoach.domain.scheduling.ValidateScheduleUseCase
 import com.shangmentiyu.sportscoach.ui.analytics.AnalyticsViewModel
 import com.shangmentiyu.sportscoach.ui.bodymetric.BodyMetricChartViewModel
 import com.shangmentiyu.sportscoach.ui.coachreport.CoachDailyReportViewModel
@@ -101,7 +101,7 @@ val appModule = module {
     single { ScriptRepository(androidContext()) }
 
     // === 领域层 ===
-    single { CanScheduleLessonsUseCase(get()) }
+    single { ValidateScheduleUseCase(get()) }
     single { CalculateRemainingLessonsUseCase(get()) }
 
     // === 视图模型层（v46 架构层四：全量迁移到 Koin） ===
