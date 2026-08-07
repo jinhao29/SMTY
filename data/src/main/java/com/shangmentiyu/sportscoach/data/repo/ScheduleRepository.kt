@@ -219,6 +219,8 @@ class ScheduleRepository(
         location: String = "",
         lessonType: String = "训练课",
         isLongTerm: Boolean = false,
+        // v49 体验课：未注册学员临时体验课，不消耗课时包余额
+        isTrial: Boolean = false,
         content: List<ExerciseItem> = emptyList(),
         contentImages: List<String> = emptyList(),
         color: String = "blue",
@@ -238,6 +240,7 @@ class ScheduleRepository(
             lessonType = lessonType,
             startDate = todayDateStr(),
             isLongTerm = isLongTerm,
+            isTrial = isTrial,
             content = contentToJson(content),
             contentImages = imagesToJson(contentImages),
             color = color,

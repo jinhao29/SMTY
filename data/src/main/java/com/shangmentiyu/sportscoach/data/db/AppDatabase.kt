@@ -29,7 +29,7 @@ import com.shangmentiyu.sportscoach.data.model.TrainingCycle
 
 @Database(
     entities = [Student::class, Lesson::class, LessonPackage::class, Coach::class, Schedule::class, ParentReport::class, TrainingCycle::class, BodyMetricHistory::class, ScheduleMemory::class, DietTemplateEntity::class, StudentDietRecord::class, StudentFts::class, ArchivedLesson::class, AuditLogEntity::class, PlanImage::class],
-    version = 28,
+    version = 29,
     exportSchema = false
 )
 @TypeConverters(com.shangmentiyu.sportscoach.data.model.Converters::class)
@@ -812,6 +812,21 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
+         * === v49：体验课支持（schedules / lessons 表新增 isTrial 列）===
+         *
+         * - isTrial：0=常规排课，1=体验课（未注册学员临时体验课，不消耗课时包余额）
+         * - INTEGER NOT NULL DEFAULT 0 保证存量数据自动归为常规排课，无需数据迁移
+         * - studentId 列本就可空（v20 起），体验课写入 NULL + studentName 存临时姓名，
+         *   无需修改列约束
+         */
+        private val MIGRATION_28_29 = object : Migration(28, 29) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE schedules ADD COLUMN isTrial INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE lessons ADD COLUMN isTrial INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        /**
          * 数据库首次创建时的回调：插入预置饮食模板数据。
          *
          * 仅在数据库文件首次创建时触发（新装用户），老用户升级走 [MIGRATION_17_18]。
@@ -841,7 +856,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     DATABASE_NAME
                 )
-                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25, MIGRATION_25_26, MIGRATION_26_27, MIGRATION_27_28)
+                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25, MIGRATION_25_26, MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29)
                     .addCallback(DB_CALLBACK)
                     // === 终极防丢机制：严禁任何破坏性清库 fallback ===
                     // 历史教训：fallbackToDestructiveMigrationOnDowngrade() 在数据库文件版本
@@ -903,6 +918,6 @@ abstract class AppDatabase : RoomDatabase() {
          *
          * 修改 @Database version 时必须同步修改此常量，否则版本检查会失效。
          */
-        private const val DATABASE_VERSION = 28
+        private const val DATABASE_VERSION = 29
     }
 }

@@ -15,9 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ExpandMore
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,10 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.shangmentiyu.sportscoach.ui.theme.LightOnSurfaceVariant
-import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
-import com.shangmentiyu.sportscoach.ui.theme.appOutline
 import com.shangmentiyu.sportscoach.ui.theme.appSurface
 import java.time.LocalDate
 import java.time.YearMonth
@@ -94,7 +88,7 @@ fun ScheduleCalendar(
             .background(appSurface())
             .padding(horizontal = 16.dp, vertical = 20.dp)
     ) {
-        // === 1. 顶部头部：月份 + 下拉指示 ===
+        // === 1. 顶部头部：月份 + 静态"本月"标签 ===
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -106,27 +100,14 @@ fun ScheduleCalendar(
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
             )
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(50))
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "本月",
-                        fontSize = 13.sp,
-                        color = LightOnSurfaceVariant
-                    )
-                    Spacer(Modifier.size(4.dp))
-                    Icon(
-                        imageVector = Icons.Outlined.ExpandMore,
-                        contentDescription = null,
-                        tint = LightOnSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
+            // === 修复：删除"本月"假下拉箭头（无真实月份切换逻辑，杜绝可操作假象）===
+            // 原 ExpandMore 箭头暗示可下拉选择月份，实际无任何点击效果；
+            // 保留静态"本月"标签，仅展示当前月份，不再误导教练。
+            Text(
+                text = "本月",
+                fontSize = 13.sp,
+                color = appOnSurfaceVariant()
+            )
         }
 
         Spacer(Modifier.height(16.dp))
@@ -254,17 +235,22 @@ private fun CalendarDayCell(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // === 修复：选中态对比度全部由主题令牌接管（深色模式不再"白字白底"）===
+    // - 选中背景：colorScheme.primary（深色模式下为更亮的 NightPrimary）
+    // - 选中文字：colorScheme.onPrimary（随主题自动配对的对比色，替代硬编码白色）
+    // - 今日：colorScheme.primary 半透明底 + primary 文字（替代硬编码 LightPrimary）
     val bgColor = when {
         data.isSelected -> MaterialTheme.colorScheme.primary
-        data.isToday -> LightPrimary.copy(alpha = 0.12f)
+        data.isToday -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
         else -> Color.Transparent
     }
 
     val textColor = when {
-        data.isSelected -> Color.White
-        data.isToday -> LightPrimary
+        data.isSelected -> MaterialTheme.colorScheme.onPrimary
+        data.isToday -> MaterialTheme.colorScheme.primary
         data.isCurrentMonth -> MaterialTheme.colorScheme.primary
-        else -> appOutline()
+        // 邻月日期：深色模式下 outline(#38383A) 在 surface(#2C2C2E) 上近乎不可见，改用 onSurfaceVariant
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 
     val interactionSource = remember { MutableInteractionSource() }
@@ -288,12 +274,15 @@ private fun CalendarDayCell(
             fontWeight = if (data.isSelected || data.isToday) FontWeight.Bold else FontWeight.Normal
         )
         Spacer(Modifier.height(2.dp))
+        // === 排课红点：主题令牌接管，深色模式清晰可见 ===
+        // 数据源为 ScheduleScreen 传入的 scheduledDaysOfWeek（订阅 OperationViewModel.schedules
+        // 响应式 Flow，新增/删除排课、体验课保存后红点立即刷新，无需手动切周）
         if (data.isScheduled && !data.isSelected) {
             Box(
                 modifier = Modifier
                     .size(5.dp)
                     .clip(CircleShape)
-                    .background(LightPrimary)
+                    .background(MaterialTheme.colorScheme.primary)
             )
         } else {
             Spacer(Modifier.size(5.dp))

@@ -125,6 +125,7 @@ data class Schedule(
     val startDate: String,                // 生效日期 YYYY-MM-DD
     val endDate: String = "",             // 结束日期（空=长期有效）
     val isLongTerm: Boolean = false,      // 是否长期排课（勾选后每周自动生成对应时间的课表）
+    val isTrial: Boolean = false,         // v49 体验课：未注册学员临时体验课，不消耗课时包余额
     val isActive: Boolean = true,         // 是否启用
     val note: String = "",
     val content: String = "[]",           // 训练内容 JSON（ExerciseItem 列表）

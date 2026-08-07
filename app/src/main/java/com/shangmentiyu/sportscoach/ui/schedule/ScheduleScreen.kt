@@ -101,13 +101,15 @@ import java.util.Locale
  * @param dayOfWeek ISO 周几（1=周一 ... 7=周日）
  * @param dayName 周几文本（如"周一"）
  * @param date 对应日期
- * @param dateLabel 日期文本（如"03-04"）
+ * @param dateLabel 日期文本（如"03-04"，用于展示）
+ * @param dateStr 完整日期字符串（yyyy-MM-dd，用于 LazyRow 唯一 key，杜绝切周文字错乱）
  */
 private data class DayItem(
     val dayOfWeek: Int,
     val dayName: String,
     val date: Date,
-    val dateLabel: String
+    val dateLabel: String,
+    val dateStr: String
 )
 
 /**
@@ -194,6 +196,7 @@ fun ScheduleScreen(
     val weekDays: List<DayItem> = remember(weekStart) {
         val cal = Calendar.getInstance().apply { time = weekStart }
         val zone = java.time.ZoneId.systemDefault()
+        val fullDateFmt = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault())
         (1..7).map { dayOfWeek ->
             val date = cal.time
             val localDate = date.toInstant().atZone(zone).toLocalDate()
@@ -201,7 +204,9 @@ fun ScheduleScreen(
                 dayOfWeek = dayOfWeek,
                 dayName = dayNames[dayOfWeek - 1],
                 date = date,
-                dateLabel = dateFmt.format(localDate)
+                dateLabel = dateFmt.format(localDate),
+                // 完整日期字符串作为 LazyRow key：跨周/跨年全局唯一，杜绝旧状态复用错乱
+                dateStr = fullDateFmt.format(localDate)
             )
             cal.add(Calendar.DATE, 1)
             item
@@ -947,10 +952,11 @@ private fun DaySelector(
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = Spacing.screenH),
         horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
     ) {
-        // key 使用日期字符串（dateLabel）而非 dayOfWeek：
-        // 切周时新旧两天序列 key 全相同（1~7），LazyRow 会把 7 个项原地复用并套用旧状态，
-        // 出现"数字消失/渲染空洞"；改用日期字符串后切周即整组重建，保证显示与数据一致。
-        items(days, key = { it.dateLabel }) { day ->
+        // key 使用完整日期字符串（dateStr = yyyy-MM-dd）而非 dayOfWeek：
+        // 切周时新旧两天序列若用 dayOfWeek 作 key 则全部相同（1~7），LazyRow 会
+        // 把 7 个项原地复用并套用旧状态，出现"数字消失/渲染空洞"；
+        // 改用完整日期字符串后切周即整组重建，保证显示与数据一致。
+        items(days, key = { it.dateStr }) { day ->
             val isSelected = day.dayOfWeek == selectedDayOfWeek
             val isToday = remember(day.date) {
                 val d = Calendar.getInstance().apply { time = day.date }

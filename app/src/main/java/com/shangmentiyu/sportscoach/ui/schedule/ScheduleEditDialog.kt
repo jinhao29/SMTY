@@ -207,6 +207,8 @@ fun ScheduleEditDialog(
     var location by remember { mutableStateOf(prefillLocation ?: "") }
     var lessonType by remember { mutableStateOf("训练课") }
     var isLongTerm by remember { mutableStateOf(false) }
+    // === v49 体验课：未注册学员临时体验课开关 ===
+    var isTrial by remember { mutableStateOf(false) }
     var color by remember { mutableStateOf("blue") }
     var note by remember { mutableStateOf("") }
     var content by remember { mutableStateOf<List<ExerciseItem>>(emptyList()) }
@@ -225,6 +227,7 @@ fun ScheduleEditDialog(
             location = s.location
             lessonType = s.lessonType
             isLongTerm = s.isLongTerm
+            isTrial = s.isTrial
             color = s.color
             note = s.note
             content = vm.parseContent(s.content)
@@ -257,7 +260,8 @@ fun ScheduleEditDialog(
     val buildForm: () -> ScheduleForm = {
         ScheduleForm(
             studentName = studentName,
-            studentId = selectedStudentId,
+            // v49 体验课：studentId 强制 null（未注册学员无软关联）
+            studentId = if (isTrial) null else selectedStudentId,
             coachName = coachName,
             dayOfWeek = dayOfWeek,
             daysOfWeek = if (isCreate) selectedDays else emptySet(),
@@ -266,6 +270,7 @@ fun ScheduleEditDialog(
             location = location,
             lessonType = lessonType,
             isLongTerm = isLongTerm,
+            isTrial = isTrial,
             content = content,
             contentImages = contentImages,
             color = color,
@@ -345,29 +350,66 @@ fun ScheduleEditDialog(
                 item {
                     IOSSectionHeader("基本信息")
                     IOSCard {
-                        // 学员下拉选择
+                        // === v49 体验课开关：开启后学员选择切换为姓名输入框 ===
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "体验课",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Medium,
+                                    color = appOnSurface()
+                                )
+                                Text(
+                                    "为未注册学员安排临时体验课，不消耗课时包",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = appOnSurfaceVariant()
+                                )
+                            }
+                            androidx.compose.material3.Switch(
+                                checked = isTrial,
+                                onCheckedChange = { checked ->
+                                    isTrial = checked
+                                    if (checked) {
+                                        // 体验课不关联注册学员：清空软关联 ID
+                                        selectedStudentId = null
+                                    }
+                                }
+                            )
+                        }
+                        Spacer(Modifier.height(Spacing.md))
+                        // 学员选择：体验课开启时切换为可输入姓名的 TextField（隐藏学员下拉列表）
                         var studentExpanded by remember { mutableStateOf(false) }
                         ExposedDropdownMenuBox(
-                            expanded = studentExpanded,
+                            expanded = if (isTrial) false else studentExpanded,
                             onExpandedChange = { studentExpanded = !studentExpanded }
                         ) {
                             OutlinedTextField(
                                 value = studentName,
                                 onValueChange = { studentName = it },
                                 readOnly = false,
-                                label = { Text("学员") },
+                                label = { Text(if (isTrial) "体验课学员姓名" else "学员") },
                                 leadingIcon = { Icon(Icons.Outlined.Person, contentDescription = null) },
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(studentExpanded) },
+                                trailingIcon = {
+                                    if (!isTrial) {
+                                        ExposedDropdownMenuDefaults.TrailingIcon(studentExpanded)
+                                    }
+                                },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true),
+                                    .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = !isTrial),
 
                              shape = AppTextFieldShape,
                              colors = editDialogFieldColors(),)
-                            DropdownMenu(
-                                expanded = studentExpanded,
-                                onDismissRequest = { studentExpanded = false }
-                            ) {
+                            // 常规排课：显示学员下拉建议列表；体验课：隐藏（可直接输入临时姓名）
+                            if (!isTrial) {
+                                DropdownMenu(
+                                    expanded = studentExpanded,
+                                    onDismissRequest = { studentExpanded = false }
+                                ) {
                                 students.forEach { s ->
                                     DropdownMenuItem(
                                         text = { Text("${s.name} (${s.gender})") },
@@ -403,6 +445,7 @@ fun ScheduleEditDialog(
                                     )
                                 }
                             }
+                            }   // 闭合 if (!isTrial)：体验课开启时隐藏学员下拉列表
                         }
                         Spacer(Modifier.height(Spacing.md))
                         // 教练
@@ -947,13 +990,20 @@ fun ScheduleEditDialog(
                         // 校验失败直接弹窗拦截，绝不走数据库流程
                         val form = buildForm()
                         scope.launch {
-                            val error = withContext(Dispatchers.IO) {
-                                vm.validateScheduleForSave(form)
-                            }
-                            if (error != null) {
-                                vm.showToast(error)
-                            } else {
-                                vm.saveSchedule(form)
+                            // 修复闪退：校验/保存期间 UseCase 抛出的任何运行时异常
+                            // （额度已满 IllegalStateException、日期早于购买 IllegalArgumentException 等）
+                            // 必须在此捕获并暴露给用户，否则未捕获异常会导致 App 闪退
+                            try {
+                                val error = withContext(Dispatchers.IO) {
+                                    vm.validateScheduleForSave(form)
+                                }
+                                if (error != null) {
+                                    vm.showToast(error)
+                                } else {
+                                    vm.saveSchedule(form)
+                                }
+                            } catch (e: Exception) {
+                                vm.showToast(e.message ?: "保存失败：${e.javaClass.simpleName}")
                             }
                         }
                     },

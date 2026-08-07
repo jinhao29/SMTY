@@ -15,6 +15,7 @@ import com.shangmentiyu.sportscoach.data.model.LessonPackage
 import com.shangmentiyu.sportscoach.data.model.Schedule
 import com.shangmentiyu.sportscoach.data.model.TrainingCycle
 import com.shangmentiyu.sportscoach.domain.scheduling.EffectiveRemainingCalculator
+import com.shangmentiyu.sportscoach.domain.scheduling.LongTermSchedulePlanner
 import com.shangmentiyu.sportscoach.domain.scheduling.ScheduleValidationSource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -174,6 +175,8 @@ class OperationRepository(
      * @param lesson 待签退的课时记录（必须已存在，包含学员名、ID 等信息）
      * @return ConsumeResult.success=true 表示签退成功；
      *         false 表示无可用课时包或扣减失败（事务回滚，Lesson 状态不变）
+     *
+     * === v49 体验课：isTrial=true 时跳过课时包扣减，仅记录签退时间 ===
      */
     suspend fun consumeLessonForCheckOut(lesson: Lesson): ConsumeResult = consumeMutex.withLock {
         val database = db ?: return@withLock ConsumeResult(
@@ -197,14 +200,28 @@ class OperationRepository(
                     throw RuntimeException("Lesson 更新未生效（affected=$affected）")
                 }
 
-                // 2. 调用核心消课逻辑扣减课时包
+                // 2. 体验课：不消耗课时包余额，仅记录签退时间即完成
+                if (lesson.isTrial) {
+                    android.util.Log.i("CheckOut",
+                        "体验课签退成功（不消耗课时）：${lesson.studentName} lessonId=${lesson.id}")
+                    AutoBackupScheduler.notifyDataChange()
+                    return@withTransaction ConsumeResult(
+                        success = true,
+                        packageId = "",
+                        packageName = "体验课",
+                        remainingAfter = 0,
+                        message = "体验课已签退（不消耗课时）"
+                    )
+                }
+
+                // 3. 常规排课：调用核心消课逻辑扣减课时包
                 val consume = doConsumeLessonInternal(lesson.studentName)
                 if (!consume.success) {
                     // 抛异常触发事务回滚，Lesson 状态保持"已签到"
                     throw RuntimeException("课时包扣减失败：${consume.message}")
                 }
 
-                // 3. 回填扣减的课时包 ID
+                // 4. 回填扣减的课时包 ID
                 lessonDao.update(updatedLesson.copy(packageId = consume.packageId))
 
                 android.util.Log.i("CheckOut",
@@ -281,6 +298,8 @@ class OperationRepository(
 
     /**
      * 获取学员剩余课时汇总（按所有活跃包累加）。
+     *
+     * === v49 体验课：体验课不消耗课时包余额，不参与本汇总 ===
      */
     suspend fun getRemainingSummary(studentName: String): RemainingSummary {
         val packages = pkgDao.getByStudent(studentName).first()
@@ -557,24 +576,40 @@ class OperationRepository(
         scheduleQueryRepo.canScheduleMoreLessons(studentName, fromDate)
 
     /**
-     * 统计学员从指定日期起未消课的课时数量。
+     * === v49 三要素公式：已签退课时数（「已消耗」） ===
      *
-     * 委托 [ScheduleQueryRepository.countUnconsumedLessonsFrom]。
+     * 剩余可排课时 = 总课时(活跃包剩余之和) - 已消耗(已签退) - 待消耗(占位)。
+     * 委托 [ScheduleQueryRepository.countCheckedOutLessons]。
      */
-    override suspend fun countUnconsumedLessonsFrom(studentName: String, fromDate: String): Int =
-        scheduleQueryRepo.countUnconsumedLessonsFrom(studentName, fromDate)
+    override suspend fun countCheckedOutLessons(studentName: String): Int =
+        scheduleQueryRepo.countCheckedOutLessons(studentName)
 
     /**
-     * 统计学员从指定日期起"长期自动未签退"的课时数量。
+     * === v49 三要素公式：待消耗占位课时数（「待消耗」） ===
      *
-     * 委托 [ScheduleQueryRepository.countLongTermPendingFrom]。
+     * 统计长期自动生成 + 未签退的占位课时数量，用于剩余可排课时计算。
+     * 委托 [ScheduleQueryRepository.countPendingPlaceholderLessons]。
      */
-    override suspend fun countLongTermPendingFrom(studentName: String, fromDate: String): Int =
-        scheduleQueryRepo.countLongTermPendingFrom(studentName, fromDate)
+    override suspend fun countPendingPlaceholderLessons(studentName: String, fromDate: String): Int =
+        scheduleQueryRepo.countPendingPlaceholderLessons(studentName, fromDate)
 
-    /** v46：双通道统计长期自动未签退课时（studentId 优先、studentName 回退） */
-    suspend fun countLongTermPendingFromDual(studentId: String?, name: String, fromDate: String): Int =
-        scheduleQueryRepo.countLongTermPendingFromDual(studentId, name, fromDate)
+    /**
+     * === v49 长期排课统一生成入口（独立学员循环 + 逐日 + 额度封顶） ===
+     *
+     * 与 [com.shangmentiyu.sportscoach.ui.operation.OperationViewModel.ensureLongTermLessonsForWeek]
+     * 共用同一生成策略：从 [weekStart] 起遍历未来日期，当天未排且剩余可排课时
+     * （总-已消耗-待消耗）> 0 才生成一条占位并减 1；额度用尽立即停止该学员后续生成。
+     *
+     * 委托 [ScheduleQueryRepository.generateLongTermLessonsForStudent]。
+     *
+     * @return 本次新生成的课时数
+     */
+    suspend fun generateLongTermLessonsForStudent(
+        studentName: String,
+        weekStart: String,
+        today: String,
+        windowDays: Int = LongTermSchedulePlanner.DEFAULT_WINDOW_DAYS
+    ): Int = scheduleQueryRepo.generateLongTermLessonsForStudent(studentName, weekStart, today, windowDays)
 
     /**
      * 根据长期排课 Schedule 生成一条课时记录（Lesson）。

@@ -126,43 +126,41 @@ interface LessonDao {
     suspend fun countByStudentDateTimeDual(studentId: String?, name: String, date: String, time: String): Int
 
     /**
-     * === v27：统计长期自动生成且尚未签退的课时数量 ===
+     * === v49 彻底重构：三要素额度统计（已消耗 / 待消耗 / 按天查重） ===
      *
-     * 用户需求："签退后消耗课时"重构后，[countUnconsumedFrom] 仍按 packageId 是否为空判断，
-     * 但签退流程改为：签到时创建 status="已签到"、packageId="" 的 Lesson；
-     * 签退时才扣减课时包并更新 status="已签退"、packageId=目标包ID。
-     *
-     * 因此"未消费"的课时应包含两类：
-     * 1. status="已签到"（签到未签退，等待签退消课）
-     * 2. packageId="" 且 status != "已签退"（长期自动生成的待签到课时）
-     *
-     * 本方法只统计"长期自动"类型的待签到课时，避免与教练手动签到的课时混淆。
-     * 长期自动课时识别：lessonType 包含"(长期自动)"。
-     *
-     * 用于 [com.shangmentiyu.sportscoach.ui.operation.OperationViewModel.ensureLongTermLessonsForWeek]
-     * 计算可用余额 = 有效课时包剩余 - 长期自动未签退课时数。
-     *
-     * @param studentName 学员姓名
-     * @param fromDate 起始日期 YYYY-MM-DD（含）
-     * @return 长期自动生成且未签退的课时数量
+     * 剩余可排课时 = 总课时(活跃包剩余之和) - 已消耗(已签退) - 待消耗(占位)。
+     * 以下查询为三要素公式的数据基础，双通道（studentId 优先、studentName 回退）。
+     * （v49 起替代旧的 countLongTermPendingFrom / countLongTermPendingFromDual，
+     *   新的「待消耗」判定以 signOutTime 是否为空为准，语义更贴近业务定义）
      */
-    @Query(
-        "SELECT COUNT(*) FROM lessons WHERE studentName = :studentName " +
-            "AND date >= :fromDate " +
-            "AND lessonType LIKE '%(长期自动)%' " +
-            "AND status != '已签退'"
-    )
-    suspend fun countLongTermPendingFrom(studentName: String, fromDate: String): Int
 
-    /** v46：双通道统计长期自动未签退课时（studentId 优先、studentName 回退） */
+    /** 已签退课时数（signOutTime 非空），即三要素公式中的「已消耗」；体验课不消耗课时包，故排除 */
+    @Query(
+        "SELECT COUNT(*) FROM lessons WHERE " +
+            "(studentId = :studentId OR (studentId IS NULL AND studentName = :name)) " +
+            "AND (signOutTime IS NOT NULL AND signOutTime != '') " +
+            "AND isTrial = 0"
+    )
+    suspend fun countCheckedOutLessonsDual(studentId: String?, name: String): Int
+
+    /** 待消耗占位课时数（长期自动生成 + 未签退 + date >= fromDate），即三要素公式中的「待消耗」；体验课不计入占位消耗 */
     @Query(
         "SELECT COUNT(*) FROM lessons WHERE " +
             "(studentId = :studentId OR (studentId IS NULL AND studentName = :name)) " +
             "AND date >= :fromDate " +
             "AND lessonType LIKE '%(长期自动)%' " +
-            "AND status != '已签退'"
+            "AND (signOutTime IS NULL OR signOutTime = '') " +
+            "AND isTrial = 0"
     )
-    suspend fun countLongTermPendingFromDual(studentId: String?, name: String, fromDate: String): Int
+    suspend fun countPendingPlaceholderLessonsDual(studentId: String?, name: String, fromDate: String): Int
+
+    /** 按天查重：学员在某天是否已有课时记录（长期排课生成器按天检查「当天已排」） */
+    @Query(
+        "SELECT COUNT(*) FROM lessons WHERE " +
+            "(studentId = :studentId OR (studentId IS NULL AND studentName = :name)) " +
+            "AND date = :date"
+    )
+    suspend fun countLessonsByStudentDateDual(studentId: String?, name: String, date: String): Int
 
     @Insert
     suspend fun insert(lesson: Lesson)

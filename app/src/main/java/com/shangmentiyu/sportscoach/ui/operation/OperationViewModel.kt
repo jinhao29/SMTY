@@ -15,6 +15,7 @@ import com.shangmentiyu.sportscoach.data.repo.OperationRepository
 import com.shangmentiyu.sportscoach.data.repo.ScheduleMemoryRepository
 import com.shangmentiyu.sportscoach.data.repo.ScheduleRepository
 import com.shangmentiyu.sportscoach.data.repo.StudentRepository
+import com.shangmentiyu.sportscoach.domain.scheduling.ScheduleQuotaExceededException
 import com.shangmentiyu.sportscoach.domain.scheduling.ValidateScheduleUseCase
 import com.shangmentiyu.sportscoach.ui.schedule.ScheduleForm
 import kotlinx.coroutines.Dispatchers
@@ -305,7 +306,13 @@ class OperationViewModel(
 
     /**
      * 保存前统一校验（dialog 与 saveSchedule 共用同一入口）：
-     * 日期不得早于今天 / 早于购买日期 / 额度已满，任一不满足返回用户可读错误文案。
+     * 日期不得早于今天 / 早于购买日期 / 剩余可排课时为 0，任一不满足返回用户可读错误文案。
+     *
+     * === v49 彻底重构：额度校验统一走 ValidateScheduleUseCase 三要素公式 ===
+     * 剩余可排课时 = 总课时(活跃包剩余之和) - 已消耗(已签退) - 待消耗(占位)，
+     * 编辑/新建场景使用完全一致的校验口径。
+     *
+     * === v49 体验课：isTrial=true 跳过购买日期校验与余额校验，仅保留"生效日期不早于今天" ===
      */
     suspend fun validateScheduleForSave(form: ScheduleForm): String? {
         if (form.studentName.isBlank()) return null
@@ -313,22 +320,20 @@ class OperationViewModel(
         val todayStr = LocalDate.now().format(dateFormatter)
         val weekStartLocal = _weekStart.value.toInstant().atZone(zone).toLocalDate()
         val days = if (form.daysOfWeek.isNotEmpty()) form.daysOfWeek.sorted() else listOf(form.dayOfWeek)
-        val isEdit = _editingSchedule.value != null
         for (dow in days) {
             val dateStr = weekStartLocal.plusDays((dow - 1).toLong()).format(dateFormatter)
             if (dateStr < todayStr) {
                 return "排课生效日期不能早于今天，请在未来的日期排课。"
             }
+            // 体验课：不校验购买日期与课时余额（不消耗课时包）
+            if (form.isTrial) continue
+            // 核心校验 1：排课日期不得早于首次购买日期（按生成当天的实际日期校验）
             if (!validateSchedule.isDateValid(form.studentName, dateStr)) {
                 return "无法排课：所选日期早于购买日期"
             }
-            val capacityOk = if (isEdit) {
-                pkgRepo.getEffectiveRemainingLessons(form.studentName, dateStr) > 0
-            } else {
-                validateSchedule.hasRemainingCapacity(form.studentName, dateStr)
-            }
-            if (!capacityOk) {
-                return "无法排课：该学员在排课日期前尚未拥有有效课时包或额度已满。"
+            // 核心校验 2：剩余可排课时（三要素公式）> 0 才允许排课
+            if (!validateSchedule.hasRemainingCapacity(form.studentName, dateStr)) {
+                return "无法排课：该学员课时额度已用完（剩余可排课时为 0）。"
             }
         }
         return null
@@ -358,7 +363,7 @@ class OperationViewModel(
      * @param forceReplace 是否强制替换已有冲突排课（用户在确认框中选择"确认替换"时传 true）
      */
     fun saveSchedule(form: ScheduleForm, forceReplace: Boolean = false) {
-        if (form.studentName.isBlank()) { _toast.value = "请选择学员"; return }
+        if (form.studentName.isBlank()) { _toast.value = "请选择学员或填写体验课学员姓名"; return }
         if (form.startTime.isBlank()) { _toast.value = "请填写上课时间"; return }
         safeLaunch {
             try {
@@ -396,10 +401,11 @@ class OperationViewModel(
                     }
                     for (dayOfWeek in targetDays) {
                         if (forceReplace) {
-                            // v25 优化5：强制替换分支——先删除冲突排课再写入
+                            // v25 优化5：强制替换分支——先删除冲突排课再写入（日期已由 validateScheduleForSave 校验）。
+                            // v49 体验课：studentId 强制 null（未注册学员）
                             scheduleRepo.addScheduleForce(
                                 studentName = form.studentName,
-                                studentId = form.studentId,
+                                studentId = if (form.isTrial) null else form.studentId,
                                 coachName = form.coachName,
                                 dayOfWeek = dayOfWeek,
                                 startTime = form.startTime,
@@ -407,6 +413,7 @@ class OperationViewModel(
                                 location = form.location,
                                 lessonType = form.lessonType,
                                 isLongTerm = form.isLongTerm,
+                                isTrial = form.isTrial,
                                 content = form.content,
                                 contentImages = form.contentImages,
                                 color = form.color,
@@ -414,22 +421,36 @@ class OperationViewModel(
                                 equipment = form.equipment
                             )
                         } else {
-                            scheduleRepo.addSchedule(
+                            // === v49 彻底重构：新建排课统一走 saveSchedule（Repository 层强制校验） ===
+                            // 与编辑分支共用同一入口：日期不得早于首次购买（IllegalArgumentException）、
+                            // 剩余可排课时（三要素公式）> 0（ScheduleQuotaExceededException），
+                            // 业务异常直接上抛由 UI 显示明确文案，杜绝"额度用完仍排课"。
+                            // 体验课（form.isTrial）：studentId 强制 null（未注册学员），跳过校验
+                            val schedule = Schedule(
                                 studentName = form.studentName,
-                                studentId = form.studentId,
+                                studentId = if (form.isTrial) null else form.studentId,
                                 coachName = form.coachName,
                                 dayOfWeek = dayOfWeek,
                                 startTime = form.startTime,
                                 durationMinutes = form.durationMinutes,
                                 location = form.location,
                                 lessonType = form.lessonType,
+                                // 手动排课生效日默认今天（与 ScheduleRepository.addSchedule 原行为一致）
+                                startDate = todayStr(),
+                                endDate = "",
                                 isLongTerm = form.isLongTerm,
-                                content = form.content,
-                                contentImages = form.contentImages,
+                                isTrial = form.isTrial,
+                                content = scheduleRepo.contentToJson(form.content),
+                                contentImages = scheduleRepo.imagesToJson(form.contentImages),
                                 color = form.color,
                                 note = form.note,
-                                equipment = form.equipment
+                                equipment = scheduleRepo.equipmentToJson(form.equipment)
                             )
+                            val ok = opRepo.saveSchedule(schedule)
+                            if (!ok) {
+                                _toast.value = "保存失败：数据库写入异常，请查看 Logcat (tag=DataFlow)"
+                                return@safeLaunch
+                            }
                         }
                     }
                     val countText = if (targetDays.size > 1) "（${targetDays.size}天）" else ""
@@ -440,6 +461,9 @@ class OperationViewModel(
                     } else {
                         "课程已添加$countText"
                     }
+                    // === v49：保存长期排课后立即触发占位生成 ===
+                    // 确保长期排课生成器能正确反映刚占用的课时（额度同步扣减，避免超额）
+                    if (form.isLongTerm) ensureLongTermLessonsForWeek()
                 } else {
                     // === v33 数据流加固：优先使用 form.id 作为更新主键 ===
                     // 双重保险：editing.id 来自 startEdit 异步加载，理论上不丢失；
@@ -451,7 +475,8 @@ class OperationViewModel(
                         id = effectiveId,
                         studentName = form.studentName,
                         // v46：编辑模式未重选学员时保留原 studentId，避免被 null 覆盖清空
-                        studentId = form.studentId ?: editing.studentId,
+                        // v49 体验课：studentId 强制 null（未注册学员无软关联）
+                        studentId = if (form.isTrial) null else (form.studentId ?: editing.studentId),
                         coachName = form.coachName,
                         dayOfWeek = form.dayOfWeek,
                         startTime = form.startTime,
@@ -459,6 +484,7 @@ class OperationViewModel(
                         location = form.location,
                         lessonType = form.lessonType,
                         isLongTerm = form.isLongTerm,
+                        isTrial = form.isTrial,
                         content = scheduleRepo.contentToJson(form.content),
                         contentImages = scheduleRepo.imagesToJson(form.contentImages),
                         color = form.color,
@@ -519,6 +545,18 @@ class OperationViewModel(
                     // 不关闭编辑弹窗，保留用户已填表单
                     _coachConflictEvent.tryEmit(e)
                 }
+            } catch (e: ScheduleQuotaExceededException) {
+                // === v49：额度已满业务异常（三要素公式）===
+                // Repository 层 saveSchedule 上抛，直接显示明确文案，不走"保存失败"笼统提示
+                android.util.Log.w("OperationVM",
+                    "saveSchedule 额度校验拦截：${e.message}")
+                _toast.value = e.message ?: "无法排课：该学员课时额度已满"
+            } catch (e: IllegalArgumentException) {
+                // === 排课日期早于购买日期的业务校验异常 ===
+                // opRepo.saveSchedule 在事务前抛出，异常消息即用户可读文案，直接展示
+                android.util.Log.w("OperationVM",
+                    "saveSchedule 日期校验拦截：${e.message}")
+                _toast.value = e.message ?: "无法排课：日期校验失败"
             } catch (e: Exception) {
                 // === Bug 修复：不再黑盒吞掉异常，向用户显示具体失败原因 ===
                 // 原代码只 catch CoachConflictException，其他异常（主键冲突 / 约束违反 /
@@ -533,24 +571,25 @@ class OperationViewModel(
     }
 
     /**
-     * 长期排课自动生成本周课记录：
+     * 长期排课自动生成未来课时记录：
      * 进入排课页/每日计划页时检查所有 isLongTerm=true 的排课，
-     * 为本周对应 dayOfWeek 自动生成一条 Lesson 记录（若当天尚无对应记录）。
+     * 为未来日期（从当前周开始）自动生成 Lesson 占位记录。
      *
-     * 约束（数据流正确性核心）：
-     * - 仅对本周（_weekStart 起算 7 天内）的每个长期排课生成一次
-     * - 同一学员+同一日期+同一 startTime 已存在 Lesson 时跳过，避免重复
-     * - 自动生成的 Lesson 标记 lessonType = "长期自动"，便于区分手动签到
-     * - 过去日期（dateStr < today）：不补排新记录，已生成的保留不删除（历史数据不回溯）
-     * - 今天及以后日期（dateStr >= today）：必须同时满足以下条件才生成：
-     *   1. 学员在 dateStr 当天有"有效课时包"
-     *      （purchaseDate <= dateStr 且 expireDate 为空或 expireDate >= dateStr）
-     *      → 修正：避免学员 7.24 买的课被排到 7.20
-     *   2. 有效课时包剩余 > 从 dateStr 起长期自动未签退的课时数
-     *      → v27 重构：原 [OperationRepository.countUnconsumedLessonsFrom] 按 packageId 为空判断，
-     *        但新流程下签到时 packageId 必为空（签到不扣课时），会导致待签退课时被错误计入"未消费"
-     *      → 改用 [OperationRepository.countLongTermPendingFrom]：只统计长期自动生成且 status != "已签退" 的课时
-     *      → 确保排课精确到最后一节课，余额用完后停止生成
+     * === v49 彻底重构：独立学员循环 + 逐日生成 + 额度封顶 ===
+     * 生成核心已下沉到 [com.shangmentiyu.sportscoach.data.repo.ScheduleQueryRepository]
+     * 的 [com.shangmentiyu.sportscoach.data.repo.ScheduleQueryRepository.generateLongTermLessonsForStudent]
+     * （与历史修正 fixHistoricalScheduleErrors 共用同一实现）：
+     *
+     * 1. 使用一个独立循环处理每个学员
+     * 2. 遍历未来日期（从当前周开始），检查每一天是否已经存在排课；
+     *    若当天未排，则判断剩余可排课时（总-已消耗-待消耗，三要素公式）是否 > 0：
+     *    - 是 → 按当天 dayOfWeek 命中的长期模板生成一条课时占位，额度减 1
+     *    - 否 → 立即停止该学员后续所有排课生成
+     * 3. 严格遵循学员排课偏好（周一至周五等）：周几无模板则跳过
+     * 4. 模板为 schedules 表长期记录（手动排课时写入），生成器只追加 lessons 占位
+     * 5. 过去日期（date < today）：不补排新记录（历史数据不回溯）
+     *
+     * 一旦剩余可排课时为 0，不再生成任何未来排课（根治「额度用完仍排课」）。
      */
     fun ensureLongTermLessonsForWeek() {
         safeLaunch {
@@ -560,72 +599,27 @@ class OperationViewModel(
                 val allSchedules = scheduleRepo.getAllSchedulesOnce()
                 val longTerm = allSchedules.filter { it.isActive && it.isLongTerm }
                 if (longTerm.isEmpty()) return@withLock
-                val cal = Calendar.getInstance()
-                val weekStartCal = Calendar.getInstance().apply {
-                    time = _weekStart.value
-                    set(Calendar.HOUR_OF_DAY, 0)
-                    clear(Calendar.MINUTE); clear(Calendar.SECOND); clear(Calendar.MILLISECOND)
-                }
+
                 // 线程安全：使用 [LocalDate] + [DateTimeFormatter] 替代 [SimpleDateFormat]
-                val todayStr = LocalDate.now().format(dateFormatter)
                 val zone = java.time.ZoneId.systemDefault()
+                val weekStartStr = _weekStart.value.toInstant()
+                    .atZone(zone).toLocalDate().format(dateFormatter)
+                val todayStr = LocalDate.now().format(dateFormatter)
 
-                // v24 优化2：收集本周余额不足警告，生成完成后一次性推送给 UI
+                // v24 优化2：收集余额不足警告，生成完成后一次性推送给 UI
                 val warnings = mutableListOf<String>()
-                // 周几中文映射，用于生成可读警告文案
-                val dayNames = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
 
-                // 逐周生成前预计算每学员可用额度：futureAvailable = totalRemaining - pendingConsumed
-                // （pastConsumed 已体现在 remainingLessons 中，不重复扣减）
+                // === v49：独立循环处理每个学员 ===
+                // 每个学员的剩余可排课时独立计算（三要素公式），额度用尽只停止该学员，
+                // 不影响其他学员继续生成
                 val students = longTerm.map { it.studentName }.distinct()
-                val futureAvailableByStudent = students.associateWith { name ->
-                    validateSchedule.futureAvailableLessons(name, todayStr)
-                }
-                val totalRemainingByStudent = students.associateWith { name ->
-                    opRepo.getEffectiveRemainingLessons(name, todayStr)
-                }
-                val weekGenerated = mutableMapOf<String, Int>()
-
-                // 超限停止：每学员可用额度 = futureAvailable（totalRemaining - 已占用）。
-                // 学员额度用尽（本周已生成 + 已占用 >= futureAvailable）后立即截断该学员
-                // 本周剩余日期的生成，坚决不再往后排一周；其他学员额度未满则继续正常生成。
-                val exhausted = mutableSetOf<String>()
-                // 遍历本周 7 天
-                for (offset in 0..6) {
-                    val dayCal = Calendar.getInstance().apply {
-                        time = weekStartCal.time
-                        add(Calendar.DATE, offset)
+                for (name in students) {
+                    val available = validateSchedule.availableQuota(name, todayStr)
+                    if (available <= 0) {
+                        warnings.add("$name 课时额度已用完（剩余可排课时为 0），不再生成排课")
+                        continue
                     }
-                    val dayOfWeek = dayCal.get(Calendar.DAY_OF_WEEK).let { if (it == 1) 7 else it - 1 }
-                    val dateStr = dayCal.toInstant().atZone(zone).toLocalDate().format(dateFormatter)
-                    // 绝对禁止为已过去的日期生成或重生成 Lesson 记录
-                    if (dateStr < todayStr) continue
-
-                    longTerm.filter { it.dayOfWeek == dayOfWeek }.forEach { sched ->
-                        val name = sched.studentName
-                        // 该学员额度已用尽：本周剩余日期全部截断，不补排
-                        if (name in exhausted) return@forEach
-                        if (!sched.isLongTerm) return@forEach
-
-                        if (sched.endDate.isNotBlank() && dateStr > sched.endDate) return@forEach
-                        if (sched.startDate.isNotBlank() && dateStr < sched.startDate) return@forEach
-                        if (opRepo.hasLessonForScheduleOnDate(sched.studentName, dateStr, sched.startTime)) {
-                            return@forEach
-                        }
-
-                        // 超限停止：本周已生成 + 已占用 >= 可用额度时，截断该学员后续所有排课
-                        val dayLabel = dayNames.getOrElse(dayOfWeek - 1) { "周$dayOfWeek" }
-                        val usedBudget = weekGenerated[name] ?: 0
-                        val futureAvailable = futureAvailableByStudent[name] ?: 0
-                        if (usedBudget >= futureAvailable) {
-                            warnings.add("${name} $dayLabel 余额不足（剩余${totalRemainingByStudent[name] ?: 0} 节）")
-                            exhausted += name
-                            return@forEach
-                        }
-
-                        opRepo.generateLongTermLesson(sched, dateStr)
-                        weekGenerated[name] = usedBudget + 1
-                    }
+                    opRepo.generateLongTermLessonsForStudent(name, weekStartStr, todayStr)
                 }
 
                 // v24 优化2：将收集到的余额不足警告推送给 UI

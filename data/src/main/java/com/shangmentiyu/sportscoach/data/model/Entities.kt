@@ -101,6 +101,8 @@ data class Lesson(
     // 配合"签退后消耗课时"重构：签到时仅创建 Lesson(status="已签到", packageId="")
     // 签退时事务内：consumeLesson 扣减课时包 + 更新 Lesson(status="已签退", packageId, signOutTime)
     val status: String = "已签到",         // 课时状态：已签到 / 已签退
+    // === v49 体验课：未注册学员临时体验课占位/签到记录，签退不扣减课时包 ===
+    val isTrial: Boolean = false,
     val createdAt: Long = System.currentTimeMillis()
 )
 

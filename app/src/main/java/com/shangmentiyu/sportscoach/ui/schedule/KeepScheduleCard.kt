@@ -181,6 +181,22 @@ fun KeepScheduleCard(
                             )
                         }
                     }
+                    // === v49 体验课标签：浅紫色胶囊，明显标识临时体验课 ===
+                    if (schedule.isTrial) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color(0xFFEDE7F6))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "体验课",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color(0xFF7B1FA2)
+                            )
+                        }
+                    }
                     if (!schedule.isActive) {
                         Box(
                             modifier = Modifier

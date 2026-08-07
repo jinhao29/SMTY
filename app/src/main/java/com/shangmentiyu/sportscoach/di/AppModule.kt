@@ -101,7 +101,10 @@ val appModule = module {
     single { ScriptRepository(androidContext()) }
 
     // === 领域层 ===
-    single { ValidateScheduleUseCase(get()) }
+    // 修复闪退：ValidateScheduleUseCase 构造参数是接口 ScheduleValidationSource，
+    // Koin 按精确类型解析注册表内无该接口定义，会抛 NoBeanDefFoundException 闪退；
+    // 显式注入实现类 OperationRepository（其实现该接口，双通道查询逻辑唯一）
+    single { ValidateScheduleUseCase(get<OperationRepository>()) }
     single { CalculateRemainingLessonsUseCase(get()) }
 
     // === 视图模型层（v46 架构层四：全量迁移到 Koin） ===

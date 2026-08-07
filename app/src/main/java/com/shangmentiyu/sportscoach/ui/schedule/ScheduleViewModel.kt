@@ -35,6 +35,8 @@ data class ScheduleForm(
     val location: String = "",
     val lessonType: String = "训练课",
     val isLongTerm: Boolean = false, // 是否长期排课（勾选后每周自动生成对应时间的课表）
+    // === v49 体验课：未注册学员临时体验课，不选学员（studentId=null，studentName 填临时姓名），不消耗课时包 ===
+    val isTrial: Boolean = false,
     val content: List<ExerciseItem> = emptyList(),
     val contentImages: List<String> = emptyList(),  // 训练内容图片路径（从电脑截图导入）
     val color: String = "blue",
