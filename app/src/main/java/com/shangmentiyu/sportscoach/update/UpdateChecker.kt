@@ -42,8 +42,9 @@ import java.util.concurrent.TimeUnit
  * 异常兜底策略：
  * - HTTP 404：仓库尚未发布 Release → 静默降级为 UpToDate，仅 Log.d，绝不弹窗
  * - SocketTimeoutException（下载阶段）：抛出 DownloadException 给上层弹"网络不稳定"
- * - SocketTimeoutException（检查阶段）：静默降级为 UpToDate
- * - 其他 IO 异常：静默降级为 UpToDate，不阻塞用户
+ * - SocketTimeoutException / UnknownHostException / IOException（检查阶段）：返回
+ *   Error("网络异常，请稍后重试")，让设置页手动检查明确提示；后台 Worker 收到 Error 排程 1h/6h 重试
+ * - 其他未预期异常：返回 Error 交 UI 展示
  */
 object UpdateChecker {
 
@@ -131,7 +132,8 @@ object UpdateChecker {
      *
      * 异常兜底策略：
      * - HTTP 404：仓库尚未发布 Release → 返回 [UpdateResult.UpToDate]，仅 Log.d，绝不弹窗
-     * - 网络异常（超时/无法解析主机）：→ 返回 [UpdateResult.UpToDate]，仅日志记录
+     * - 网络异常（超时/无法解析主机/连接重置）：→ 返回 [UpdateResult.Error]（"网络异常，请稍后重试"），
+     *   设置页手动检查可见明确提示；后台 Worker 据此排程重试
      * - 其他 HTTP 错误码 / JSON 解析错误：→ 返回 [UpdateResult.Error]
      */
     suspend fun checkForUpdate(): UpdateResult = withContext(Dispatchers.IO) {
@@ -218,7 +220,9 @@ object UpdateChecker {
                     return@withContext UpdateResult.Error("Release 缺少 tag_name")
                 }
 
-                val apkUrl = release.assets.firstOrNull()?.downloadUrl
+                // 优先取 universal 通用包（适用于所有 ABI 设备），兜底取第一个附件
+                val apkUrl = release.assets.firstOrNull { it.name.contains("universal") }
+                    ?.downloadUrl ?: release.assets.firstOrNull()?.downloadUrl
                 if (apkUrl.isNullOrBlank()) {
                     // Release 已发布但没有 APK 附件：视为"无可用更新"，避免错误弹窗
                     Log.w(
@@ -293,17 +297,18 @@ object UpdateChecker {
                 }
             }
         } catch (e: SocketTimeoutException) {
-            // 网络超时（检查阶段）：不弹错误窗，仅日志记录，视为"已是最新"
-            Log.w(TAG, "❌ 检查更新超时（SocketTimeoutException）：${e.message}，视为当前已是最新版本", e)
-            UpdateResult.UpToDate
+            // 网络超时（检查阶段）：返回 Error，让设置页"检查更新"明确提示网络异常，
+            // 而非静默降级为"已是最新"误导用户（后台 Worker 收到 Error 会排程 1h/6h 重试）
+            Log.w(TAG, "❌ 检查更新超时（SocketTimeoutException）：${e.message}", e)
+            UpdateResult.Error("网络异常，请稍后重试")
         } catch (e: UnknownHostException) {
-            // 无法解析主机（无网络/DNS 失败）：不弹错误窗，仅日志记录
+            // 无法解析主机（无网络/DNS 失败）：同上，明确提示而非静默
             Log.w(TAG, "❌ 无法连接 GitHub（UnknownHostException，网络不可用）：${e.message}", e)
-            UpdateResult.UpToDate
+            UpdateResult.Error("网络异常，请稍后重试")
         } catch (e: java.io.IOException) {
-            // 其他 IO 异常（连接重置等）：不弹错误窗，仅日志记录
+            // 其他 IO 异常（连接重置等）：网络类问题统一明确提示
             Log.w(TAG, "❌ 网络 IO 异常（IOException）：${e.message}", e)
-            UpdateResult.UpToDate
+            UpdateResult.Error("网络异常，请稍后重试")
         } catch (e: Exception) {
             // 未预期异常：返回 Error，由 UI 决定是否提示
             Log.e(TAG, "❌ 检查更新未预期异常: ${e.javaClass.simpleName}: ${e.message}", e)
