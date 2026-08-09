@@ -67,7 +67,15 @@ class DailyPlanViewModel(
         }
         viewModelScope.launch(appExceptionHandler) {
             _selectedDate
-                .flatMapLatest { date -> opRepo.getSchedulesByDay(parseDayOfWeek(date)) }
+                .flatMapLatest { date ->
+                    opRepo.getActiveSchedules().map { all ->
+                        val dow = parseDayOfWeek(date)
+                        val filtered = all.filter { it.dayOfWeek == dow }
+                        android.util.Log.d("ScheduleDataFlow",
+                            "date=$date, dayOfWeek=$dow, total=${all.size}, filtered=${filtered.size}")
+                        filtered
+                    }
+                }
                 .collect {
                     _schedules.value = it
                     _loaded.value = true

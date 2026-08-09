@@ -59,6 +59,7 @@ import com.shangmentiyu.sportscoach.core.AbilityAnalyzer
 import com.shangmentiyu.sportscoach.core.BmiProcessor
 import com.shangmentiyu.sportscoach.core.Standards
 import com.shangmentiyu.sportscoach.data.model.Lesson
+import com.shangmentiyu.sportscoach.ui.theme.AppTextField
 import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.theme.AttendanceAbsent
 import com.shangmentiyu.sportscoach.ui.theme.AttendanceLate
@@ -93,8 +94,6 @@ import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appSurface
-import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
-import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 /**
  * 成长档案页：明亮活力渐变风格（Dribbble-inspired）。
@@ -464,15 +463,13 @@ private fun ParentNameInputDialog(
                     color = MaterialTheme.colorScheme.primary
                 )
                 Spacer(Modifier.height(Spacing.xs))
-                androidx.compose.material3.OutlinedTextField(
+                AppTextField(
                     value = parentName,
                     onValueChange = { parentName = it },
                     placeholder = { Text("如：张爸爸 / 李妈妈") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-
-                 shape = AppTextFieldShape,
-                 colors = appTextFieldColors(),)
+                    modifier = Modifier.fillMaxWidth()
+                )
                 Spacer(Modifier.height(Spacing.sm))
                 Text(
                     "加密后生成 4 位密码，需口头告知家长查看",

@@ -15,7 +15,12 @@ object Scorer {
         if (raw.isNullOrBlank()) throw IllegalArgumentException("成绩为空")
         val s = raw.trim()
         if (unit == "分秒") return parseTime(s)
-        return s.toDoubleOrNull() ?: throw IllegalArgumentException("格式错误")
+        // === v50：显式拒绝负数成绩 ===
+        // 原实现直接 toDoubleOrNull()，负数（如 "-5"）会被 scoreLess 误判为满分，
+        // 或由 coerceIn(0,100) 静默吸收；现统一抛"成绩不能为负数"，由上层 ok=false 拦截不入库
+        val value = s.toDoubleOrNull() ?: throw IllegalArgumentException("格式错误")
+        if (value < 0) throw IllegalArgumentException("成绩不能为负数")
+        return value
     }
 
     /** 解析分秒为秒数 */

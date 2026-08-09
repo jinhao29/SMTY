@@ -24,7 +24,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -45,6 +44,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shangmentiyu.sportscoach.core.BmiProcessor
+import com.shangmentiyu.sportscoach.ui.theme.AppTextField
 import com.shangmentiyu.sportscoach.ui.theme.PrimaryButton
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appBackground
@@ -54,8 +54,6 @@ import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 import com.shangmentiyu.sportscoach.ui.theme.appSurface
 import com.shangmentiyu.sportscoach.ui.theme.appTertiary
 import com.shangmentiyu.sportscoach.ui.theme.appInfoBlue
-import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
-import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 /**
  * BMI 计算器页面。
@@ -131,7 +129,7 @@ fun BmiCalculatorScreen(
                     color = appOnSurface()
                 )
 
-                OutlinedTextField(
+                AppTextField(
                     value = heightText,
                     onValueChange = { heightText = it.filter { c -> c.isDigit() } },
                     label = { Text("身高") },
@@ -139,11 +137,9 @@ fun BmiCalculatorScreen(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                shape = AppTextFieldShape,
-                colors = appTextFieldColors(),
-                )
+)
 
-                OutlinedTextField(
+                AppTextField(
                     value = weightText,
                     onValueChange = { weightText = it.filter { c -> c.isDigit() || c == '.' } },
                     label = { Text("体重") },
@@ -151,9 +147,7 @@ fun BmiCalculatorScreen(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                shape = AppTextFieldShape,
-                colors = appTextFieldColors(),
-                )
+)
 
                 PrimaryButton(
                     text = "计算 BMI",

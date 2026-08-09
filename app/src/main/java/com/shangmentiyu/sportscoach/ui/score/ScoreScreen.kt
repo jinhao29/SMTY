@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -17,6 +18,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,7 +33,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
-import com.shangmentiyu.sportscoach.ui.theme.appSurface
 import com.shangmentiyu.sportscoach.ui.theme.appSurfaceVariant
 
 /**
@@ -53,15 +55,14 @@ fun ScoreScreen(
 ) {
     var tabIndex by remember { mutableStateOf(1) } // 默认"查看成绩"
 
-    Scaffold(
-        containerColor = appSurface()
-    ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            // === 顶部胶囊 Tab 栏（替代原 PrimaryTabRow，彻底移除紫色实线下划线）===
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+    Scaffold(contentWindowInsets = WindowInsets(0)) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // === 顶部胶囊 Tab 栏（替代原 PrimaryTabRow，彻底移除紫色实线下划线）===
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                 ScoreTabItem(
                     label = "录入成绩",
                     selected = tabIndex == 0,
@@ -72,15 +73,16 @@ fun ScoreScreen(
                     selected = tabIndex == 1,
                     onClick = { tabIndex = 1 }
                 )
-            }
-            Crossfade(
-                targetState = tabIndex,
-                animationSpec = tween(durationMillis = 220),
-                label = "ScoreTabCrossfade"
-            ) { index ->
-                when (index) {
-                    0 -> ScoreInputTab()
-                    1 -> ScoreViewTab(onEditScore = onEditScore)
+                }
+                Crossfade(
+                    targetState = tabIndex,
+                    animationSpec = tween(durationMillis = 220),
+                    label = "ScoreTabCrossfade"
+                ) { index ->
+                    when (index) {
+                        0 -> ScoreInputTab()
+                        1 -> ScoreViewTab(onEditScore = onEditScore)
+                    }
                 }
             }
         }
@@ -127,4 +129,10 @@ private fun RowScope.ScoreTabItem(
             maxLines = 1
         )
     }
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFFF5F7FA)
+@Composable
+private fun ScoreScreenPreview() {
+    ScoreScreen(onOpenLesson = {})
 }

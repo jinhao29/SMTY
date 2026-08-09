@@ -24,13 +24,13 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.EventRepeat
 import androidx.compose.material.icons.outlined.Remove
+import com.shangmentiyu.sportscoach.ui.theme.AppTextField
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -52,8 +52,6 @@ import com.shangmentiyu.sportscoach.ui.operation.OperationViewModel
 import com.shangmentiyu.sportscoach.ui.schedule.AutoScheduleFromPackageDialog
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
-import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
-import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 /**
  * 课时管理 Tab：展示所有学员的课时包余额，支持增添/减少/赠送。
@@ -394,15 +392,13 @@ private fun RenameStudentDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.outline
                 )
-                OutlinedTextField(
+                AppTextField(
                     value = newName,
                     onValueChange = { newName = it },
                     label = { Text("新姓名") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                shape = AppTextFieldShape,
-                colors = appTextFieldColors(),
-                )
+)
             }
         },
         confirmButton = {
@@ -446,14 +442,12 @@ private fun AdjustDialog(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("学员：${pkg.studentName} (${pkg.name})")
                 Text("当前剩余：${pkg.remainingLessons} 课时")
-                OutlinedTextField(
+                AppTextField(
                     value = countText,
                     onValueChange = { countText = it.filter { c -> c.isDigit() } },
                     label = { Text(hint) },
                     singleLine = true,
-                shape = AppTextFieldShape,
-                colors = appTextFieldColors(),
-                )
+)
             }
         },
         confirmButton = {
@@ -498,33 +492,27 @@ private fun EditPackageDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.outline)
 
-                OutlinedTextField(
+                AppTextField(
                     value = purchaseDate,
                     onValueChange = { purchaseDate = it },
                     label = { Text("购买日期 (YYYY-MM-DD)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                shape = AppTextFieldShape,
-                colors = appTextFieldColors(),
-                )
-                OutlinedTextField(
+)
+                AppTextField(
                     value = expireDate,
                     onValueChange = { expireDate = it },
                     label = { Text("过期日期 (留空=永不过期)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                shape = AppTextFieldShape,
-                colors = appTextFieldColors(),
-                )
-                OutlinedTextField(
+)
+                AppTextField(
                     value = usedText,
                     onValueChange = { usedText = it.filter { c -> c.isDigit() } },
                     label = { Text("已用课时 (0-${pkg.totalLessons})") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                shape = AppTextFieldShape,
-                colors = appTextFieldColors(),
-                )
+)
 
                 // 直接消课按钮
                 Button(

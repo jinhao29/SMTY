@@ -18,6 +18,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.shangmentiyu.sportscoach.ui.theme.AppTextField
 import kotlinx.coroutines.launch
 import com.shangmentiyu.sportscoach.core.Standards
 import com.shangmentiyu.sportscoach.core.Std
@@ -74,19 +75,17 @@ fun ScoringScreen(
                 onExpandedChange = { studentExpanded = !studentExpanded },
                 modifier = Modifier.padding(16.dp)
             ) {
-                OutlinedTextField(
+                AppTextField(
                     value = selectedStudent?.let { "${it.name} (${it.gender} ${Standards.gradeLabel(it.grade)})" } ?: "",
                     onValueChange = {},
                     readOnly = true,
                     label = { Text("选择学员") },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = studentExpanded) },
-                    shape = AppTextFieldShape,
-                    colors = appTextFieldColors(),
-                    modifier = Modifier.fillMaxWidth().menuAnchor(
+modifier = Modifier.fillMaxWidth().menuAnchor(
                         androidx.compose.material3.MenuAnchorType.PrimaryNotEditable,
                         enabled = true
                     )
-                )
+)
                 ExposedDropdownMenu(expanded = studentExpanded, onDismissRequest = { studentExpanded = false }) {
                     students.forEach { student ->
                         DropdownMenuItem(
@@ -233,15 +232,13 @@ private fun ScoreRow(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            OutlinedTextField(
+            AppTextField(
                 value = inputValue,
                 onValueChange = onValueChange,
                 label = { Text("输入成绩(${std.unit})") },
                 modifier = Modifier.weight(1f),
                 singleLine = true,
-                shape = AppTextFieldShape,
-                colors = appTextFieldColors()
-            )
+)
             Spacer(modifier = Modifier.width(8.dp))
             // 得分和等级
             if (result != null && result.ok && result.score != null) {
@@ -296,15 +293,13 @@ private fun CustomScoreRow(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            OutlinedTextField(
+            AppTextField(
                 value = inputValue,
                 onValueChange = onValueChange,
                 label = { Text("输入成绩") },
                 modifier = Modifier.weight(1f),
                 singleLine = true,
-                shape = AppTextFieldShape,
-                colors = appTextFieldColors()
-            )
+)
             Spacer(modifier = Modifier.width(8.dp))
             IconButton(onClick = onRemove) {
                 Icon(
@@ -337,15 +332,13 @@ private fun AddCustomProjectDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.outline
                 )
-                OutlinedTextField(
+                AppTextField(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text("项目名称") },
                     singleLine = true,
-                    shape = AppTextFieldShape,
-                    colors = appTextFieldColors(),
-                    modifier = Modifier.fillMaxWidth()
-                )
+modifier = Modifier.fillMaxWidth()
+)
             }
         },
         confirmButton = {

@@ -189,13 +189,14 @@ class StudentRepository(
         // v47：级联清单统一为 5 张业务子表（lessons/schedules/lesson_packages/
         // training_cycles/student_plan_images），与 softDeleteStudentById 保持一致
         db?.withTransaction {
+            // v48 双通道：先读 studentId，再软删除（软删后 getByName 过滤活跃行会返回 null）
+            val sid = dao.getByNameIncludeDeleted(name)?.studentId
             dao.softDeleteByName(name)
             db.lessonDao().deleteByStudent(name)
             db.scheduleDao().deleteByStudent(name)
             db.lessonPackageDao().deleteByStudent(name)
             db.trainingCycleDao().deleteByStudent(name)
             // v48 双通道：studentId 优先，旧数据 NULL 回退姓名
-            val sid = dao.getByName(name)?.studentId
             db.planImageDao().deleteByStudentIdDual(sid, name)
         } ?: dao.softDeleteByName(name)
         // v26 优化1：记录操作日志（软删除）
@@ -260,7 +261,10 @@ class StudentRepository(
 
         // 在单事务内原子级联更新所有子表的 studentName
         database.withTransaction {
-            // 1. 主表改名（必须先执行，后续子表通过新名关联）
+            // v48 双通道：先读 studentId，再改名（改名后 getByName(oldName) 返回 null）
+            val sid = dao.getByNameIncludeDeleted(oldName)?.studentId
+
+            // 1. 主表改名（必须先于后续子表更新）
             dao.renameStudent(oldName, newName)
 
             // 2. 各子表 studentName 字段同步更新
@@ -272,7 +276,9 @@ class StudentRepository(
             database.parentReportDao().renameStudent(oldName, newName)
             database.dietDao().renameStudent(oldName, newName)
             // v48 双通道：student_plan_images 改名并补写 studentId（旧数据 NULL 回退姓名）
-            database.planImageDao().renameStudentIdDual(dao.getByName(oldName)?.studentId, oldName, newName)
+            database.planImageDao().renameStudentIdDual(sid, oldName, newName)
+            // 归档课时表改名，防止历史数据断链
+            database.archivedLessonDao().renameStudent(oldName, newName)
 
             // v26 优化1：在事务内记录日志，保证数据与日志一致性
             auditLog?.log(
@@ -373,12 +379,14 @@ class StudentRepository(
                 database.lessonDao().updateStudentNameByStudentId(studentId, newName)
                 database.scheduleDao().updateStudentNameByStudentId(studentId, newName)
                 database.lessonPackageDao().updateStudentNameByStudentId(studentId, newName)
-                database.trainingCycleDao().renameStudent(oldName, newName)
-                database.bodyMetricHistoryDao().renameStudent(oldName, newName)
-                database.parentReportDao().renameStudent(oldName, newName)
-                database.dietDao().renameStudent(oldName, newName)
+                database.trainingCycleDao().updateStudentNameByStudentId(studentId, newName)
+                database.bodyMetricHistoryDao().updateStudentNameByStudentId(studentId, newName)
+                database.parentReportDao().updateStudentNameByStudentId(studentId, newName)
+                database.dietDao().updateStudentNameByStudentId(studentId, newName)
                 // v48 双通道：student_plan_images 改名并补写 studentId
                 database.planImageDao().renameStudentIdDual(studentId, oldName, newName)
+                // 归档课时表改名，防止历史数据断链
+                database.archivedLessonDao().renameStudent(oldName, newName)
 
                 // 4.3 在事务内记录日志，保证数据与日志一致性
                 auditLog?.log(

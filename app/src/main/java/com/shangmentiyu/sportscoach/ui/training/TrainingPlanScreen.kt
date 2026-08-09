@@ -33,6 +33,8 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -292,4 +294,10 @@ private fun ExerciseRecommendCard(re: RecommendedExercise, index: Int) {
             }
         }
     }
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFFF5F7FA)
+@Composable
+private fun TrainingPlanScreenPreview() {
+    TrainingPlanScreen(studentName = "示例学员", onBack = {}, onApplied = {})
 }

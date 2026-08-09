@@ -49,7 +49,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -72,6 +71,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import com.shangmentiyu.sportscoach.core.PhotoCrypto
 import com.shangmentiyu.sportscoach.data.model.Lesson
+import com.shangmentiyu.sportscoach.ui.theme.AppTextField
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import com.shangmentiyu.sportscoach.ui.theme.SafeAsyncImage
 import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
@@ -84,8 +84,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
-import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 /**
  * 课后反馈 Tab：展示**全部历史签到签退记录**，按日期分组、对应学员对应日期，
@@ -655,7 +653,7 @@ private fun PostClassLessonCard(
                     expanded = typeExpanded,
                     onExpandedChange = { typeExpanded = !typeExpanded }
                 ) {
-                    OutlinedTextField(
+                    AppTextField(
                         value = editLessonType,
                         onValueChange = { editLessonType = it },
                         readOnly = false,
@@ -664,9 +662,7 @@ private fun PostClassLessonCard(
                         modifier = Modifier.fillMaxWidth()
                             .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true),
                         singleLine = true,
-
-                     shape = AppTextFieldShape,
-                     colors = appTextFieldColors(),)
+)
                     ExposedDropdownMenu(
                         expanded = typeExpanded,
                         onDismissRequest = { typeExpanded = false }
@@ -689,16 +685,14 @@ private fun PostClassLessonCard(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    OutlinedTextField(
+                    AppTextField(
                         value = editCoach,
                         onValueChange = { editCoach = it },
                         label = { Text("教练") },
                         singleLine = true,
                         modifier = Modifier.weight(1.5f),
-
-                     shape = AppTextFieldShape,
-                     colors = appTextFieldColors(),)
-                    OutlinedTextField(
+)
+                    AppTextField(
                         value = editDuration,
                         onValueChange = { editDuration = it.filter { c -> c.isDigit() } },
                         label = { Text("时长(分)") },
@@ -707,22 +701,18 @@ private fun PostClassLessonCard(
                             keyboardType = KeyboardType.Number
                         ),
                         modifier = Modifier.weight(1f),
-
-                     shape = AppTextFieldShape,
-                     colors = appTextFieldColors(),)
+)
                 }
                 Spacer(Modifier.height(8.dp))
 
                 // 地点
-                OutlinedTextField(
+                AppTextField(
                     value = editLocation,
                     onValueChange = { editLocation = it },
                     label = { Text("上课地点") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-
-                 shape = AppTextFieldShape,
-                 colors = appTextFieldColors(),)
+)
                 Spacer(Modifier.height(8.dp))
 
                 // 出勤状态（下拉建议 + 自定义）
@@ -732,7 +722,7 @@ private fun PostClassLessonCard(
                     expanded = attExpanded,
                     onExpandedChange = { attExpanded = !attExpanded }
                 ) {
-                    OutlinedTextField(
+                    AppTextField(
                         value = editAttendance,
                         onValueChange = { editAttendance = it },
                         readOnly = false,
@@ -741,9 +731,7 @@ private fun PostClassLessonCard(
                         modifier = Modifier.fillMaxWidth()
                             .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true),
                         singleLine = true,
-
-                     shape = AppTextFieldShape,
-                     colors = appTextFieldColors(),)
+)
                     ExposedDropdownMenu(
                         expanded = attExpanded,
                         onDismissRequest = { attExpanded = false }
@@ -812,16 +800,14 @@ private fun PostClassLessonCard(
                 Spacer(Modifier.height(8.dp))
 
                 // 教练寄语输入
-                OutlinedTextField(
+                AppTextField(
                     value = editComment,
                     onValueChange = { editComment = it },
                     label = { Text("教练寄语（给家长）") },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 3,
                     maxLines = 6,
-
-                 shape = AppTextFieldShape,
-                 colors = appTextFieldColors(),)
+)
                 Spacer(Modifier.height(8.dp))
 
                 // 保存反馈按钮

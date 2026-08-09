@@ -1,7 +1,7 @@
 package com.shangmentiyu.sportscoach.ui.home
 
+import com.shangmentiyu.sportscoach.ui.theme.ShadowTokens
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,12 +19,14 @@ import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -35,8 +37,6 @@ import com.shangmentiyu.sportscoach.data.model.Student
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
-import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
-import com.shangmentiyu.sportscoach.ui.theme.appOutline
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 
 /**
@@ -51,7 +51,6 @@ import com.shangmentiyu.sportscoach.ui.theme.appPrimary
  * @param student 学员数据
  * @param remaining 剩余课时数
  * @param nextLesson 下一节课（可为 null）
- * @param showTopDivider 是否显示顶部分割线（首项不显示）
  * @param onSign 签到回调
  * @param onGrowth 成长档案回调
  * @param onEdit 编辑回调
@@ -65,7 +64,6 @@ internal fun StudentListItem(
     student: Student,
     remaining: Int,
     nextLesson: Lesson?,
-    showTopDivider: Boolean,
     onSign: () -> Unit,
     onGrowth: () -> Unit,
     onEdit: () -> Unit,
@@ -93,7 +91,7 @@ internal fun StudentListItem(
             }
         }
     }
-    val avatarBg = remember(student.name) { avatarColorFor(student.name) }
+    val avatarBg = avatarColorFor(student.name)
     val bmiValue = remember(student.bmi, student.heightCm, student.weightKg) {
         if (student.bmi > 0f) student.bmi
         else if (student.heightCm > 0 && student.weightKg > 0f)
@@ -106,24 +104,26 @@ internal fun StudentListItem(
     val primaryColor = appPrimary()
     val editIconBgColor = remember(primaryColor) { primaryColor.copy(alpha = 0.12f) }
 
-    // === 痛点二 方案A：iOS 分组列表行样式 ===
-    Column(
+    // === 参考图复刻：独立白色卡片（16dp 大圆角 + 4dp 柔和弥散阴影）===
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface)
-            .clickable(onClick = onGrowth)
-            .padding(Spacing.md)
+            .shadow(
+                elevation = 4.dp,
+                shape = RoundedCornerShape(16.dp),
+                ambientColor = ShadowTokens.softAmbient,
+                spotColor = ShadowTokens.softSpot
+            ),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 0.dp
     ) {
-        // === 顶部细灰分割线（首项不显示）===
-        if (showTopDivider) {
-            Box(
-                modifier = Modifier
-                    .padding(bottom = Spacing.md)
-                    .height(0.5.dp)
-                    .fillMaxWidth()
-                    .background(appDividerColor())
-            )
-        }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onGrowth)
+                .padding(Spacing.md)
+        ) {
         // === 第一行：头像 + 姓名 + 剩余课时徽章 ===
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -249,6 +249,7 @@ internal fun StudentListItem(
                 type = CardActionType.PRIMARY
             )
         }
+        }
     }
 }
 
@@ -274,6 +275,14 @@ enum class CardActionType { PRIMARY, NEUTRAL, DANGER }
  * - 充足的垂直 padding（11dp）保证 44dp 触控区
  * - 文字居中，FontWeight.Medium
  */
+/**
+ * 卡片底部按钮：圆角胶囊样式（RoundedCornerShape(50)），颜色严格统一为珊瑚橙。
+ *
+ * 设计要点（参考图复刻）：
+ * - 主操作（签到）：珊瑚橙背景 #FF6B47 + 白色文字
+ * - 次要操作（编辑/删除）：浅珊瑚橙填充背景（主色 10% 透明度）+ 珊瑚橙文字
+ * - 无任何实线边框，50dp 胶囊圆角
+ */
 @Composable
 internal fun CardActionButton(
     text: String,
@@ -281,20 +290,21 @@ internal fun CardActionButton(
     type: CardActionType,
     modifier: Modifier = Modifier
 ) {
+    val primary = appPrimary()
     val bgColor = when (type) {
-        CardActionType.PRIMARY -> appPrimary().copy(alpha = 0.12f)
-        CardActionType.NEUTRAL -> appOnSurfaceVariant().copy(alpha = 0.10f)
-        CardActionType.DANGER -> MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
+        CardActionType.PRIMARY -> primary
+        CardActionType.NEUTRAL -> primary.copy(alpha = 0.10f)
+        CardActionType.DANGER -> primary.copy(alpha = 0.10f)
     }
     val textColor = when (type) {
-        CardActionType.PRIMARY -> appPrimary()
-        CardActionType.NEUTRAL -> appOnSurfaceVariant()
-        CardActionType.DANGER -> MaterialTheme.colorScheme.error
+        CardActionType.PRIMARY -> Color.White
+        CardActionType.NEUTRAL -> primary
+        CardActionType.DANGER -> primary
     }
 
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(50))
             .background(bgColor)
             .clickable(onClick = onClick)
             .padding(vertical = 11.dp),

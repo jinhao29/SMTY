@@ -56,6 +56,13 @@ class LessonViewModel(
     private val _packageName = MutableStateFlow("")
     val packageName: StateFlow<String> = _packageName.asStateFlow()
 
+    /**
+     * 签退进行中标记：防止连点「完成签退」导致并发执行两次消课事务。
+     * Repository 层另有 consumeMutex + 幂等拦截兜底，此处为第一道 UI 防线。
+     */
+    private val _signingOut = MutableStateFlow(false)
+    val signingOut: StateFlow<Boolean> = _signingOut.asStateFlow()
+
     /** 教练默认值：优先读取设置中的教练名，为空时强制 "李" */
     val defaultCoach: StateFlow<String> = settingsRepo.coach
         .map { it.ifBlank { DEFAULT_COACH } }
@@ -162,35 +169,64 @@ class LessonViewModel(
     }
 
     /**
-     * 课后签退：记录签退时间（当前 HH:mm）与可选的签退照片路径。
+     * 课后签退（结算本次课时）。
      *
-     * 签退不消课（消课在签到时已完成），仅补充签退时间与照片。
-     * 签退照片路径由 UI 层先通过 [updateLesson] 写入 signOutPhotoPath 字段，
-     * 此方法只负责设置 signOutTime 并立即持久化（不走防抖，确保签退时间精确）。
+     * === v50 修复：签退必须走事务化消课，否则"正常学员签退不扣课时" ===
+     * 旧实现仅调用 [LessonRepository.signOut] 写 signOutTime，既不扣减课时包也不更新 status，
+     * 导致 UI 显示"已签退"但课时包余额纹丝不动。现统一委托
+     * [OperationRepository.consumeLessonForCheckOut]：
+     * - 单事务内完成「扣减课时包 + 更新 status=已签退 + 写入 signOutTime + 回填 packageId」
+     * - 体验课（isTrial=true）仅记录签退时间，不消耗课时包
+     * - 任一环节失败整体回滚，杜绝"签退了但没扣课时"残缺态
+     *
+     * 防重入：[_signingOut] 置位期间忽略重复调用；Repository 另有 consumeMutex + 幂等拦截兜底。
      *
      * @param onDone 签退完成回调（主线程），参数为是否成功
      */
     fun signOut(onDone: (Boolean) -> Unit = {}) {
         val current = _lesson.value ?: run { onDone(false); return }
+        if (_signingOut.value) {
+            android.util.Log.d("CheckOutFlow", "signOut 拦截：lessonId=${current.id} 正在签退中")
+            return
+        }
+        _signingOut.value = true
         viewModelScope.launch(appExceptionHandler) {
-            val photoPath = current.signOutPhotoPath
-            val ok = lessonRepo.signOut(current.id, photoPath)
-            if (ok) {
-                // 签退成功：沉淀地点记忆（供下次签到页自动填充）
-                if (current.location.isNotBlank()) {
-                    memoryRepo.saveMemory(
-                        current.coach.ifBlank { DEFAULT_COACH },
-                        FIELD_CHECKIN_LOCATION,
-                        current.location
-                    )
+            try {
+                // 签退照片路径已由 UI 通过 updateLesson 先行持久化，此处直接走事务化消课
+                val result = opRepo.consumeLessonForCheckOut(current)
+                android.util.Log.d("CheckOutFlow",
+                    "signOut lessonId=${current.id} success=${result.success} " +
+                        "pkg=${result.packageName} remaining=${result.remainingAfter}")
+                if (result.success) {
+                    _toast.value = if (result.packageName.isNotEmpty()) {
+                        "签退成功，剩余 ${result.remainingAfter} 节"
+                    } else {
+                        result.message // 体验课：不消耗课时
+                    }
+                    // 沉淀地点记忆（供下次签到页自动填充）
+                    if (current.location.isNotBlank()) {
+                        memoryRepo.saveMemory(
+                            current.coach.ifBlank { DEFAULT_COACH },
+                            FIELD_CHECKIN_LOCATION,
+                            current.location
+                        )
+                    }
+                    // 重新加载课时，刷新 signOutTime / status / packageId 字段
+                    val refreshed = lessonRepo.getById(current.id)
+                    if (refreshed != null) {
+                        _lesson.value = refreshed
+                    }
+                } else {
+                    _toast.value = "签退失败，请重试：${result.message}"
                 }
-                // 重新加载课时，刷新 signOutTime 字段
-                val refreshed = lessonRepo.getById(current.id)
-                if (refreshed != null) {
-                    _lesson.value = refreshed
-                }
+                onDone(result.success)
+            } catch (e: Exception) {
+                android.util.Log.e("CheckOutFlow", "signOut 异常 lessonId=${current.id}", e)
+                _toast.value = "签退失败：${e.message ?: "未知异常"}"
+                onDone(false)
+            } finally {
+                _signingOut.value = false
             }
-            onDone(ok)
         }
     }
 

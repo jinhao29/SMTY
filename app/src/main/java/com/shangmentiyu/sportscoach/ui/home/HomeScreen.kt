@@ -30,6 +30,7 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -291,4 +292,20 @@ private fun ExpiryBanner(
             )
         }
     }
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFFF5F7FA)
+@Composable
+private fun HomeScreenPreview() {
+    HomeScreen(
+        onSign = {},
+        onAddStudent = {},
+        onGrowth = {},
+        onEditStudent = {},
+        onLessonCheckIn = {},
+        onOperation = {},
+        onSchedule = {},
+        onHeightPrediction = {},
+        onDietManage = {}
+    )
 }

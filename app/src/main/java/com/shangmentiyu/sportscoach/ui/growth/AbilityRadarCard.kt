@@ -1,5 +1,6 @@
 package com.shangmentiyu.sportscoach.ui.growth
 
+import com.shangmentiyu.sportscoach.ui.theme.ShadowTokens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -76,9 +77,9 @@ fun AbilityRadarCard(radar: AbilityAnalyzer.AbilityRadar) {
             .shadow(
                 elevation = 4.dp,
                 shape = RoundedCornerShape(10.dp),
-                // ponytail: 投影色保持 M3 默认黑（0x1A000000），明暗主题通用，无对应令牌
-                ambientColor = Color(0x1A000000),
-                spotColor = Color(0x1A000000)
+                // ponytail: 投影色保持 M3 默认黑（0x1A000000），对应 ShadowTokens.strong
+                ambientColor = ShadowTokens.strongAmbient,
+                spotColor = ShadowTokens.strongSpot
             )
             .background(appSurface(), RoundedCornerShape(10.dp))
             .padding(horizontal = 20.dp, vertical = 18.dp)

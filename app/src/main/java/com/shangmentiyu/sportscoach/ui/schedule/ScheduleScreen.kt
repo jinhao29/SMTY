@@ -46,6 +46,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
@@ -68,12 +69,6 @@ import androidx.compose.ui.unit.sp
 import com.shangmentiyu.sportscoach.data.model.Schedule
 import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.operation.OperationViewModel
-import com.shangmentiyu.sportscoach.ui.theme.LightSecondary
-import com.shangmentiyu.sportscoach.ui.theme.LightTertiary
-import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
-import com.shangmentiyu.sportscoach.ui.theme.LightPrimaryContainer
-import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
-import com.shangmentiyu.sportscoach.ui.theme.LightOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.IOSCard
 import com.shangmentiyu.sportscoach.ui.theme.FloatingSnackbarHost
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
@@ -365,52 +360,47 @@ fun ScheduleScreen(
                             }
                         },
                         actions = {
-                            // === 按课时包自动排课入口 ===
-                            // 关联课包购买时间，按多周几自动排课到课时上完那一周
-                            IconButton(onClick = { showAutoScheduleDialog = true }) {
-                                Icon(
-                                    Icons.Outlined.EventRepeat,
-                                    contentDescription = "按课包排课",
-                                    tint = appPrimary()
-                                )
-                            }
+                            // === 右上角功能按钮组：【图标 + 下方小字】垂直组合，替代纯图标按钮 ===
+                            // 颜色规范：珊瑚橙 #FF6B47（appPrimary）/ 深灰 #6B6B6B（appOnSurfaceVariant）
+                            ScheduleActionButton(
+                                icon = Icons.Outlined.EventRepeat,
+                                label = "周历",
+                                tint = appPrimary(),
+                                onClick = { showAutoScheduleDialog = true }
+                            )
                             // === Bug 修复2：手动触发"清理过去无效排课"按钮 ===
                             // 即使启动时已自动清理，仍保留手动按钮供用户主动触发
                             // （如数据库被外部同步污染后可一键再次清理）
-                            IconButton(onClick = { vm.cleanupPastLessonsManually() }) {
-                                Icon(
-                                    Icons.Outlined.CleaningServices,
-                                    contentDescription = "清理过去无效排课",
-                                    tint = appPrimary()
-                                )
-                            }
+                            ScheduleActionButton(
+                                icon = Icons.Outlined.CleaningServices,
+                                label = "清理",
+                                tint = appPrimary(),
+                                onClick = { vm.cleanupPastLessonsManually() }
+                            )
                             // === 按学员删除排课入口 ===
-                            IconButton(onClick = { showDeleteByStudentDialog = true }) {
-                                Icon(
-                                    Icons.Outlined.PersonRemove,
-                                    contentDescription = "按学员删除排课",
-                                    tint = appOnSurface()
-                                )
-                            }
+                            ScheduleActionButton(
+                                icon = Icons.Outlined.PersonRemove,
+                                label = "学员",
+                                tint = appOnSurfaceVariant(),
+                                onClick = { showDeleteByStudentDialog = true }
+                            )
                             // 多选模式入口：仅在有排课时显示
                             if (schedules.isNotEmpty()) {
-                                IconButton(onClick = { isMultiSelectMode = true }) {
-                                    Icon(
-                                        Icons.Outlined.DeleteSweep,
-                                        contentDescription = "多选删除",
-                                        tint = appPrimary()
-                                    )
-                                }
+                                ScheduleActionButton(
+                                    icon = Icons.Outlined.DeleteSweep,
+                                    label = "多选",
+                                    tint = appPrimary(),
+                                    onClick = { isMultiSelectMode = true }
+                                )
                             }
                             // 清空全部按钮（保留原有功能）
                             if (schedules.isNotEmpty()) {
-                                IconButton(onClick = { showClearAllDialog = true }) {
-                                    Icon(
-                                        Icons.Outlined.CleaningServices,
-                                        contentDescription = "清空全部",
-                                        tint = MaterialTheme.colorScheme.error
-                                    )
-                                }
+                                ScheduleActionButton(
+                                    icon = Icons.Outlined.CleaningServices,
+                                    label = "清空",
+                                    tint = appPrimary(),
+                                    onClick = { showClearAllDialog = true }
+                                )
                             }
                         }
                     )
@@ -1048,19 +1038,6 @@ private fun weekRangeText(weekStart: Date): String {
 }
 
 /**
- * 将 Schedule.color 字符串映射为 Color。
- */
-private fun scheduleColor(colorKey: String): Color = when (colorKey) {
-    "blue" -> LightSecondary
-    "green" -> LightTertiary
-    "orange" -> LightPrimary
-    "purple" -> LightPrimary
-    "pink" -> LightPrimaryContainer
-    "teal" -> LightOnSurfaceVariant
-    else -> LightSecondary
-}
-
-/**
  * 周切换按钮：图标 + 文字 + 圆角浅色背景。
  *
  * 设计要点：
@@ -1204,4 +1181,46 @@ private fun MultiSelectBottomBar(
             }
         }
     }
+}
+
+/**
+ * 课表页右上角功能按钮：【图标 + 下方小字】垂直组合。
+ *
+ * 颜色规范：珊瑚橙 #FF6B47（appPrimary）或 深灰 #6B6B6B（appOnSurfaceVariant），
+ * 由调用方通过 tint 指定。onClick 与原纯图标按钮完全一致，不改变任何功能。
+ */
+@Composable
+private fun ScheduleActionButton(
+    icon: ImageVector,
+    label: String,
+    tint: Color,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = tint,
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = label,
+            color = tint,
+            fontSize = 9.sp,
+            maxLines = 1
+        )
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFFF5F7FA)
+@Composable
+private fun ScheduleScreenPreview() {
+    ScheduleScreen(onBack = {})
 }

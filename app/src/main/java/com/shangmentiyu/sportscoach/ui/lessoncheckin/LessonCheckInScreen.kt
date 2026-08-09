@@ -1,5 +1,6 @@
 package com.shangmentiyu.sportscoach.ui.lessoncheckin
 
+import com.shangmentiyu.sportscoach.ui.theme.ShadowTokens
 import android.app.Application
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -34,6 +35,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -121,14 +123,17 @@ class LessonCheckInViewModel(
      *
      * 扣减课时统一发生在签退环节（saveFeedbackAndCheckOut → consumeLessonForCheckOut），
      * 保证同一课时全程只扣减一次，杜绝"签到即消课 + 签退再消课"的重复扣费。
+     *
+     * @param studentId 学员唯一 ID（软关联外键，v50：补传以支撑双通道查询，杜绝改名断链）
      */
-    fun sign(studentName: String, onCreated: (SignResult) -> Unit) {
+    fun sign(studentName: String, studentId: String? = null, onCreated: (SignResult) -> Unit) {
         viewModelScope.launch {
             val result = try {
                 val lessonId = lessonRepo.createLesson(
                     studentName = studentName,
                     coach = "",
-                    packageId = ""
+                    packageId = "",
+                    studentId = studentId
                 )
                 SignResult(
                     lessonId = lessonId,
@@ -257,7 +262,7 @@ fun LessonCheckInScreen(
                                 alreadySignedToday = todayLessons.any { it.studentName == student.name },
                                 showTopDivider = false,
                                 onSign = {
-                                    vm.sign(student.name) { result ->
+                                    vm.sign(student.name, student.studentId) { result ->
                                         snackbar = result.message
                                         snackbarLessonId = result.lessonId
                                     }
@@ -320,8 +325,8 @@ private fun TodaySignedCard(lesson: Lesson, onClick: () -> Unit) {
             .shadow(
                 elevation = 4.dp,
                 shape = RoundedCornerShape(10.dp),
-                ambientColor = Color(0x1A000000),
-                spotColor = Color(0x1A000000)
+                ambientColor = ShadowTokens.strongAmbient,
+                spotColor = ShadowTokens.strongSpot
             )
             .background(appSurface(), RoundedCornerShape(10.dp))
             .clickable(onClick = onClick)
@@ -497,4 +502,10 @@ private fun subtitleFor(student: Student, remaining: Int): String {
         }
     )
     return parts.joinToString(" · ")
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFFF5F7FA)
+@Composable
+private fun LessonCheckInScreenPreview() {
+    LessonCheckInScreen(onBack = {}, onOpenLesson = {})
 }

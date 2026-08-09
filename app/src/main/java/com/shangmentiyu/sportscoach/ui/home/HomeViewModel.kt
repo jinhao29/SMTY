@@ -2,8 +2,6 @@ package com.shangmentiyu.sportscoach.ui.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.room.withTransaction
-import com.shangmentiyu.sportscoach.data.db.AppDatabase
 import com.shangmentiyu.sportscoach.data.model.Lesson
 import com.shangmentiyu.sportscoach.data.model.Student
 import com.shangmentiyu.sportscoach.data.repo.LessonRepository
@@ -45,7 +43,6 @@ class HomeViewModel(
     private val studentRepo: StudentRepository,
     private val lessonRepo: LessonRepository,
     private val opRepo: OperationRepository,
-    private val db: AppDatabase,
     private val settingsRepo: SettingsRepository? = null,
     /**
      * === v5 新增：精彩瞬间上传器（手机→PC 双向传输） ===
@@ -462,14 +459,20 @@ class HomeViewModel(
      * - 老数据 Lesson.packageId 非空但 status 默认为"已签到"（v24 迁移默认值）
      * - 这些数据下次签退时会自动迁移为"已签退"，不影响历史报表
      */
-    fun sign(studentName: String, onCreated: (SignResult) -> Unit) {
+    /**
+     * 签到：仅创建 Lesson，不扣减课时包。
+     *
+     * @param studentId 学员唯一 ID（v50：补传以支撑双通道查询，杜绝改名断链）
+     */
+    fun sign(studentName: String, studentId: String? = null, onCreated: (SignResult) -> Unit) {
         safeLaunch {
             try {
                 // 签到：仅创建 Lesson，不扣减课时包
                 val lid = lessonRepo.createLesson(
                     studentName = studentName,
                     coach = "",
-                    packageId = ""  // 签到时不扣减课时包，packageId 留空
+                    packageId = "",  // 签到时不扣减课时包，packageId 留空
+                    studentId = studentId
                 )
 
                 onCreated(
@@ -565,9 +568,10 @@ class HomeViewModel(
     }
 
     /**
-     * 更新学员全部信息（含姓名）：在同一 DB 事务中级联改名 + 更新其他字段。
+     * 更新学员全部信息（含姓名）。
      *
-     * - 姓名变化时：先重名校验，再级联更新 7 张表的 studentName，最后更新 students 表其他字段
+     * - 姓名变化时：先经 [StudentRepository.renameStudentCascade] 级联改名（单事务 + 重名校验），
+     *   再更新 students 表其他字段
      * - 姓名未变时：等价于 [updateStudent]
      *
      * @param original 原学员对象
@@ -588,30 +592,15 @@ class HomeViewModel(
         safeLaunch {
             try {
                 if (original.name != newName) {
-                    db.withTransaction {
-                        // 重名校验：确保新姓名尚未占用
-                        if (db.studentDao().getByName(newName) != null) {
-                            throw IllegalArgumentException("学员「$newName」已存在")
-                        }
-                        // 级联改名 7 张表（表访问顺序：students → lessons → schedules →
-                        // lesson_packages → training_cycles → body_metric_history → parent_reports）
-                        db.studentDao().renameStudent(original.name, newName)
-                        db.lessonDao().renameStudent(original.name, newName)
-                        db.scheduleDao().renameStudent(original.name, newName)
-                        db.lessonPackageDao().renameStudent(original.name, newName)
-                        db.trainingCycleDao().renameStudent(original.name, newName)
-                        db.bodyMetricHistoryDao().renameStudent(original.name, newName)
-                        db.parentReportDao().renameStudent(original.name, newName)
-                        // 更新 students 表其他字段（此时姓名已是 newName）
-                        db.studentDao().update(
-                            original.copy(
-                                name = newName,
-                                gender = gender, grade = grade, school = school, phone = phone,
-                                age = age, heightCm = heightCm, weightKg = weightKg, bmi = bmi,
-                                updatedAt = System.currentTimeMillis()
-                            )
+                    studentRepo.renameStudentCascade(original.name, newName)
+                    studentRepo.updateStudent(
+                        original.copy(
+                            name = newName,
+                            gender = gender, grade = grade, school = school, phone = phone,
+                            age = age, heightCm = heightCm, weightKg = weightKg, bmi = bmi,
+                            updatedAt = System.currentTimeMillis()
                         )
-                    }
+                    )
                     toast("已更新「$newName」的全部信息，全局数据已同步")
                 } else {
                     // 姓名未变，直接更新其他字段
@@ -941,11 +930,8 @@ class HomeViewModel(
     }
 
     /**
-     * 学员改名：在同一个 DB 事务中级联更新 7 张表的 studentName 字段，
-     * 保证学员全局数据统一。
-     *
-     * 涉及表：students / lessons / lesson_packages / schedules /
-     *         body_metric_history / parent_reports / training_cycles
+     * 学员改名：委托 [StudentRepository.renameStudentCascade] 在单事务内
+     * 原子级联更新全部子表的 studentName（含重名校验 / 操作日志 / 备份触发）。
      *
      * @param oldName 原姓名
      * @param newName 新姓名
@@ -962,19 +948,7 @@ class HomeViewModel(
         }
         safeLaunch {
             try {
-                db.withTransaction {
-                    // 重名校验：确保新姓名尚未占用
-                    if (db.studentDao().getByName(newName) != null) {
-                        throw IllegalArgumentException("学员「$newName」已存在")
-                    }
-                    db.studentDao().renameStudent(oldName, newName)
-                    db.lessonDao().renameStudent(oldName, newName)
-                    db.scheduleDao().renameStudent(oldName, newName)
-                    db.lessonPackageDao().renameStudent(oldName, newName)
-                    db.trainingCycleDao().renameStudent(oldName, newName)
-                    db.bodyMetricHistoryDao().renameStudent(oldName, newName)
-                    db.parentReportDao().renameStudent(oldName, newName)
-                }
+                studentRepo.renameStudentCascade(oldName, newName)
                 toast("已将「$oldName」改名为「$newName」，全局数据已同步")
                 onDone(true, "改名成功")
             } catch (e: Exception) {

@@ -1,5 +1,6 @@
 package com.shangmentiyu.sportscoach.ui.script
 
+import com.shangmentiyu.sportscoach.ui.theme.ShadowTokens
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -34,6 +35,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -180,8 +182,8 @@ private fun ScriptItemCard(
             .shadow(
                 elevation = 4.dp,
                 shape = RoundedCornerShape(20.dp),
-                ambientColor = Color.Black.copy(alpha = 0.04f),
-                spotColor = Color.Black.copy(alpha = 0.06f)
+                ambientColor = ShadowTokens.softAmbient,
+                spotColor = ShadowTokens.softSpot
             )
             .background(appSurface(), RoundedCornerShape(20.dp))
             .combinedClickable(
@@ -269,4 +271,10 @@ private fun EmptyScriptState(modifier: Modifier = Modifier) {
             color = appOnSurfaceVariant()
         )
     }
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFFF5F7FA)
+@Composable
+private fun ScriptListScreenPreview() {
+    ScriptListScreen(onBack = {}, onOpen = {}, onAdd = {})
 }

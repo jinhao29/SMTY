@@ -1,5 +1,6 @@
 package com.shangmentiyu.sportscoach.ui
 
+import com.shangmentiyu.sportscoach.ui.theme.ShadowTokens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
@@ -85,8 +86,8 @@ fun FloatingBottomBar(
                 .shadow(
                     elevation = 8.dp,
                     shape = RoundedCornerShape(24.dp),
-                    ambientColor = Color.Black.copy(alpha = 0.04f),
-                    spotColor = Color.Black.copy(alpha = 0.06f)
+                    ambientColor = ShadowTokens.softAmbient,
+                    spotColor = ShadowTokens.softSpot
                 ),
             shape = RoundedCornerShape(24.dp),
             color = appSurface()  // 纯白实底（暗色模式自动跟随表面令牌）

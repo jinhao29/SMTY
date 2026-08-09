@@ -27,7 +27,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -44,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shangmentiyu.sportscoach.data.model.LessonPackage
 import com.shangmentiyu.sportscoach.ui.operation.OperationViewModel
+import com.shangmentiyu.sportscoach.ui.theme.AppTextField
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
@@ -51,8 +51,6 @@ import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appOutline
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 import com.shangmentiyu.sportscoach.ui.theme.appSurface
-import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
-import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 /**
  * 按课时包自动排课对话框（共享组件）。
@@ -173,15 +171,13 @@ fun AutoScheduleFromPackageDialog(
             }
 
             // === 教练输入 ===
-            OutlinedTextField(
+            AppTextField(
                 value = coachName,
                 onValueChange = { coachName = it },
                 label = { Text("教练姓名") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
-
-             shape = AppTextFieldShape,
-             colors = appTextFieldColors(),)
+)
 
             // === 上课日多选 ===
             Text(
@@ -213,7 +209,7 @@ fun AutoScheduleFromPackageDialog(
             }
 
             // === 上课时间 ===
-            OutlinedTextField(
+            AppTextField(
                 value = startTime,
                 onValueChange = { startTime = it },
                 label = { Text("上课时间 (HH:mm)") },
@@ -222,31 +218,25 @@ fun AutoScheduleFromPackageDialog(
                     Icon(Icons.Outlined.Schedule, contentDescription = null, modifier = Modifier.clickable { })
                 },
                 modifier = Modifier.fillMaxWidth(),
-
-             shape = AppTextFieldShape,
-             colors = appTextFieldColors(),)
+)
 
             // === 地点 ===
-            OutlinedTextField(
+            AppTextField(
                 value = location,
                 onValueChange = { location = it },
                 label = { Text("地点（可选）") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
-
-             shape = AppTextFieldShape,
-             colors = appTextFieldColors(),)
+)
 
             // === 课程类型 ===
-            OutlinedTextField(
+            AppTextField(
                 value = lessonType,
                 onValueChange = { lessonType = it },
                 label = { Text("课程类型") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
-
-             shape = AppTextFieldShape,
-             colors = appTextFieldColors(),)
+)
         }
     }
 }
@@ -266,7 +256,7 @@ private fun StudentDropdown(
         expanded = expanded,
         onExpandedChange = { expanded = !expanded }
     ) {
-        OutlinedTextField(
+        AppTextField(
             value = selected,
             onValueChange = { },
             readOnly = true,
@@ -275,9 +265,7 @@ private fun StudentDropdown(
             modifier = Modifier
                 .fillMaxWidth()
                 .menuAnchor(),
-
-         shape = AppTextFieldShape,
-         colors = appTextFieldColors(),)
+)
         ExposedDropdownMenuBoxScopeFix {
             androidx.compose.material3.DropdownMenu(
                 expanded = expanded,
@@ -324,7 +312,7 @@ private fun PackageDropdown(
         expanded = expanded,
         onExpandedChange = { expanded = !expanded }
     ) {
-        OutlinedTextField(
+        AppTextField(
             value = displayText,
             onValueChange = { },
             readOnly = true,
@@ -333,9 +321,7 @@ private fun PackageDropdown(
             modifier = Modifier
                 .fillMaxWidth()
                 .menuAnchor(),
-
-         shape = AppTextFieldShape,
-         colors = appTextFieldColors(),)
+)
         ExposedDropdownMenuBoxScopeFix {
             androidx.compose.material3.DropdownMenu(
                 expanded = expanded,

@@ -26,7 +26,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -85,9 +84,15 @@ class OperationViewModel(
     val schedulesLoaded: StateFlow<Boolean> = _schedulesLoaded.asStateFlow()
 
     init {
+        // 直接用 StateFlow.collect（而非 first()）：first() 会立即返回 StateFlow 的初始值
+        // emptyList()，导致 Room 首帧数据到达前就把 schedulesLoaded 置 true，
+        // 屏幕短暂/错误地渲染"今日无排课"空态（日历红点已出但列表为空）。
+        // collect 挂起至 Room 首帧真实 emission 后才置 loaded，并留痕每次数据量。
         viewModelScope.launch {
-            schedules.first()
-            _schedulesLoaded.value = true
+            schedules.collect { list ->
+                android.util.Log.d("ScheduleDebug", "列表加载数量: ${list.size}")
+                if (!_schedulesLoaded.value) _schedulesLoaded.value = true
+            }
         }
     }
 

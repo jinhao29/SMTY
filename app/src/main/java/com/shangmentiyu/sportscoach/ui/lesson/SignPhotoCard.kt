@@ -58,7 +58,7 @@ import java.io.File
  * - 显示当前已拍摄的照片（缩略图）
  * - 提供"拍摄"按钮调用系统相机
  * - 提供"重新拍摄"按钮替换照片
- * - 照片保存至应用内部存储 filesDir/sign_photos/，路径回写至 Lesson.photoPath / signOutPhotoPath
+ * - 照片保存至应用内部存储 filesDir/SignPhotos/，路径回写至 Lesson.photoPath / signOutPhotoPath
  *
  * 隐私合规（PIPL）：
  * - 签到/签退照片含学员人脸生物特征，使用 [PhotoCrypto] 进行 AES-GCM 加密存储

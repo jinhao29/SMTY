@@ -49,7 +49,7 @@ import javax.crypto.spec.SecretKeySpec
 object PhotoCrypto {
 
     /** 加密照片存储目录名（位于 filesDir 下） */
-    private const val PHOTO_DIR = "sign_photos"
+    private const val PHOTO_DIR = "SignPhotos"
 
     // === 种子派生密钥方案常量（v22 引入） ===
 
@@ -87,6 +87,7 @@ object PhotoCrypto {
      * 幂等：目录已存在时直接返回，.nomedia 已存在时不重复写入。
      */
     fun ensurePhotoDir(context: Context): File {
+        BackupManager.migrateLegacySignPhotosDir(context.filesDir)
         val dir = File(context.filesDir, PHOTO_DIR)
         if (!dir.exists()) dir.mkdirs()
         // .nomedia 文件存在时，系统相册和媒体扫描器会跳过该目录

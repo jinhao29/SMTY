@@ -41,7 +41,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
@@ -73,6 +72,7 @@ import com.shangmentiyu.sportscoach.data.model.MealItem
 import com.shangmentiyu.sportscoach.data.repo.DietRepository
 import com.shangmentiyu.sportscoach.domain.ActivityLevel
 import com.shangmentiyu.sportscoach.domain.TdeeResult
+import com.shangmentiyu.sportscoach.ui.theme.AppTextField
 import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.theme.IOSCard
 import com.shangmentiyu.sportscoach.ui.theme.PrimaryButton
@@ -90,8 +90,6 @@ import com.shangmentiyu.sportscoach.ui.theme.appWarningContainer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.LocalContentColor
-import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
-import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 /**
  * 学员饮食管理页面（3+2 饮食法）。
@@ -600,7 +598,7 @@ private fun MealCard(
                     fontWeight = FontWeight.Medium
                 )
                 Spacer(Modifier.height(Spacing.xs))
-                OutlinedTextField(
+                AppTextField(
                     value = note,
                     onValueChange = onNoteChange,
                     modifier = Modifier.fillMaxWidth(),
@@ -614,9 +612,7 @@ private fun MealCard(
                     singleLine = false,
                     minLines = 1,
                     maxLines = 3,
-                    shape = AppTextFieldShape,
-                    colors = appTextFieldColors()
-                )
+)
             }
         }
     }
@@ -691,7 +687,7 @@ private fun CustomMealsEditDialog(
                     fontWeight = FontWeight.Medium
                 )
                 Spacer(Modifier.height(Spacing.xs))
-                OutlinedTextField(
+                AppTextField(
                     value = input,
                     onValueChange = { input = it },
                     modifier = Modifier.fillMaxWidth(),
@@ -705,9 +701,7 @@ private fun CustomMealsEditDialog(
                     singleLine = false,
                     minLines = 4,
                     maxLines = 8,
-                    shape = AppTextFieldShape,
-                    colors = appTextFieldColors()
-                )
+)
                 Spacer(Modifier.height(Spacing.xs))
                 Text(
                     "提示：清空全部内容后点击确定，可恢复使用模板默认食谱。",
@@ -951,7 +945,7 @@ private fun TdeeInputField(
             fontWeight = FontWeight.Medium
         )
         Spacer(Modifier.height(Spacing.xs))
-        OutlinedTextField(
+        AppTextField(
             value = value,
             onValueChange = onValueChange,
             modifier = Modifier.fillMaxWidth(),
@@ -963,16 +957,6 @@ private fun TdeeInputField(
                 )
             },
             singleLine = true,
-            shape = RoundedCornerShape(12.dp),
-            colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = appGroupedBackground(),
-                unfocusedContainerColor = appGroupedBackground(),
-                disabledContainerColor = appGroupedBackground(),
-                focusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
-                unfocusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
-                focusedLabelColor = appPrimary(),
-                cursorColor = appPrimary()
-            ),
             trailingIcon = {
                 Text(
                     suffix,
@@ -1010,23 +994,21 @@ private fun ActivityLevelDropdown(
     ) {
         // 触发器：浅灰背景的只读输入框 + 箭头图标
         // enabled=false 防止 TextField 内部消费点击事件，让外层 Box 的 clickable 生效
-        OutlinedTextField(
+        AppTextField(
             value = "${selected.label}  (×${selected.factor})",
             onValueChange = {},
             readOnly = true,
             enabled = false,
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            shape = AppTextFieldShape,
-            colors = appTextFieldColors(),
-            trailingIcon = {
+trailingIcon = {
                 Icon(
                     Icons.Outlined.ArrowDropDown,
                     contentDescription = null,
                     tint = appOnSurfaceVariant()
                 )
             }
-        )
+)
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false }

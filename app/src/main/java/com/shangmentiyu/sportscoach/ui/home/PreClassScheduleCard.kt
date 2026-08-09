@@ -187,20 +187,20 @@ internal fun PreClassScheduleCard(
                 textAlign = TextAlign.Center
             )
 
-            // === v49 体验课标签：浅紫色胶囊，明显标识临时体验课 ===
+            // === v49 体验课标签：浅珊瑚橙胶囊，明显标识临时体验课 ===
             if (schedule.isTrial) {
                 Spacer(Modifier.height(Spacing.xs))
                 Box(
                     modifier = Modifier
                         .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
-                        .background(Color(0xFFEDE7F6))  // 浅紫色底
+                        .background(primaryColor.copy(alpha = 0.12f))  // 浅珊瑚橙底
                         .padding(horizontal = 10.dp, vertical = 3.dp)
                 ) {
                     Text(
                         "体验课",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF7B1FA2)  // 紫色文字
+                        color = primaryColor  // 珊瑚橙文字
                     )
                 }
             }

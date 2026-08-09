@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.AlertDialog
+import com.shangmentiyu.sportscoach.ui.theme.AppTextField
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 import androidx.compose.material3.Button
@@ -28,7 +29,6 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -55,8 +55,6 @@ import com.shangmentiyu.sportscoach.ui.theme.GlassCard
 import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
 import com.shangmentiyu.sportscoach.ui.theme.ScoreFail
 import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
-import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
-import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 /**
  * 体型变化曲线页面：展示学员身高/体重/BMI 的历史变化。
@@ -117,15 +115,13 @@ fun BodyMetricChartScreen(onBack: () -> Unit) {
                     if (students.isEmpty()) {
                         Text("暂无学员", color = MaterialTheme.colorScheme.outline)
                     } else {
-                        OutlinedTextField(
+                        AppTextField(
                             value = selectedStudent,
                             onValueChange = { vm.selectStudent(it) },
                             label = { Text("学员姓名") },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
-
-                         shape = AppTextFieldShape,
-                         colors = appTextFieldColors(),)
+)
                         students.take(8).forEach { name ->
                             Text("· $name", style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier.padding(start = 8.dp, top = 2.dp))
@@ -363,30 +359,24 @@ private fun AddRecordDialog(
         title = "新增测量记录",
         content = {
             Column(modifier = Modifier.fillMaxWidth()) {
-                OutlinedTextField(
+                AppTextField(
                     value = height, onValueChange = { height = it.filter { c -> c.isDigit() } },
                     label = { Text("身高 (cm)") },
                     modifier = Modifier.fillMaxWidth(), singleLine = true,
-
-                 shape = AppTextFieldShape,
-                 colors = appTextFieldColors(),)
+)
                 Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
+                AppTextField(
                     value = weight,
                     onValueChange = { weight = it.filter { c -> c.isDigit() || c == '.' } },
                     label = { Text("体重 (kg)") },
                     modifier = Modifier.fillMaxWidth(), singleLine = true,
-
-                 shape = AppTextFieldShape,
-                 colors = appTextFieldColors(),)
+)
                 Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
+                AppTextField(
                     value = note, onValueChange = { note = it },
                     label = { Text("备注（可选）") },
                     modifier = Modifier.fillMaxWidth(), singleLine = true,
-
-                 shape = AppTextFieldShape,
-                 colors = appTextFieldColors(),)
+)
             }
         },
         confirmButton = {

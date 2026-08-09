@@ -413,6 +413,11 @@ class SettingsViewModel(
      * - 使用 [lessonRepo.getTodayLessons] 直接命中索引查询，不再全表加载
      */
     fun exportTodayRecords(treeUri: Uri) {
+        // === v50 防叠加：导出进行中忽略重复触发，防止多个导出任务并发写文件 ===
+        if (_exportProgress.value is ExportProgress.Working) {
+            _statusMessage.value = "正在导出中，请稍候"
+            return
+        }
         safeLaunch {
             // 线程安全：使用 [java.time.LocalDate] 替代 [SimpleDateFormat]
             val today = java.time.LocalDate.now()
@@ -448,9 +453,12 @@ class SettingsViewModel(
                 val ok = withContext(Dispatchers.IO) {
                     try {
                         val student = studentRepo.getByName(lesson.studentName)
-                        val fileName = "${lesson.studentName}_${lesson.date}_课堂记录.xlsx"
+                        // === v50：文件名追加毫秒时间戳，杜绝同日同学员多条课时记录互相覆盖 ===
+                        // 原实现 "${name}_${date}_课堂记录.xlsx" 无时间戳，循环导出时
+                        // 后一条会 findFile→delete 掉前一条，最终只剩最后一条，数据丢失
+                        val fileName = "${lesson.studentName}_${lesson.date}_" +
+                            "${System.currentTimeMillis()}_课堂记录.xlsx"
                             .replace("/", "_").replace("\\", "_")
-                        treeDir.findFile(fileName)?.delete()
                         val docFile = treeDir.createFile(
                             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                             fileName
@@ -475,6 +483,11 @@ class SettingsViewModel(
      * 性能优化（v16）：全部切 IO 线程 + 进度 Flow，避免大数据量导出时 ANR。
      */
     fun exportScoresArchive(treeUri: Uri) {
+        // === v50 防叠加：导出进行中忽略重复触发 ===
+        if (_exportProgress.value is ExportProgress.Working) {
+            _statusMessage.value = "正在导出中，请稍候"
+            return
+        }
         safeLaunch {
             _exportProgress.value = ExportProgress.Working(0, 0, "正在读取成绩记录…")
             val lessons = withContext(Dispatchers.IO) {
@@ -563,6 +576,11 @@ class SettingsViewModel(
      * @param strategy 导入策略（APPEND / OVERWRITE / UPDATE_PART）
      */
     fun importStudentsWithStrategy(treeUri: Uri, strategy: ImportStrategy) {
+        // === v50 防叠加：导入进行中忽略重复触发，防止并发解析/写库 ===
+        if (_exportProgress.value is ExportProgress.Working) {
+            _statusMessage.value = "正在导入中，请稍候"
+            return
+        }
         safeLaunch {
             _exportProgress.value = ExportProgress.Working(0, 0, "正在扫描档案文件…")
             val treeDir = withContext(Dispatchers.IO) {
@@ -638,6 +656,11 @@ class SettingsViewModel(
      * @param targetUri 用户通过 SAF CreateDocument 选择的目标文件 Uri
      */
     fun backupData(targetUri: Uri) {
+        // === v50 防叠加：备份进行中忽略重复触发 ===
+        if (_backupInProgress.value) {
+            _statusMessage.value = "正在备份中，请稍候"
+            return
+        }
         safeLaunch {
             _backupInProgress.value = true
             _backupProgress.value = BackupProgress.Working("prepare", 0, 0, "正在准备备份…")
@@ -668,6 +691,11 @@ class SettingsViewModel(
      * @param sourceUri 用户通过 SAF OpenDocument 选择的备份文件 Uri
      */
     fun restoreData(sourceUri: Uri) {
+        // === v50 防叠加：恢复进行中忽略重复触发（恢复会覆盖整库，绝不允许并发） ===
+        if (_backupInProgress.value) {
+            _statusMessage.value = "正在恢复中，请稍候"
+            return
+        }
         safeLaunch {
             _backupInProgress.value = true
             try {
@@ -746,6 +774,7 @@ class SettingsViewModel(
     fun scanSignPhotos() {
         safeLaunch {
             try {
+                BackupManager.migrateLegacySignPhotosDir(app.filesDir)
                 val dir = File(app.filesDir, signPhotosDirName)
                 if (!dir.exists()) {
                     _signPhotosSize.value = 0

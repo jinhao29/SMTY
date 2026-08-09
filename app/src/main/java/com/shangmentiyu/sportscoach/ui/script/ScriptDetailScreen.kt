@@ -29,7 +29,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -46,13 +45,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.shangmentiyu.sportscoach.ui.theme.AppTextField
 import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appBackground
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
-import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 /**
  * 话术编辑页（UI 层）。
@@ -152,18 +151,17 @@ fun ScriptDetailScreen(
             verticalArrangement = Arrangement.spacedBy(Spacing.md)
         ) {
             // 项目名称输入
-            OutlinedTextField(
+            AppTextField(
                 value = name,
                 onValueChange = { name = it },
                 label = { Text("项目名称") },
                 placeholder = { Text("如：课后反馈-表扬") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
-                colors = appTextFieldColors()
-            )
+)
 
             // 话术内容输入
-            OutlinedTextField(
+            AppTextField(
                 value = content,
                 onValueChange = { content = it },
                 label = { Text("话术内容") },
@@ -171,8 +169,7 @@ fun ScriptDetailScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 200.dp, max = 400.dp),
-                colors = appTextFieldColors()
-            )
+)
 
             Spacer(Modifier.height(Spacing.xs))
 

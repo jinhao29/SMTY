@@ -914,10 +914,12 @@ abstract class AppDatabase : RoomDatabase() {
          * 当前代码声明的数据库版本（与 @Database version 保持一致）。
          *
          * 用于在 [com.shangmentiyu.sportscoach.core.PreUpdateBackupManager.checkVersionAndEmergencyBackup]
-         * 中与数据库文件实际版本对比，检测降级场景。
+         * 中与数据库文件实际版本对比，检测降级场景；
+         * 也用于 [com.shangmentiyu.sportscoach.core.BackupManager] 恢复前
+         * 对比备份库版本，拒绝来自更高版本 App 的备份，防止恢复后闪退。
          *
          * 修改 @Database version 时必须同步修改此常量，否则版本检查会失效。
          */
-        private const val DATABASE_VERSION = 29
+        const val DATABASE_VERSION = 29
     }
 }

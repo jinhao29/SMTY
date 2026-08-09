@@ -159,22 +159,4 @@ class LessonRepository(private val dao: LessonDao) {
     suspend fun updateLesson(lesson: Lesson) = dao.update(lesson)
     suspend fun deleteLesson(id: String) = dao.deleteById(id)
     suspend fun deleteByStudent(name: String) = dao.deleteByStudent(name)
-
-    /**
-     * 课后签退：记录签退时间与可选的签退照片路径。
-     *
-     * 注意：签退不消课（消课在签到时已完成），仅补充签退信息。
-     *
-     * @param lessonId 课时 ID
-     * @param photoPath 签退照片路径（空=未拍照）
-     * @return 是否签退成功（课时不存在时返回 false）
-     */
-    suspend fun signOut(lessonId: String, photoPath: String = ""): Boolean {
-        val lesson = dao.getById(lessonId) ?: return false
-        dao.update(lesson.copy(
-            signOutTime = nowTimeStr(),
-            signOutPhotoPath = photoPath
-        ))
-        return true
-    }
 }

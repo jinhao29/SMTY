@@ -44,7 +44,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Text
@@ -72,6 +71,7 @@ import com.shangmentiyu.sportscoach.core.JsonSafe
 import com.shangmentiyu.sportscoach.core.PhotoCrypto
 import com.shangmentiyu.sportscoach.data.model.ExerciseItem
 import com.shangmentiyu.sportscoach.data.model.Lesson
+import com.shangmentiyu.sportscoach.ui.theme.AppTextField
 import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.theme.LightSecondary
 import com.shangmentiyu.sportscoach.ui.theme.LightTertiary
@@ -91,8 +91,6 @@ import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
 import com.shangmentiyu.sportscoach.util.ShareUtils
 import org.json.JSONObject
 import java.io.File
-import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
-import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 /**
  * 课后小结页：完整展示签到信息（照片 + 文字）+ 可编辑小结文本 + 分享导出。
  *
@@ -210,16 +208,14 @@ fun SummaryScreen(
 
             // 6. 小结文本框（可编辑）
             IOSSectionHeader("课堂小结")
-            OutlinedTextField(
+            AppTextField(
                 value = summary,
                 onValueChange = { vm.updateSummary(it) },
                 label = { Text("课堂小结") },
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 6,
                 textStyle = MaterialTheme.typography.bodyMedium,
-
-             shape = AppTextFieldShape,
-             colors = appTextFieldColors(),)
+)
 
             // 7. 操作按钮第一行：重生成 | 复制 | 保存
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {

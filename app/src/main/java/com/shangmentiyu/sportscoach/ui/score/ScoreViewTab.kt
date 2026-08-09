@@ -1,5 +1,6 @@
 package com.shangmentiyu.sportscoach.ui.score
 
+import com.shangmentiyu.sportscoach.ui.theme.ShadowTokens
 import android.util.Log
 
 import androidx.compose.foundation.background
@@ -55,7 +56,6 @@ import androidx.compose.ui.unit.dp
 import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.analytics.AnalyticsViewModel
 import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
-import com.shangmentiyu.sportscoach.ui.theme.LightOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.BrandGradientEnd
 import com.shangmentiyu.sportscoach.ui.theme.BrandGradientStart
 import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
@@ -111,7 +111,6 @@ fun ScoreViewTab(onEditScore: (String) -> Unit = {}) {
         contentPadding = PaddingValues(
             start = Spacing.screenH,
             end = Spacing.screenH,
-            top = Spacing.screenV,
             bottom = 88.dp
         )
     ) {
@@ -190,8 +189,8 @@ private fun StudentPicker(
             .shadow(
                 elevation = 4.dp,
                 shape = RoundedCornerShape(20.dp),
-                ambientColor = Color(0x1A000000),
-                spotColor = Color(0x1A000000)
+                ambientColor = ShadowTokens.strongAmbient,
+                spotColor = ShadowTokens.strongSpot
             )
             .background(appSurface(), RoundedCornerShape(20.dp))
     ) {
@@ -272,8 +271,8 @@ private fun OverviewStats(overview: AnalyticsViewModel.OverviewStats) {
             .shadow(
                 elevation = 4.dp,
                 shape = RoundedCornerShape(20.dp),
-                ambientColor = Color(0x1A000000),
-                spotColor = Color(0x1A000000)
+                ambientColor = ShadowTokens.strongAmbient,
+                spotColor = ShadowTokens.strongSpot
             )
             .background(appSurface(), RoundedCornerShape(20.dp))
             .padding(vertical = Spacing.lg),
@@ -364,8 +363,8 @@ private fun ProjectSection(
                 .shadow(
                     elevation = 4.dp,
                     shape = RoundedCornerShape(10.dp),
-                    ambientColor = Color(0x1A000000),
-                    spotColor = Color(0x1A000000)
+                    ambientColor = ShadowTokens.strongAmbient,
+                    spotColor = ShadowTokens.strongSpot
                 )
                 .background(appSurface(), RoundedCornerShape(10.dp))
         ) {
@@ -407,7 +406,7 @@ private fun ScoreCompareCard(records: List<AnalyticsViewModel.ScoreRecord>) {
     val delta = last.score - first.score
     val (trendIcon, trendColor, trendText) = when {
         delta > 0.5 -> Triple(Icons.Outlined.TrendingUp, LightPrimary, "进步")
-        delta < -0.5 -> Triple(Icons.Outlined.TrendingDown, LightOnSurfaceVariant, "退步")
+        delta < -0.5 -> Triple(Icons.Outlined.TrendingDown, MaterialTheme.colorScheme.onSurfaceVariant, "退步")
         else -> Triple(Icons.Outlined.TrendingFlat, MaterialTheme.colorScheme.outline, "持平")
     }
 
@@ -496,7 +495,7 @@ private fun ScoreRecordRow(
                 val (trendIcon, trendColor, trendText) = when {
                     delta > 0.5 -> Triple(Icons.Outlined.TrendingUp, LightPrimary,
                         "↑ ${"%.1f".format(delta)} 较上次")
-                    delta < -0.5 -> Triple(Icons.Outlined.TrendingDown, LightOnSurfaceVariant,
+                    delta < -0.5 -> Triple(Icons.Outlined.TrendingDown, MaterialTheme.colorScheme.onSurfaceVariant,
                         "↓ ${"%.1f".format(kotlin.math.abs(delta))} 较上次")
                     else -> Triple(Icons.Outlined.TrendingFlat, MaterialTheme.colorScheme.outline,
                         "→ 持平")
@@ -574,8 +573,8 @@ private fun EmptyHint(
                 .shadow(
                     elevation = 4.dp,
                     shape = RoundedCornerShape(24.dp),
-                    ambientColor = Color(0x1A000000),
-                    spotColor = Color(0x1A000000)
+                    ambientColor = ShadowTokens.strongAmbient,
+                    spotColor = ShadowTokens.strongSpot
                 )
                 .background(appSurface(), RoundedCornerShape(24.dp))
                 .padding(vertical = Spacing.xxl),

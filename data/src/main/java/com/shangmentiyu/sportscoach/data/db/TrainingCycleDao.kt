@@ -34,6 +34,10 @@ interface TrainingCycleDao {
     @Query("UPDATE training_cycles SET studentName = :newName WHERE studentName = :oldName")
     suspend fun renameStudent(oldName: String, newName: String)
 
+    /** === 双通道加固：按 studentId 精准级联改名（不受同名干扰），与 lessons/schedules/lesson_packages 对齐 === */
+    @Query("UPDATE training_cycles SET studentName = :newName WHERE studentId = :studentId")
+    suspend fun updateStudentNameByStudentId(studentId: String, newName: String): Int
+
     /** 删除学员的所有训练周期（删除学员时级联调用） */
     @Query("DELETE FROM training_cycles WHERE studentName = :name")
     suspend fun deleteByStudent(name: String)

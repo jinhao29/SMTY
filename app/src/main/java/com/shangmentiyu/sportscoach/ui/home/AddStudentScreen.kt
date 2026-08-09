@@ -1,5 +1,6 @@
 package com.shangmentiyu.sportscoach.ui.home
 
+import com.shangmentiyu.sportscoach.ui.theme.ShadowTokens
 import android.app.Application
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -20,14 +21,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.School
 import androidx.compose.material3.Button
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -47,6 +45,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.room.Room
+import com.shangmentiyu.sportscoach.data.db.AppDatabase
+import com.shangmentiyu.sportscoach.data.repo.LessonRepository
+import com.shangmentiyu.sportscoach.data.repo.OperationRepository
+import com.shangmentiyu.sportscoach.data.repo.ScheduleQueryRepository
+import com.shangmentiyu.sportscoach.data.repo.ScheduleRepository
+import com.shangmentiyu.sportscoach.data.repo.StageSummaryRepository
+import com.shangmentiyu.sportscoach.data.repo.StudentRepository
+import com.shangmentiyu.sportscoach.data.repo.TrainingCycleRepository
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -65,6 +74,7 @@ import com.shangmentiyu.sportscoach.ui.theme.ScoreFail
 import com.shangmentiyu.sportscoach.ui.theme.ScoreGood
 import com.shangmentiyu.sportscoach.ui.theme.ScorePass
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
+import com.shangmentiyu.sportscoach.ui.theme.StyledDropdown
 
 /**
  * 学员编辑页：iOS Inset Grouped 表单风格。
@@ -98,7 +108,6 @@ fun AddStudentScreen(
     var age by remember(student) { mutableStateOf(student?.age?.toString() ?: "") }
     var heightStr by remember(student) { mutableStateOf(student?.heightCm?.takeIf { it > 0 }?.toString() ?: "") }
     var weightStr by remember(student) { mutableStateOf(student?.weightKg?.takeIf { it > 0f }?.toString() ?: "") }
-    var expanded by remember { mutableStateOf(false) }
     var snackbar by remember { mutableStateOf<String?>(null) }
     var showConfirmDialog by remember { mutableStateOf(false) }
 
@@ -223,8 +232,6 @@ fun AddStudentScreen(
                         IosFormDropdownRow(
                             label = "年级",
                             displayValue = Standards.gradeFullLabel(grade),
-                            expanded = expanded,
-                            onExpandedChange = { expanded = it },
                             options = Standards.GRADE_OPTIONS.filter { it.first != "0" }.map { (code, label) -> code to label },
                             onSelect = { grade = it },
                             showDivider = false
@@ -514,8 +521,8 @@ private fun IosFormCard(content: @Composable () -> Unit) {
             .shadow(
                 elevation = 4.dp,
                 shape = RoundedCornerShape(10.dp),
-                ambientColor = Color(0x1A000000),
-                spotColor = Color(0x1A000000)
+                ambientColor = ShadowTokens.strongAmbient,
+                spotColor = ShadowTokens.strongSpot
             )
             .background(appSurface(), RoundedCornerShape(10.dp))
     ) {
@@ -666,57 +673,40 @@ private fun IosFormSelectorRow(
 }
 
 /**
- * iOS 下拉选择行：左侧 Label + 右侧下拉框。
+ * iOS 下拉选择行：左侧 Label + 右侧统一 StyledDropdown。
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun IosFormDropdownRow(
     label: String,
     displayValue: String,
-    expanded: Boolean,
-    onExpandedChange: (Boolean) -> Unit,
     options: List<Pair<String, String>>,  // (code, label)
     onSelect: (String) -> Unit,
     showDivider: Boolean = true
 ) {
     Column {
-        ExposedDropdownMenuBox(
-            expanded = expanded,
-            onExpandedChange = onExpandedChange,
-            modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.md)
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .menuAnchor(MenuAnchorType.PrimaryNotEditable),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Spacing.md)
-            ) {
-                Text(
-                    label,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.width(72.dp)
-                )
-                Text(
-                    displayValue,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.weight(1f)
-                )
-                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
-            }
-            ExposedDropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { onExpandedChange(false) }
-            ) {
-                options.forEach { (code, lbl) ->
-                    DropdownMenuItem(
-                        text = { Text(lbl) },
-                         onClick = { onSelect(code); onExpandedChange(false) }
-                    )
-                }
-            }
+            Text(
+                label,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.width(72.dp)
+            )
+            StyledDropdown(
+                selected = displayValue,
+                options = options.map { it.second },
+                optionLabel = { it },
+                optionIcon = { Icons.Outlined.School },
+                onSelected = { label ->
+                    options.firstOrNull { it.second == label }?.let { onSelect(it.first) }
+                },
+                modifier = Modifier.weight(1f)
+            )
         }
         if (showDivider) {
             Box(
@@ -839,4 +829,38 @@ private fun IosBmiDisplayRow(
 private fun todayStr(): String {
     return java.time.LocalDate.now()
         .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd", java.util.Locale.getDefault()))
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFFF5F7FA)
+@Composable
+private fun AddStudentScreenPreview() {
+    val context = LocalContext.current
+    val db = remember {
+        Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+    }
+    AddStudentScreen(
+        onBack = {},
+        vm = remember {
+            HomeViewModel(
+                studentRepo = StudentRepository(db.studentDao(), db),
+                lessonRepo = LessonRepository(db.lessonDao()),
+                opRepo = OperationRepository(
+                    pkgDao = db.lessonPackageDao(),
+                    coachDao = db.coachDao(),
+                    lessonDao = db.lessonDao(),
+                    studentDao = db.studentDao(),
+                    archivedLessonDao = null,
+                    db = db,
+                    scheduleRepo = ScheduleRepository(db.scheduleDao(), db.lessonDao()),
+                    scheduleQueryRepo = ScheduleQueryRepository(
+                        db.scheduleDao(), db.lessonDao(), db.lessonPackageDao(), db.studentDao(), db
+                    ),
+                    trainingCycleRepo = TrainingCycleRepository(db.trainingCycleDao()),
+                    stageSummaryRepo = StageSummaryRepository()
+                )
+            )
+        }
+    )
 }

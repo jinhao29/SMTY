@@ -109,7 +109,7 @@ val appModule = module {
 
     // === 视图模型层（v46 架构层四：全量迁移到 Koin） ===
     viewModel { SettingsViewModel(androidContext() as Application, get(), get(), get(), get(), get(), get()) }
-    viewModel { HomeViewModel(get(), get(), get(), get(), get(), get()) }
+    viewModel { HomeViewModel(get(), get(), get(), get(), get()) }
     viewModel { ScoringViewModel(get(), get()) }
     viewModel { LessonViewModel(get(), get(), get(), get()) }
     viewModel { SummaryViewModel(get(), get()) }

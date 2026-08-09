@@ -4,10 +4,8 @@ import android.util.Log
 
 import android.content.Context
 import android.net.Uri
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -48,18 +46,13 @@ import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.SnackbarDuration
@@ -90,7 +83,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.shangmentiyu.sportscoach.data.model.ExerciseItem
-import com.shangmentiyu.sportscoach.data.model.ScheduleMemory
 import com.shangmentiyu.sportscoach.data.repo.CoachConflictException
 import com.shangmentiyu.sportscoach.ui.operation.OperationViewModel
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
@@ -107,12 +99,12 @@ import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 import com.shangmentiyu.sportscoach.ui.theme.appSurface
 import com.shangmentiyu.sportscoach.ui.theme.appSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
+import com.shangmentiyu.sportscoach.ui.theme.StyledDropdown
+import com.shangmentiyu.sportscoach.ui.theme.AppTextField
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
-import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 /**
  * 添加/编辑课程对话框（iOS 分组风格 / Inset Grouped Form）。
@@ -382,83 +374,62 @@ fun ScheduleEditDialog(
                         }
                         Spacer(Modifier.height(Spacing.md))
                         // 学员选择：体验课开启时切换为可输入姓名的 TextField（隐藏学员下拉列表）
-                        var studentExpanded by remember { mutableStateOf(false) }
-                        ExposedDropdownMenuBox(
-                            expanded = if (isTrial) false else studentExpanded,
-                            onExpandedChange = { studentExpanded = !studentExpanded }
-                        ) {
-                            OutlinedTextField(
+                        if (isTrial) {
+                            AppTextField(
                                 value = studentName,
                                 onValueChange = { studentName = it },
-                                readOnly = false,
-                                label = { Text(if (isTrial) "体验课学员姓名" else "学员") },
+                                label = { Text("体验课学员姓名") },
                                 leadingIcon = { Icon(Icons.Outlined.Person, contentDescription = null) },
-                                trailingIcon = {
-                                    if (!isTrial) {
-                                        ExposedDropdownMenuDefaults.TrailingIcon(studentExpanded)
-                                    }
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = !isTrial),
-
-                             shape = AppTextFieldShape,
-                             colors = editDialogFieldColors(),)
-                            // 常规排课：显示学员下拉建议列表；体验课：隐藏（可直接输入临时姓名）
-                            if (!isTrial) {
-                                DropdownMenu(
-                                    expanded = studentExpanded,
-                                    onDismissRequest = { studentExpanded = false }
-                                ) {
-                                students.forEach { s ->
-                                    DropdownMenuItem(
-                                        text = { Text("${s.name} (${s.gender})") },
-                                        onClick = {
-                                            studentName = s.name
-                                            // v46：同步记录选中学员的 studentId（软关联精确匹配）
-                                            selectedStudentId = s.studentId
-                                            studentExpanded = false
-                                            // 选择学员后立即清除焦点，关闭软键盘
-                                            focusManager.clearFocus()
-                                            // === v28 优化3：新建模式下选中学员后异步预填训练内容推荐 ===
-                                            // 触发条件：
-                                            // 1. 仅新建模式（isCreate=true）触发，编辑模式不动用户已有内容
-                                            // 2. 当前 content 为空（用户尚未添加动作）
-                                            // 3. 同一学员只触发一次（避免用户清空后又自动填充）
-                                            // 异步执行不阻塞 UI；推荐失败静默忽略，保持空白由教练填写
-                                            if (isCreate && content.isEmpty() && recommendedFor != s.name) {
-                                                recommendedFor = s.name
-                                                scope.launch {
-                                                    val recommended = withContext(Dispatchers.IO) {
-                                                        vm.recommendTrainingContent(
-                                                            studentName = s.name,
-                                                            latestBmi = s.bmi
-                                                        )
-                                                    }
-                                                    // 再次校验 content 仍为空（用户可能在加载期间手动添加）
-                                                    if (recommended.isNotEmpty() && content.isEmpty()) {
-                                                        content = recommended
-                                                    }
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            StyledDropdown(
+                                selected = studentName,
+                                options = students.map { "${it.name} (${it.gender})" },
+                                optionLabel = { it },
+                                optionIcon = { Icons.Outlined.Person },
+                                onSelected = { label ->
+                                    students.firstOrNull { "${it.name} (${it.gender})" == label }?.let { s ->
+                                        studentName = s.name
+                                        // v46：同步记录选中学员的 studentId（软关联精确匹配）
+                                        selectedStudentId = s.studentId
+                                        // 选择学员后立即清除焦点，关闭软键盘
+                                        focusManager.clearFocus()
+                                        // === v28 优化3：新建模式下选中学员后异步预填训练内容推荐 ===
+                                        // 触发条件：
+                                        // 1. 仅新建模式（isVip=false）触发，编辑模式不动用户已有内容
+                                        // 2. 当前 content 为空（用户尚未添加动作）
+                                        // 3. 同一学员只触发一次（避免用户清空后又自动填充）
+                                        // 异步执行不阻塞 UI；推荐失败静默忽略，保持空白由教练填写
+                                        if (isCreate && content.isEmpty() && recommendedFor != s.name) {
+                                            recommendedFor = s.name
+                                            scope.launch {
+                                                val recommended = withContext(Dispatchers.IO) {
+                                                    vm.recommendTrainingContent(
+                                                        studentName = s.name,
+                                                        latestBmi = s.bmi
+                                                    )
+                                                }
+                                                if (recommended.isNotEmpty() && content.isEmpty()) {
+                                                    content = recommended
                                                 }
                                             }
                                         }
-                                    )
-                                }
-                            }
-                            }   // 闭合 if (!isTrial)：体验课开启时隐藏学员下拉列表
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
                         Spacer(Modifier.height(Spacing.md))
                         // 教练
-                        OutlinedTextField(
+                        AppTextField(
                             value = coachName,
                             onValueChange = { coachName = it },
                             label = { Text("教练") },
                             leadingIcon = { Icon(Icons.Outlined.Person, contentDescription = null) },
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-
-                         shape = AppTextFieldShape,
-                         colors = editDialogFieldColors(),)
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 }
 
@@ -521,42 +492,19 @@ fun ScheduleEditDialog(
                                 }
                             }
                         } else {
-                            // 编辑模式：保留原下拉单选（编辑单条记录）
-                            var dayExpanded by remember { mutableStateOf(false) }
-                            ExposedDropdownMenuBox(
-                                expanded = dayExpanded,
-                                onExpandedChange = { dayExpanded = !dayExpanded }
-                            ) {
-                                OutlinedTextField(
-                                    value = dayLabels.getOrNull(dayOfWeek - 1) ?: "周一",
-                                    onValueChange = {},
-                                    readOnly = true,
-                                    label = { Text("周几") },
-                                    leadingIcon = { Icon(Icons.Outlined.CalendarToday, contentDescription = null) },
-                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(dayExpanded) },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true),
-
-                                 shape = AppTextFieldShape,
-                                 colors = editDialogFieldColors(),)
-                                DropdownMenu(
-                                    expanded = dayExpanded,
-                                    onDismissRequest = { dayExpanded = false }
-                                ) {
-                                    dayLabels.forEachIndexed { idx, label ->
-                                        DropdownMenuItem(
-                                            text = { Text(label) },
-                                            onClick = {
-                                                dayOfWeek = idx + 1
-                                                dayExpanded = false
-                                                // 选择周几后立即清除焦点，关闭软键盘
-                                                focusManager.clearFocus()
-                                            }
-                                        )
-                                    }
-                                }
-                            }
+                            // 编辑模式：下拉单选（编辑单条记录）
+                            StyledDropdown(
+                                selected = dayLabels.getOrNull(dayOfWeek - 1) ?: "周一",
+                                options = dayLabels,
+                                optionLabel = { it },
+                                optionIcon = { Icons.Outlined.CalendarToday },
+                                onSelected = { label ->
+                                    dayOfWeek = dayLabels.indexOf(label) + 1
+                                    // 选择周几后立即清除焦点，关闭软键盘
+                                    focusManager.clearFocus()
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
                         Spacer(Modifier.height(Spacing.md))
                         // 开始时间（支持下拉选择历史时间记忆）+ 时长
@@ -564,70 +512,28 @@ fun ScheduleEditDialog(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(Spacing.md)
                         ) {
-                            // 开始时间：ExposedDropdownMenuBox 支持自由输入 + 历史下拉
-                            var timeExpanded by remember { mutableStateOf(false) }
-                            ExposedDropdownMenuBox(
-                                expanded = timeExpanded,
-                                onExpandedChange = { timeExpanded = !timeExpanded },
+                            // 开始时间：历史时间记忆下拉
+                            StyledDropdown(
+                                selected = startTime,
+                                options = timeMemories.map { it.value },
+                                optionLabel = { it },
+                                optionIcon = { Icons.Outlined.Schedule },
+                                onSelected = { value ->
+                                    startTime = value
+                                    // 选择历史时间后立即清除焦点，关闭软键盘
+                                    focusManager.clearFocus()
+                                },
                                 modifier = Modifier.weight(1f)
-                            ) {
-                                OutlinedTextField(
-                                    value = startTime,
-                                    onValueChange = {
-                                        startTime = it
-                                        timeExpanded = false
-                                    },
-                                    label = { Text("开始时间") },
-                                    placeholder = { Text("09:00") },
-                                    leadingIcon = { Icon(Icons.Outlined.Schedule, contentDescription = null) },
-                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(timeExpanded) },
-                                    singleLine = true,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true),
-
-                                 shape = AppTextFieldShape,
-                                 colors = editDialogFieldColors(),)
-                                DropdownMenu(
-                                    expanded = timeExpanded,
-                                    onDismissRequest = { timeExpanded = false }
-                                ) {
-                                    if (timeMemories.isEmpty()) {
-                                        DropdownMenuItem(
-                                            text = { Text("暂无历史时间", color = appOutline()) },
-                                            onClick = { timeExpanded = false }
-                                        )
-                                    } else {
-                                        timeMemories.forEach { mem ->
-                                            ScheduleMemoryMenuItem(
-                                                mem = mem,
-                                                onSelect = {
-                                                    startTime = mem.value
-                                                    timeExpanded = false
-                                                    // 选择历史时间后立即清除焦点，关闭软键盘
-                                                    focusManager.clearFocus()
-                                                },
-                                                onDelete = {
-                                                    // 长按删除该条历史记忆，删除后下拉列表经 Room Flow 自动刷新
-                                                    vm.deleteMemory(mem)
-                                                    timeExpanded = false
-                                                }
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                            OutlinedTextField(
+                            )
+                            AppTextField(
                                 value = durationMinutes,
                                 onValueChange = { durationMinutes = it.filter { c -> c.isDigit() } },
                                 label = { Text("时长(分)") },
                                 leadingIcon = { Icon(Icons.Outlined.Timer, contentDescription = null) },
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                modifier = Modifier.weight(1f),
-
-                             shape = AppTextFieldShape,
-                             colors = editDialogFieldColors(),)
+                                modifier = Modifier.weight(1f)
+                            )
                         }
                         Spacer(Modifier.height(Spacing.md))
                         // 长期排课勾选：勾选后每周自动生成对应时间的课表
@@ -659,96 +565,34 @@ fun ScheduleEditDialog(
                 item {
                     IOSSectionHeader("课程详情")
                     IOSCard {
-                        // 上课地点（支持下拉选择历史地点记忆 + 自由输入）
-                        var locExpanded by remember { mutableStateOf(false) }
-                        ExposedDropdownMenuBox(
-                            expanded = locExpanded,
-                            onExpandedChange = { locExpanded = !locExpanded }
-                        ) {
-                            OutlinedTextField(
-                                value = location,
-                                onValueChange = {
-                                    location = it
-                                    locExpanded = false
-                                },
-                                readOnly = false,
-                                label = { Text("上课地点") },
-                                leadingIcon = { Icon(Icons.Outlined.LocationOn, contentDescription = null) },
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(locExpanded) },
-                                singleLine = true,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true),
-
-                             shape = AppTextFieldShape,
-                             colors = editDialogFieldColors(),)
-                            DropdownMenu(
-                                expanded = locExpanded,
-                                onDismissRequest = { locExpanded = false }
-                            ) {
-                                if (locationMemories.isEmpty()) {
-                                    DropdownMenuItem(
-                                        text = { Text("暂无历史地点", color = appOutline()) },
-                                        onClick = { locExpanded = false }
-                                    )
-                                } else {
-                                    locationMemories.forEach { mem ->
-                                        ScheduleMemoryMenuItem(
-                                            mem = mem,
-                                            onSelect = {
-                                                location = mem.value
-                                                locExpanded = false
-                                                // 选择历史地点后立即清除焦点，关闭软键盘
-                                                focusManager.clearFocus()
-                                            },
-                                            onDelete = {
-                                                // 长按删除该条历史记忆，删除后下拉列表经 Room Flow 自动刷新
-                                                vm.deleteMemory(mem)
-                                                locExpanded = false
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-                        }
+                        // 上课地点（历史地点记忆下拉）
+                        StyledDropdown(
+                            selected = location,
+                            options = locationMemories.map { it.value },
+                            optionLabel = { it },
+                            optionIcon = { Icons.Outlined.LocationOn },
+                            onSelected = { value ->
+                                location = value
+                                // 选择历史地点后立即清除焦点，关闭软键盘
+                                focusManager.clearFocus()
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
                         Spacer(Modifier.height(Spacing.md))
-                        // 课时类型下拉（预设：训练课/体验课，支持自定义输入）
-                        var typeExpanded by remember { mutableStateOf(false) }
+// 课时类型下拉（预设：训练课/体验课）
                         val typePresets = listOf("训练课", "体验课")
-                        ExposedDropdownMenuBox(
-                            expanded = typeExpanded,
-                            onExpandedChange = { typeExpanded = !typeExpanded }
-                        ) {
-                            OutlinedTextField(
-                                value = lessonType,
-                                onValueChange = { lessonType = it },
-                                readOnly = false,
-                                label = { Text("课时类型") },
-                                leadingIcon = { Icon(Icons.Outlined.Label, contentDescription = null) },
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(typeExpanded) },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true),
-
-                             shape = AppTextFieldShape,
-                             colors = editDialogFieldColors(),)
-                            DropdownMenu(
-                                expanded = typeExpanded,
-                                onDismissRequest = { typeExpanded = false }
-                            ) {
-                                typePresets.forEach { t ->
-                                    DropdownMenuItem(
-                                        text = { Text(t) },
-                                        onClick = {
-                                            lessonType = t
-                                            typeExpanded = false
-                                            // 选择课时类型后立即清除焦点，关闭软键盘
-                                            focusManager.clearFocus()
-                                        }
-                                    )
-                                }
-                            }
-                        }
+                        StyledDropdown(
+                            selected = lessonType,
+                            options = typePresets,
+                            optionLabel = { it },
+                            optionIcon = { Icons.Outlined.Label },
+                            onSelected = { value ->
+                                lessonType = value
+                                // 选择课时类型后立即清除焦点，关闭软键盘
+                                focusManager.clearFocus()
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
                         Spacer(Modifier.height(Spacing.md))
                         // 颜色选择器（胶囊状）
                         Text(
@@ -928,16 +772,14 @@ fun ScheduleEditDialog(
                 item {
                     IOSSectionHeader("备注")
                     IOSCard {
-                        OutlinedTextField(
+                        AppTextField(
                             value = note,
                             onValueChange = { note = it },
                             label = { Text("备注信息") },
                             leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Notes, contentDescription = null) },
                             modifier = Modifier.fillMaxWidth(),
-                            minLines = 2,
-
-                         shape = AppTextFieldShape,
-                         colors = editDialogFieldColors(),)
+                            minLines = 2
+                        )
                     }
                 }
 
@@ -1061,40 +903,6 @@ fun ScheduleEditDialog(
 }
 
 /**
- * 排课记忆下拉项：点击选中该历史值，长按删除该条记忆。
- * 自定义 Row + combinedClickable（DropdownMenuItem 不支持长按），视觉与菜单项一致。
- */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun ScheduleMemoryMenuItem(
-    mem: ScheduleMemory,
-    onSelect: () -> Unit,
-    onDelete: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(
-                onClick = onSelect,
-                onLongClick = onDelete
-            )
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            mem.value,
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodyLarge
-        )
-        Text(
-            "长按删除",
-            style = MaterialTheme.typography.labelSmall,
-            color = appOutline()
-        )
-    }
-}
-
-/**
  * 训练内容/课前任务编辑卡片（iOS 子卡片风格）。
  *
  * 视觉规格：
@@ -1123,15 +931,13 @@ private fun ExerciseEditCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
         ) {
-            OutlinedTextField(
+            AppTextField(
                 value = item.name,
                 onValueChange = { onUpdate(item.copy(name = it)) },
                 label = { Text("动作") },
                 singleLine = true,
-                modifier = Modifier.weight(1.5f),
-
-             shape = AppTextFieldShape,
-             colors = editDialogFieldColors(),)
+                modifier = Modifier.weight(1.5f)
+            )
             IconButton(onClick = onDelete) {
                 Icon(
                     Icons.Outlined.Delete,
@@ -1147,7 +953,7 @@ private fun ExerciseEditCard(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
         ) {
-            OutlinedTextField(
+            AppTextField(
                 value = item.sets.toString(),
                 onValueChange = { v ->
                     val n = v.filter { it.isDigit() }.toIntOrNull() ?: 0
@@ -1156,28 +962,22 @@ private fun ExerciseEditCard(
                 label = { Text("组数") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f),
-
-             shape = AppTextFieldShape,
-             colors = editDialogFieldColors(),)
-            OutlinedTextField(
+                modifier = Modifier.weight(1f)
+            )
+            AppTextField(
                 value = item.reps,
                 onValueChange = { onUpdate(item.copy(reps = it)) },
                 label = { Text("次数") },
                 singleLine = true,
-                modifier = Modifier.weight(1f),
-
-             shape = AppTextFieldShape,
-             colors = editDialogFieldColors(),)
-            OutlinedTextField(
+                modifier = Modifier.weight(1f)
+            )
+            AppTextField(
                 value = item.intensity,
                 onValueChange = { onUpdate(item.copy(intensity = it)) },
                 label = { Text("强度") },
                 singleLine = true,
-                modifier = Modifier.weight(1f),
-
-             shape = AppTextFieldShape,
-             colors = editDialogFieldColors(),)
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }
@@ -1351,14 +1151,10 @@ private fun loadImageBitmapFromFile(path: String): androidx.compose.ui.graphics.
 }
 
 /**
- * 新增/编辑课程弹窗专用输入框配色（UI 一致性修复）。
+ * 删除按钮样式：红底白字圆角按钮。
  *
  * 视觉规格：
  * - 浅灰 #F0F0F0 圆角底色（与全局 appTextFieldColors 一致，融入白色卡片，消除"白底块补丁感"）
- * - 边框全透明
- * - 标签文字对比度修复：未聚焦深黑 #1A1A1A / 聚焦珊瑚橙 #FF6B47
- *   （绝对禁止 #B0B0B0 及更浅的灰色作为表单标签颜色）
- * - 光标/错误态珊瑚橙
  */
 @Composable
 private fun editDialogFieldColors(): TextFieldColors {

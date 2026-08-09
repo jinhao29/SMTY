@@ -1,5 +1,6 @@
 package com.shangmentiyu.sportscoach.ui.schedule
 
+import com.shangmentiyu.sportscoach.ui.theme.ShadowTokens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -81,8 +82,8 @@ fun ScheduleCalendar(
             .shadow(
                 elevation = 4.dp,
                 shape = RoundedCornerShape(24.dp),
-                ambientColor = Color(0x0D000000),
-                spotColor = Color(0x14000000)
+                ambientColor = ShadowTokens.cardAmbient,
+                spotColor = ShadowTokens.cardSpot
             )
             .clip(RoundedCornerShape(24.dp))
             .background(appSurface())

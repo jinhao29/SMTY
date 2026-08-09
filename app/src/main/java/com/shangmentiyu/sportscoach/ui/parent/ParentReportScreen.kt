@@ -19,13 +19,13 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.AlertDialog
+import com.shangmentiyu.sportscoach.ui.theme.AppTextField
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -52,8 +52,6 @@ import com.shangmentiyu.sportscoach.ui.theme.GlassSectionTitle
 import com.shangmentiyu.sportscoach.ui.theme.FloatingSnackbarHost
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
-import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
-import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 /**
  * 家长服务主页面：生成周报/月报，查看历史报告并一键分享给家长。
@@ -245,14 +243,12 @@ private fun GenerateReportDialog(
         title = "生成家长报告",
         content = {
             Column {
-                OutlinedTextField(
+                AppTextField(
                     value = selectedName,
                     onValueChange = { selectedName = it },
                     label = { Text("学员姓名") },
                     modifier = Modifier.fillMaxWidth(),
-
-                 shape = AppTextFieldShape,
-                 colors = appTextFieldColors(),)
+)
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(

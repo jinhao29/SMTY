@@ -1,12 +1,12 @@
 package com.shangmentiyu.sportscoach.ui.home
 
+import com.shangmentiyu.sportscoach.ui.theme.ShadowTokens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -27,30 +26,18 @@ import androidx.compose.ui.graphics.graphicsLayer
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
-import com.shangmentiyu.sportscoach.ui.theme.appSurface
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FilterList
-import androidx.compose.material.icons.outlined.LocationOn
-import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Sort
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.MenuAnchorType
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
@@ -59,7 +46,6 @@ import com.shangmentiyu.sportscoach.ui.theme.OutlinedTimePickerField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -78,10 +64,11 @@ import com.shangmentiyu.sportscoach.data.model.Lesson
 import com.shangmentiyu.sportscoach.data.model.Student
 import com.shangmentiyu.sportscoach.ui.home.HomeViewModel.GradeFilter
 import com.shangmentiyu.sportscoach.ui.home.HomeViewModel.StudentSortBy
-import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
+import com.shangmentiyu.sportscoach.ui.theme.AppTextField
+import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
 import com.shangmentiyu.sportscoach.ui.theme.StudentListSkeleton
-import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
+import com.shangmentiyu.sportscoach.ui.theme.StyledDropdown
 
 /**
  * 学员列表 Tab：展示所有学员，每项显示课时余额、下一节课信息、身高体重BMI。
@@ -284,64 +271,51 @@ fun StudentListTab(
                     }
                 }
             } else {
-                // === 痛点二 方案A：iOS 风格分组列表 ===
-                // 学员卡片在纯白 Surface 分组卡片内
+                // === 参考图复刻：学员卡片列表（独立白色卡片 + 16dp 圆角 + 柔和阴影）===
                 Column(modifier = Modifier.fillMaxSize()) {
-                    // 标题（在分组卡片外，iOS 风格珊瑚橙大写小标题）
+                    // 标题（在卡片外，iOS 风格珊瑚橙大写小标题）
                     IosSectionHeader("学员列表（${filteredStudents.size}/${students.size}）")
-                    // === 学员卡片分组容器（纯白 + 16dp 圆角 + 极小阴影）===
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = Spacing.screenH),
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        shadowElevation = 2.dp,
-                        tonalElevation = 0.dp
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        state = listState,
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                            start = Spacing.screenH,
+                            end = Spacing.screenH,
+                            top = Spacing.sm,
+                            bottom = 100.dp // 为悬浮胶囊导航留出空间，避免最后一张卡片被遮挡
+                        ),
+                        // 卡片间距 12dp，每张卡片自带阴影，不依赖容器
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            state = listState,
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                                start = 0.dp,
-                                end = 0.dp,
-                                top = Spacing.sm,
-                                bottom = 100.dp // 为悬浮胶囊导航留出空间，避免最后一张卡片被遮挡
-                            ),
-                            // 学员卡片之间无间距，由 0.5dp 细灰分割线分隔（iOS Grouped List 风格）
-                            verticalArrangement = Arrangement.spacedBy(0.dp)
-                        ) {
-                            itemsIndexed(filteredStudents, key = { _, s -> s.name }) { idx, student ->
-                                val remaining = remainingMap[student.name] ?: -1
-                                val nextLesson = nextLessons[student.name]
-                                StudentListItem(
-                                    student = student,
-                                    remaining = remaining,
-                                    nextLesson = nextLesson,
-                                    showTopDivider = idx > 0,
-                                    onSign = {
-                                        vm.sign(student.name) { result ->
-                                            if (result.lessonId.isNotBlank()) {
-                                                onSign(result.lessonId)
-                                            }
+                        itemsIndexed(filteredStudents, key = { _, s -> s.name }) { _, student ->
+                            val remaining = remainingMap[student.name] ?: -1
+                            val nextLesson = nextLessons[student.name]
+                            StudentListItem(
+                                student = student,
+                                remaining = remaining,
+                                nextLesson = nextLesson,
+                                onSign = {
+                                    vm.sign(student.name, student.studentId) { result ->
+                                        if (result.lessonId.isNotBlank()) {
+                                            onSign(result.lessonId)
                                         }
-                                    },
-                                    onGrowth = { onGrowth(student.name) },
-                                    onEdit = { onEditStudent(student) },
-                                    onDelete = { deleteTarget = student },
-                                    onEditNextLesson = { editLessonTarget = nextLesson },
-                                    onHeightPrediction = { onHeightPrediction(student.name) },
-                                    onDietManage = { onDietManage(student.name) }
-                                )
-                            }
-                            // v37 修复：列表末尾追加底部安全间距
-                            item {
-                                Spacer(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(Spacing.screenV + 80.dp)
-                                )
-                            }
+                                    }
+                                },
+                                onGrowth = { onGrowth(student.name) },
+                                onEdit = { onEditStudent(student) },
+                                onDelete = { deleteTarget = student },
+                                onEditNextLesson = { editLessonTarget = nextLesson },
+                                onHeightPrediction = { onHeightPrediction(student.name) },
+                                onDietManage = { onDietManage(student.name) }
+                            )
+                        }
+                        // v37 修复：列表末尾追加底部安全间距
+                        item {
+                            Spacer(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(Spacing.screenV + 80.dp)
+                            )
                         }
                     }
                 }
@@ -467,7 +441,6 @@ private fun EditNextLessonDialog(
  * @param onReset 重置所有筛选条件回调
  * @param onAddStudent 点击 + 按钮触发添加学员（替代原 FAB）
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun StudentFilterBar(
     totalCount: Int,
@@ -485,11 +458,6 @@ internal fun StudentFilterBar(
     val hasActiveFilter = sortBy != StudentSortBy.Default ||
             gradeFilter != GradeFilter.All ||
             nameQuery.isNotBlank()
-
-    // 排序下拉菜单展开状态
-    var sortExpanded by remember { mutableStateOf(false) }
-    // 年级下拉菜单展开状态
-    var gradeExpanded by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -509,89 +477,25 @@ internal fun StudentFilterBar(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
         ) {
-            // 排序下拉
-            ExposedDropdownMenuBox(
-                expanded = sortExpanded,
-                onExpandedChange = { sortExpanded = !sortExpanded },
+            // 排序下拉（参考图复刻：白色卡片 + 左图标 + 文字 + 右下箭头）
+            StyledDropdown(
+                selected = sortBy,
+                options = StudentSortBy.entries.toList(),
+                optionLabel = ::sortByLabel,
+                optionIcon = { Icons.Outlined.Sort },
+                onSelected = { onSortByChanged(it) },
                 modifier = Modifier.weight(1f)
-            ) {
-                OutlinedTextField(
-                    value = sortByLabel(sortBy),
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("排序") },
-                    leadingIcon = {
-                        Icon(
-                            Icons.Outlined.Sort,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(sortExpanded) },
-                    singleLine = true,
-                    shape = AppTextFieldShape,
-                    colors = appTextFieldColors(),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true)
-                )
-                DropdownMenu(
-                    expanded = sortExpanded,
-                    onDismissRequest = { sortExpanded = false }
-                ) {
-                    StudentSortBy.entries.forEach { sort ->
-                        DropdownMenuItem(
-                            text = { Text(sortByLabel(sort)) },
-                            onClick = {
-                                onSortByChanged(sort)
-                                sortExpanded = false
-                            }
-                        )
-                    }
-                }
-            }
+            )
 
-            // 年级下拉
-            ExposedDropdownMenuBox(
-                expanded = gradeExpanded,
-                onExpandedChange = { gradeExpanded = !gradeExpanded },
+            // 年级下拉（参考图复刻：白色卡片 + 左图标 + 文字 + ⌽箭头）
+            StyledDropdown(
+                selected = gradeFilter,
+                options = GradeFilter.entries.toList(),
+                optionLabel = ::gradeFilterLabel,
+                optionIcon = { Icons.Outlined.FilterList },
+                onSelected = { onGradeFilterChanged(it) },
                 modifier = Modifier.weight(1f)
-            ) {
-                OutlinedTextField(
-                    value = gradeFilterLabel(gradeFilter),
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("年级") },
-                    leadingIcon = {
-                        Icon(
-                            Icons.Outlined.FilterList,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(gradeExpanded) },
-                    singleLine = true,
-                    shape = AppTextFieldShape,
-                    colors = appTextFieldColors(),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true)
-                )
-                DropdownMenu(
-                    expanded = gradeExpanded,
-                    onDismissRequest = { gradeExpanded = false }
-                ) {
-                    GradeFilter.entries.forEach { grade ->
-                        DropdownMenuItem(
-                            text = { Text(gradeFilterLabel(grade)) },
-                            onClick = {
-                                onGradeFilterChanged(grade)
-                                gradeExpanded = false
-                            }
-                        )
-                    }
-                }
-            }
+            )
         }
 
         Spacer(Modifier.height(Spacing.sm))
@@ -603,7 +507,7 @@ internal fun StudentFilterBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
         ) {
-            OutlinedTextField(
+            AppTextField(
                 value = nameQuery,
                 onValueChange = onNameQueryChanged,
                 placeholder = { Text("搜索姓名", color = appOnSurfaceVariant()) },
@@ -631,14 +535,6 @@ internal fun StudentFilterBar(
                     }
                 },
                 singleLine = true,
-                shape = RoundedCornerShape(50),
-                colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = appSurface(),
-                    unfocusedContainerColor = appSurface(),
-                    focusedBorderColor = Color.Transparent,
-                    unfocusedBorderColor = Color.Transparent,
-                    cursorColor = appPrimary()
-                ),
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Text,
                     imeAction = ImeAction.Search
@@ -647,9 +543,9 @@ internal fun StudentFilterBar(
                     .weight(1f)
                     .shadow(
                         elevation = 4.dp,
-                        shape = RoundedCornerShape(50),
-                        ambientColor = Color.Black.copy(alpha = 0.04f),
-                        spotColor = Color.Black.copy(alpha = 0.06f)
+                        shape = AppTextFieldShape,
+                        ambientColor = ShadowTokens.softAmbient,
+                        spotColor = ShadowTokens.softSpot
                     )
             )
             // 重置按钮（仅在有激活筛选时显示）：移至此处与 + 按钮并排

@@ -12,10 +12,12 @@ import com.shangmentiyu.sportscoach.data.model.ScoreItem
 import com.shangmentiyu.sportscoach.data.model.Student
 import com.shangmentiyu.sportscoach.data.repo.LessonRepository
 import com.shangmentiyu.sportscoach.data.repo.StudentRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 class ScoringViewModel(
@@ -108,6 +110,11 @@ class ScoringViewModel(
         _selectedStudent.value = student
         _standards.value = Standards.getStandardsByGrade(student.grade)
         _customProjects.value = emptySet()
+        // === v50：切换学员必须重置成绩输入，防止上一学员的成绩残留 ===
+        // （编辑场景 loadLesson → selectStudent → loadExistingScores 顺序为
+        //   先清空再填充，不受影响）
+        _scoreInputs.value = emptyMap()
+        _scoreResults.value = emptyMap()
     }
 
     /**
@@ -176,34 +183,38 @@ class ScoringViewModel(
             return
         }
 
+        // === v50：显式切 Dispatchers.IO（Room suspend 虽自动切线程，
+        // 但 JSON 构造为 CPU 密集工作，统一在 IO 线程执行，杜绝主线程负担） ===
         viewModelScope.launch(appExceptionHandler) {
-            // 构建 scores JSON
-            val scoresObj = JSONObject()
-            for ((name, result) in results) {
-                if (result.ok) {
-                    val item = JSONObject()
-                    item.put("value", _scoreInputs.value[name] ?: "")
-                    // 自定义项目 score 为 null 时存 0.0，grade 标记为"自定义"
-                    item.put("score", result.score ?: 0.0)
-                    item.put("grade", result.grade)
-                    scoresObj.put(name, item)
+            withContext(Dispatchers.IO) {
+                // 构建 scores JSON
+                val scoresObj = JSONObject()
+                for ((name, result) in results) {
+                    if (result.ok) {
+                        val item = JSONObject()
+                        item.put("value", _scoreInputs.value[name] ?: "")
+                        // 自定义项目 score 为 null 时存 0.0，grade 标记为"自定义"
+                        item.put("score", result.score ?: 0.0)
+                        item.put("grade", result.grade)
+                        scoresObj.put(name, item)
+                    }
                 }
-            }
 
-            val lid = lessonId
-            if (lid != null) {
-                val lesson = lessonRepo.getById(lid)
-                if (lesson != null) {
-                    lessonRepo.updateLesson(lesson.copy(scores = scoresObj.toString()))
-                }
-            } else {
-                // 无关联课时，创建新记录
-                // === v46 断流修复：创建课时必须携带 studentId（软关联外键），
-                // 禁止仅传姓名，否则成绩页按 studentId 查询会断流 ===
-                val newId = lessonRepo.createLesson(student.name, "", studentId = student.studentId)
-                val lesson = lessonRepo.getById(newId)
-                if (lesson != null) {
-                    lessonRepo.updateLesson(lesson.copy(scores = scoresObj.toString()))
+                val lid = lessonId
+                if (lid != null) {
+                    val lesson = lessonRepo.getById(lid)
+                    if (lesson != null) {
+                        lessonRepo.updateLesson(lesson.copy(scores = scoresObj.toString()))
+                    }
+                } else {
+                    // 无关联课时，创建新记录
+                    // === v46 断流修复：创建课时必须携带 studentId（软关联外键），
+                    // 禁止仅传姓名，否则成绩页按 studentId 查询会断流 ===
+                    val newId = lessonRepo.createLesson(student.name, "", studentId = student.studentId)
+                    val lesson = lessonRepo.getById(newId)
+                    if (lesson != null) {
+                        lessonRepo.updateLesson(lesson.copy(scores = scoresObj.toString()))
+                    }
                 }
             }
             onSuccess()

@@ -179,6 +179,11 @@ class OperationRepository(
      * === v49 体验课：isTrial=true 时跳过课时包扣减，仅记录签退时间 ===
      */
     suspend fun consumeLessonForCheckOut(lesson: Lesson): ConsumeResult = consumeMutex.withLock {
+        android.util.Log.d("CheckOutFlow",
+            "consumeLessonForCheckOut 入口：lessonId=${lesson.id} student=${lesson.studentName} " +
+                "studentId=${lesson.studentId} isTrial=${lesson.isTrial} status=${lesson.status} " +
+                "packageId=${lesson.packageId}")
+
         val database = db ?: return@withLock ConsumeResult(
             success = false,
             message = "签退失败：数据库未初始化"
@@ -186,14 +191,26 @@ class OperationRepository(
 
         try {
             database.withTransaction {
+                // 0. 幂等防线：课时已签退则直接成功返回，杜绝重复点击/重复结算导致二次扣费
+                if (lesson.status == "已签退") {
+                    android.util.Log.d("CheckOutFlow",
+                        "幂等拦截：lessonId=${lesson.id} 已签退，跳过消课")
+                    return@withTransaction ConsumeResult(
+                        success = true,
+                        packageId = lesson.packageId,
+                        message = "课时已签退，无需重复操作"
+                    )
+                }
+
                 // 1. 先更新 Lesson：status="已签退" + signOutTime（表访问顺序：lessons 先于 lesson_packages）
+                //    packageId 保留原值：未关联的保持空待回填，已关联的（旧数据）不清空，避免破坏扣费归属记录
                 val nowTime = java.time.LocalTime.now().format(
                     java.time.format.DateTimeFormatter.ofPattern("HH:mm", Locale.getDefault())
                 )
                 val updatedLesson = lesson.copy(
                     status = "已签退",
                     signOutTime = nowTime,
-                    packageId = ""
+                    packageId = lesson.packageId
                 )
                 val affected = lessonDao.update(updatedLesson)
                 if (affected != 1) {
@@ -202,7 +219,7 @@ class OperationRepository(
 
                 // 2. 体验课：不消耗课时包余额，仅记录签退时间即完成
                 if (lesson.isTrial) {
-                    android.util.Log.i("CheckOut",
+                    android.util.Log.d("CheckOutFlow",
                         "体验课签退成功（不消耗课时）：${lesson.studentName} lessonId=${lesson.id}")
                     AutoBackupScheduler.notifyDataChange()
                     return@withTransaction ConsumeResult(
@@ -214,19 +231,35 @@ class OperationRepository(
                     )
                 }
 
-                // 3. 常规排课：调用核心消课逻辑扣减课时包
-                val consume = doConsumeLessonInternal(lesson.studentName)
+                // 3. 旧数据兼容：Lesson 已关联课时包（v27 前"签到即扣费"遗留，packageId 非空 ⟺ 已扣课时），
+                //    仅标记签退，绝不重复扣费
+                if (lesson.packageId.isNotBlank()) {
+                    val oldPkg = pkgDao.getById(lesson.packageId)
+                    android.util.Log.d("CheckOutFlow",
+                        "旧数据已扣费：lessonId=${lesson.id} pkg=${lesson.packageId}，仅标记签退不重复扣费")
+                    AutoBackupScheduler.notifyDataChange()
+                    return@withTransaction ConsumeResult(
+                        success = true,
+                        packageId = lesson.packageId,
+                        packageName = oldPkg?.name ?: "",
+                        remainingAfter = oldPkg?.remainingLessons ?: 0,
+                        message = "已签退（该课时此前已扣减课时）"
+                    )
+                }
+
+                // 4. 常规排课：调用核心消课逻辑扣减课时包（双通道：studentId 优先、studentName 回退）
+                val consume = doConsumeLessonInternal(lesson.studentName, lesson.studentId)
                 if (!consume.success) {
-                    // 抛异常触发事务回滚，Lesson 状态保持"已签到"
+                    // 抛异常触发事务回滚，Lesson 状态保持"已签到"，防止"签退成功但未扣课时"残缺态
                     throw RuntimeException("课时包扣减失败：${consume.message}")
                 }
 
-                // 4. 回填扣减的课时包 ID
+                // 5. 回填扣减的课时包 ID（精准定位：以 pkg 主键 id 落库，杜绝多课时包错乱）
                 lessonDao.update(updatedLesson.copy(packageId = consume.packageId))
 
-                android.util.Log.i("CheckOut",
+                android.util.Log.d("CheckOutFlow",
                     "签退成功：${lesson.studentName} lessonId=${lesson.id} " +
-                        "pkg=${consume.packageName} remaining=${consume.remainingAfter}")
+                        "pkg=${consume.packageName}(id=${consume.packageId}) remaining=${consume.remainingAfter}")
 
                 // v30：签退扣课时属于核心数据变更，触发自动备份防抖
                 AutoBackupScheduler.notifyDataChange()
@@ -234,7 +267,7 @@ class OperationRepository(
                 consume
             }
         } catch (e: Exception) {
-            android.util.Log.e("CheckOut", "签退失败：${e.message}", e)
+            android.util.Log.e("CheckOutFlow", "签退失败：lessonId=${lesson.id} ${e.message}", e)
             ConsumeResult(
                 success = false,
                 message = "签退失败：${e.message ?: "未知异常"}"
@@ -249,16 +282,27 @@ class OperationRepository(
      * 不获取 [consumeMutex]（已由外层调用方持有），避免重入死锁。
      * 直接执行读 + 写 + 校验三步。
      */
-    private suspend fun doConsumeLessonInternal(studentName: String): ConsumeResult {
-        val packages = pkgDao.getByStudent(studentName).first()
-        android.util.Log.d("ConsumeLesson",
-            "学员=$studentName 查询到课时包${packages.size}个: ${packages.map { "${it.name}(status=${it.status},used=${it.usedLessons}/${it.totalLessons},expire=${it.expireDate})" }}")
+    private suspend fun doConsumeLessonInternal(studentName: String, studentId: String?): ConsumeResult {
+        // v46 双通道查询：studentId 优先、studentName 回退（杜绝学员改名后断链找错课时包）
+        val packages = pkgDao.getByStudentDual(studentId, studentName).first()
+        android.util.Log.d("CheckOutFlow",
+            "消课查询：学员=$studentName studentId=$studentId 课时包${packages.size}个: " +
+                packages.map { "${it.name}(status=${it.status},used=${it.usedLessons}/${it.totalLessons})" })
         val active = packages.filter { it.status == "活跃" && !it.isExhausted && !it.isExpired }
-        android.util.Log.d("ConsumeLesson", "过滤后活跃包${active.size}个")
+        android.util.Log.d("CheckOutFlow", "消课：过滤后活跃包${active.size}个")
         val target = active.minByOrNull { it.purchaseDate }
             ?: return ConsumeResult(success = false, message = "无可用课时包")
 
-        val newUsed = (target.usedLessons + 1).coerceAtMost(target.totalLessons)
+        // 数据自愈防线：usedLessons > totalLessons 属于脏数据，
+        // 显式抛 IllegalStateException 中断消课并由外层事务整体回滚，绝不静默 coerce 掩盖错误
+        if (target.usedLessons > target.totalLessons) {
+            throw IllegalStateException(
+                "课时包数据异常：${target.name}(id=${target.id}) used=${target.usedLessons} > total=${target.totalLessons}，" +
+                    "已中断消课，请先修正课时包数据"
+            )
+        }
+
+        val newUsed = target.usedLessons + 1
         val updated = if (newUsed >= target.totalLessons) {
             target.copy(usedLessons = target.totalLessons, status = "已用完")
         } else {
@@ -267,8 +311,8 @@ class OperationRepository(
         val affected = pkgDao.update(updated)
 
         if (affected != 1) {
-            android.util.Log.e("ConsumeLesson",
-                "update 受影响行数=$affected（预期1），扣减未落库！target.id=${target.id}")
+            android.util.Log.e("CheckOutFlow",
+                "课时扣减未落库：pkgId=${target.id} affected=$affected（预期1）")
             return ConsumeResult(
                 success = false,
                 message = "课时扣减失败（更新未生效）"
@@ -277,16 +321,16 @@ class OperationRepository(
 
         val recheck = pkgDao.getById(target.id)
         if (recheck == null || recheck.usedLessons != updated.usedLessons) {
-            android.util.Log.e("ConsumeLesson",
-                "re-query 校验失败：期望used=${updated.usedLessons}，实际used=${recheck?.usedLessons}")
+            android.util.Log.e("CheckOutFlow",
+                "课时扣减校验不一致：pkgId=${target.id} 期望used=${updated.usedLessons} 实际=${recheck?.usedLessons}")
             return ConsumeResult(
                 success = false,
                 message = "课时扣减失败（校验不一致）"
             )
         }
 
-        android.util.Log.d("ConsumeLesson",
-            "扣减成功：${target.name} used ${target.usedLessons}->${updated.usedLessons} 剩余${updated.remainingLessons}")
+        android.util.Log.d("CheckOutFlow",
+            "扣减成功：${target.name}(id=${target.id}) used ${target.usedLessons}->${updated.usedLessons} 剩余${updated.remainingLessons}")
         return ConsumeResult(
             success = true,
             packageId = target.id,

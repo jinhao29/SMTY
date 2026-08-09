@@ -62,11 +62,46 @@ object BackupManager {
     /** 签到照片在 App 内部存储的目录名（与 PhotoCrypto 约定一致） */
     private const val PHOTOS_DIR_NAME = "SignPhotos"
 
+    /** 旧版照片目录名（v31 迁移前 PhotoCrypto 使用的小写目录） */
+    private const val LEGACY_PHOTOS_DIR_NAME = "sign_photos"
+
+    /**
+     * v31 迁移：旧版 filesDir/sign_photos → filesDir/SignPhotos。
+     *
+     * 规则：
+     * - 旧目录不存在时直接返回（幂等，零开销）
+     * - 将旧目录中文件复制到新目录（目标已存在同名文件时不覆盖）
+     * - 全部复制成功后才删除旧目录；任一复制失败则保留旧目录，避免丢照片
+     */
+    fun migrateLegacySignPhotosDir(filesDir: File) {
+        val legacy = File(filesDir, LEGACY_PHOTOS_DIR_NAME)
+        if (!legacy.isDirectory) return
+        val target = File(filesDir, PHOTOS_DIR_NAME)
+        if (!target.exists() && !target.mkdirs()) return
+        var copiedAll = true
+        legacy.listFiles().orEmpty().forEach { f ->
+            if (f.isFile) {
+                val dst = File(target, f.name)
+                if (!dst.exists() && runCatching { f.copyTo(dst) }.isFailure) copiedAll = false
+            }
+        }
+        if (copiedAll) legacy.deleteRecursively()
+    }
+
     /** v22 新增：桌面端 Python 程序读取的元数据 JSON 条目名 */
     private const val ZIP_ENTRY_META_JSON = "export_meta.json"
 
     /** export_meta.json 的结构版本号（供桌面端做兼容性判断） */
     private const val META_JSON_VERSION = 1
+
+    /** 恢复前安全备份目录名（位于 filesDir 下，不受系统缓存清理影响） */
+    private const val SAFETY_BACKUP_DIR = "PreRestoreBackups"
+
+    /** 恢复前安全备份目录最多保留的备份份数 */
+    private const val MAX_SAFETY_BACKUPS = 3
+
+    /** 恢复前安全备份文件名前缀 */
+    private const val SAFETY_BACKUP_PREFIX = "smty_pre_restore_safety_"
 
     /**
      * 进度回调签名。
@@ -179,6 +214,7 @@ object BackupManager {
                 }
 
                 // 3. 写入签到照片目录
+                migrateLegacySignPhotosDir(context.filesDir)
                 val photosDir = File(context.filesDir, PHOTOS_DIR_NAME)
                 if (photosDir.exists() && photosDir.isDirectory) {
                     val photos = photosDir.listFiles()?.filter { it.isFile } ?: emptyList()
@@ -406,6 +442,11 @@ object BackupManager {
     /**
      * 执行完整恢复并返回详细结果（含 PRAGMA integrity_check 校验报告）。
      *
+     * v48 防闪退：恢复前先读取备份库的 PRAGMA user_version，
+     * 若备份来自更高版本 App（备份库版本 > 当前 [AppDatabase.DATABASE_VERSION]），
+     * 直接终止恢复并提示"此备份来自更高版本 App，无法恢复"——
+     * 否则降级恢复出的旧结构数据库被 Room 加载时会抛 IllegalStateException 闪退。
+     *
      * v47 安全不变量（下沉到本入口，不再依赖调用方自备安全备份）：
      * - 恢复前自动在 App 缓存目录创建当前数据的完整安全备份
      * - 恢复失败（完整性校验失败 / 备份格式错误 / 任何异常）后自动从安全备份回滚，
@@ -414,6 +455,7 @@ object BackupManager {
      * - 安全备份仅在恢复与回滚都成功时删除；双失败时保留并提示用户手动找回
      *
      * 完整流程：
+     * 0. 将备份流缓冲到缓存临时文件，读取备份库 user_version 做跨版本恢复检查
      * 1. 创建恢复前安全备份（仅当本地已有数据）
      * 2. 关闭数据库单例（释放文件锁，避免覆盖失败）
      * 3. 清空当前数据库文件与照片目录（避免残留旧数据混入）
@@ -436,16 +478,73 @@ object BackupManager {
         inputStream: InputStream,
         onProgress: OnProgress? = null
     ): RestoreResult {
+        val buffered = File(
+            context.cacheDir,
+            "smty_restore_${System.currentTimeMillis()}.smty_backup"
+        )
+        try {
+            buffered.parentFile?.mkdirs()
+            FileOutputStream(buffered).use { fos -> inputStream.copyTo(fos) }
+        } catch (e: Exception) {
+            Log.e(TAG, "读取备份文件失败：${e.message}", e)
+            buffered.delete()
+            onProgress?.onProgress("error", 0, 0, "读取备份文件失败")
+            return RestoreResult(
+                success = false,
+                message = "读取备份文件失败：${e.message ?: "未知错误"}",
+                needRestart = false,
+                integrityOk = false,
+                integrityReport = "read backup failed"
+            )
+        }
+
+        // === v48 跨版本恢复检查 ===
+        // 备份库 PRAGMA user_version 即备份时 AppDatabase 的版本号（Room 写入）。
+        // 备份版本 > 当前版本 = 备份来自更新的 App，直接降级覆盖会让 Room 加载
+        // 未知 schema 的数据库抛 IllegalStateException，导致 App 启动即闪退。
+        // 此处读取的是缓冲文件的副本，不影响本地现有数据，检查通过前不触碰任何旧数据。
+        onProgress?.onProgress("prepare", 0, 0, "正在检查备份版本兼容性…")
+        val backupVersion = readBackupUserVersion(buffered)
+        if (backupVersion > AppDatabase.DATABASE_VERSION) {
+            Log.w(
+                TAG,
+                "拒绝恢复：备份库版本 $backupVersion > 当前版本 ${AppDatabase.DATABASE_VERSION}"
+            )
+            buffered.delete()
+            onProgress?.onProgress("error", 0, 0, "此备份来自更高版本 App，无法恢复")
+            return RestoreResult(
+                success = false,
+                message = "此备份来自更高版本 App，无法恢复",
+                needRestart = false,
+                integrityOk = false,
+                integrityReport = "backup user_version=$backupVersion > current=${AppDatabase.DATABASE_VERSION}"
+            )
+        }
+
+        return try {
+            FileInputStream(buffered).use { restoreWithSafety(context, it, onProgress) }
+        } finally {
+            buffered.delete()
+        }
+    }
+
+    private suspend fun restoreWithSafety(
+        context: Context,
+        inputStream: InputStream,
+        onProgress: OnProgress?
+    ): RestoreResult {
+        migrateLegacySignPhotosDir(context.filesDir)
         val hasExistingData = context.getDatabasePath(AppDatabase.DATABASE_NAME).exists() ||
             File(context.filesDir, PHOTOS_DIR_NAME).listFiles()?.isNotEmpty() == true
         val safetyFile = if (hasExistingData) {
             onProgress?.onProgress("safety", 0, 0, "正在创建恢复前安全备份…")
+            val safetyDir = File(context.filesDir, SAFETY_BACKUP_DIR)
+            safetyDir.mkdirs()
             val file = File(
-                context.cacheDir,
-                "smty_pre_restore_safety_${System.currentTimeMillis()}.smty_backup"
+                safetyDir,
+                "${SAFETY_BACKUP_PREFIX}${System.currentTimeMillis()}.smty_backup"
             )
             val ok = runCatching {
-                file.parentFile?.mkdirs()
                 FileOutputStream(file).use { fos -> backup(context, fos) }
             }.getOrDefault(false)
             if (!ok) {
@@ -458,6 +557,7 @@ object BackupManager {
                     integrityReport = "safety backup failed"
                 )
             }
+            pruneSafetyBackups(safetyDir)
             file
         } else null
 
@@ -483,7 +583,7 @@ object BackupManager {
             return RestoreResult(
                 success = false,
                 message = "恢复失败且自动回滚失败：${result.message}\n" +
-                    "恢复前的完整数据已保留在应用缓存目录 ${safetyFile.name}，请尽快导出保存",
+                    "恢复前的完整数据已保留在应用数据目录 $SAFETY_BACKUP_DIR/${safetyFile.name}，请尽快导出保存",
                 needRestart = false,
                 integrityOk = false,
                 integrityReport = result.integrityReport
@@ -492,6 +592,18 @@ object BackupManager {
 
         safetyFile?.delete()
         return result
+    }
+
+    /**
+     * 清理恢复前安全备份目录：只保留最近 [MAX_SAFETY_BACKUPS] 份备份。
+     * 文件名含毫秒时间戳（固定 13 位数字），按名称倒序即时间倒序。
+     */
+    private fun pruneSafetyBackups(dir: File) {
+        dir.listFiles()
+            ?.filter { it.isFile && it.name.startsWith(SAFETY_BACKUP_PREFIX) }
+            ?.sortedByDescending { it.name }
+            ?.drop(MAX_SAFETY_BACKUPS)
+            ?.forEach { it.delete() }
     }
 
     private fun restoreInternal(
@@ -714,6 +826,62 @@ object BackupManager {
             return "无法打开数据库：${e.message ?: "未知错误"}"
         }
         return report.ifBlank { "empty result" }
+    }
+
+    /**
+     * 读取备份 ZIP 内数据库的 PRAGMA user_version（即备份时 AppDatabase 的版本号）。
+     *
+     * 实现要点：
+     * - 从 ZIP 中解出 [ZIP_ENTRY_DB] 条目到缓存临时文件，用只读 SQLite 打开后查询
+     *   PRAGMA user_version；临时文件查询后立即删除，不触碰本地现有数据库
+     * - 无法读取（非本应用备份 / 损坏 / 无 db 条目）返回 0，
+     *   兼容旧版备份与 WAL 未合并且主库无头部信息的情况——版本 0 恒 <= 当前版本，
+     *   放行后由后续 integrity_check 兜底
+     *
+     * @param zipFile 已缓冲到本地的备份 ZIP 文件
+     * @return 备份库版本号；无法读取时为 0
+     */
+    private fun readBackupUserVersion(zipFile: File): Int {
+        return try {
+            ZipInputStream(FileInputStream(zipFile)).use { zis ->
+                var entry = zis.nextEntry
+                while (entry != null) {
+                    if (entry.name == ZIP_ENTRY_DB) {
+                        val tmp = File(
+                            zipFile.parentFile,
+                            "smty_backup_ver_${System.currentTimeMillis()}.db"
+                        )
+                        return try {
+                            FileOutputStream(tmp).use { fos ->
+                                val buffer = ByteArray(8192)
+                                var len = zis.read(buffer)
+                                while (len > 0) {
+                                    fos.write(buffer, 0, len)
+                                    len = zis.read(buffer)
+                                }
+                            }
+                            android.database.sqlite.SQLiteDatabase.openDatabase(
+                                tmp.absolutePath,
+                                null,
+                                android.database.sqlite.SQLiteDatabase.OPEN_READONLY
+                            ).use { db ->
+                                db.rawQuery("PRAGMA user_version;", null).use { cursor ->
+                                    if (cursor.moveToFirst()) cursor.getInt(0) else 0
+                                }
+                            }
+                        } finally {
+                            tmp.delete()
+                        }
+                    }
+                    zis.closeEntry()
+                    entry = zis.nextEntry
+                }
+                0
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "读取备份库版本失败：${e.message}", e)
+            0
+        }
     }
 
     /**

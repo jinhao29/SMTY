@@ -1,11 +1,14 @@
 package com.shangmentiyu.sportscoach.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.TextFieldColors
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 
 /**
@@ -58,3 +61,50 @@ fun appTextFieldColors(): TextFieldColors {
 
 /** 无边框输入框统一圆角（12dp 大圆角）。 */
 val AppTextFieldShape: RoundedCornerShape = RoundedCornerShape(12.dp)
+
+/**
+ * 全局标准化纯文本输入框：浅灰大圆角胶囊 + 可选左侧图标。
+ *
+ * 外观与 [appTextFieldColors] / [AppTextFieldShape] 完全一致，
+ * 仅收敛调用点参数，交互行为等同 OutlinedTextField。
+ */
+@Composable
+fun AppTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    leadingIcon: (@Composable () -> Unit)? = null,
+    trailingIcon: (@Composable () -> Unit)? = null,
+    label: (@Composable () -> Unit)? = null,
+    placeholder: (@Composable () -> Unit)? = null,
+    supportingText: (@Composable () -> Unit)? = null,
+    suffix: (@Composable () -> Unit)? = null,
+    singleLine: Boolean = false,
+    minLines: Int = 1,
+    maxLines: Int = Int.MAX_VALUE,
+    enabled: Boolean = true,
+    textStyle: TextStyle = TextStyle.Default,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    readOnly: Boolean = false,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier,
+        enabled = enabled,
+        leadingIcon = leadingIcon,
+        trailingIcon = trailingIcon,
+        label = label,
+        placeholder = placeholder,
+        supportingText = supportingText,
+        suffix = suffix,
+        singleLine = singleLine,
+        minLines = minLines,
+        maxLines = maxLines,
+        textStyle = textStyle,
+        keyboardOptions = keyboardOptions,
+        readOnly = readOnly,
+        shape = AppTextFieldShape,
+        colors = appTextFieldColors(),
+    )
+}

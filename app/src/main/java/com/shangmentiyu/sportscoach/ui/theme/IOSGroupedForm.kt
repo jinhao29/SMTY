@@ -119,7 +119,7 @@ fun IOSColorPillSelector(
         "orange" to LightPrimary,
         "purple" to LightPrimary,
         "pink" to LightPrimaryContainer,
-        "teal" to LightOnSurfaceVariant
+        "teal" to MaterialTheme.colorScheme.onSurfaceVariant
     )
     Row(
         modifier = Modifier.fillMaxWidth(),

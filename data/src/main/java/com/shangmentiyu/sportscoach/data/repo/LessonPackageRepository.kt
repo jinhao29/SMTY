@@ -62,8 +62,27 @@ class LessonPackageRepository(
     fun getActivePackages(): Flow<List<LessonPackage>> = pkgDao.getActive()
     fun countActivePackages(): Flow<Int> = pkgDao.countActive()
     suspend fun getPkgById(id: String): LessonPackage? = pkgDao.getById(id)
-    suspend fun addPackage(pkg: LessonPackage) = pkgDao.insert(pkg)
-    suspend fun updatePackage(pkg: LessonPackage) = pkgDao.update(pkg)
+
+    /**
+     * 新增课时包：写入前做状态归一化。
+     * 若 usedLessons 已达到 totalLessons（编辑导入等边界场景），自动置 status="已用完"，
+     * 保证状态字段与余额一致，不再参与后续排课余额统计（isExhausted 过滤兜底）。
+     */
+    suspend fun addPackage(pkg: LessonPackage) = pkgDao.insert(pkg.normalizeStatus())
+
+    /**
+     * 更新课时包：写入前做状态归一化（同上）。
+     * 覆盖 adjustPackage（增减 totalLessons）等所有更新入口。
+     */
+    suspend fun updatePackage(pkg: LessonPackage) = pkgDao.update(pkg.normalizeStatus())
+
+    /** 状态归一化：活跃包 used >= total 时自动置"已用完"，杜绝"余额为 0 但状态仍活跃"的脏状态 */
+    private fun LessonPackage.normalizeStatus(): LessonPackage =
+        if (status == "活跃" && totalLessons > 0 && usedLessons >= totalLessons) {
+            copy(status = "已用完")
+        } else {
+            this
+        }
 
     /**
      * 删除课时包：事务级联清理该学员名下所有排课记录。

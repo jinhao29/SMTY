@@ -16,7 +16,6 @@ import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -29,12 +28,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
+import com.shangmentiyu.sportscoach.ui.theme.AppTextField
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appOutline
-import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 /**
  * 按学员删除排课对话框。
@@ -79,15 +77,13 @@ fun DeleteByStudentDialog(
                 style = MaterialTheme.typography.bodySmall,
                 color = appOnSurfaceVariant()
             )
-            OutlinedTextField(
+            AppTextField(
                 value = search,
                 onValueChange = { search = it },
                 label = { Text("搜索学员") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
-                shape = AppTextFieldShape,
-                colors = appTextFieldColors()
-            )
+)
             LazyColumn(
                 modifier = Modifier.heightIn(max = 300.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)

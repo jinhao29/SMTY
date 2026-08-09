@@ -33,4 +33,8 @@ interface BodyMetricHistoryDao {
     /** 学员改名：级联更新 body_metric_history 表的 studentName 字段 */
     @Query("UPDATE body_metric_history SET studentName = :newName WHERE studentName = :oldName")
     suspend fun renameStudent(oldName: String, newName: String)
+
+    /** === 双通道加固：按 studentId 精准级联改名（不受同名干扰），与 lessons/schedules/lesson_packages 对齐 === */
+    @Query("UPDATE body_metric_history SET studentName = :newName WHERE studentId = :studentId")
+    suspend fun updateStudentNameByStudentId(studentId: String, newName: String): Int
 }

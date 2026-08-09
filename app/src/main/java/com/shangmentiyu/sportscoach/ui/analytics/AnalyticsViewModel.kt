@@ -102,6 +102,9 @@ class AnalyticsViewModel(
     private fun rebuildRecords(lessons: List<Lesson>) {
         val map = mutableMapOf<String, MutableList<ScoreRecord>>()
         for (lesson in lessons) {
+            // === v50：体验课（isTrial=1）不计入成绩统计 ===
+            // 体验课为未注册学员临时课，其成绩不应混入正式学员的成绩/概览/趋势
+            if (lesson.isTrial) continue
             if (lesson.scores.isBlank() || lesson.scores == "{}") continue
             // 使用 JsonSafe 兜底：脏数据不会导致整页崩溃
             val obj = JsonSafe.parseObject(lesson.scores) ?: continue

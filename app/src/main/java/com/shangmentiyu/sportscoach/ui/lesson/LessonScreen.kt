@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.shangmentiyu.sportscoach.core.TemplateData
 import com.shangmentiyu.sportscoach.data.model.ExerciseItem
+import com.shangmentiyu.sportscoach.ui.theme.AppTextField
 import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.theme.GlassCard
 import com.shangmentiyu.sportscoach.ui.theme.PrimaryButton
@@ -36,8 +37,6 @@ import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
 import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
-import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
-import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -133,27 +132,23 @@ private fun InfoCard(lesson: com.shangmentiyu.sportscoach.data.model.Lesson, vm:
             mutableStateOf(lesson.coach.ifBlank { defaultCoach })
         }
         var location by remember(lesson.location) { mutableStateOf(lesson.location) }
-        OutlinedTextField(
+        AppTextField(
             value = duration,
             onValueChange = { duration = it },
             label = { Text("课时时长(分钟)") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             trailingIcon = { Text("分钟") },
-
-         shape = AppTextFieldShape,
-         colors = appTextFieldColors(),)
+)
         Spacer(modifier = Modifier.height(8.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
+            AppTextField(
                 value = coach,
                 onValueChange = { coach = it },
                 label = { Text("教练") },
                 modifier = Modifier.weight(1f),
                 singleLine = true,
-
-             shape = AppTextFieldShape,
-             colors = appTextFieldColors(),)
+)
             // 地点：接入 ScheduleMemoryRepository(field="checkin_location") 历史记忆下拉建议
             val locationMemories by vm.locationMemories.collectAsStateWithLifecycle()
             var locationExpanded by remember { mutableStateOf(false) }
@@ -161,7 +156,7 @@ private fun InfoCard(lesson: com.shangmentiyu.sportscoach.data.model.Lesson, vm:
                 expanded = locationExpanded,
                 onExpandedChange = { locationExpanded = !locationExpanded }
             ) {
-                OutlinedTextField(
+                AppTextField(
                     value = location,
                     onValueChange = { location = it },
                     label = { Text("地点") },
@@ -169,9 +164,7 @@ private fun InfoCard(lesson: com.shangmentiyu.sportscoach.data.model.Lesson, vm:
                         .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true),
                     singleLine = true,
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(locationExpanded) },
-
-                 shape = AppTextFieldShape,
-                 colors = appTextFieldColors(),)
+)
                 ExposedDropdownMenu(
                     expanded = locationExpanded,
                     onDismissRequest = { locationExpanded = false }
@@ -193,16 +186,14 @@ private fun InfoCard(lesson: com.shangmentiyu.sportscoach.data.model.Lesson, vm:
         var lessonTypeExpanded by remember { mutableStateOf(false) }
         val lessonTypes = listOf("训练课", "体测课", "技术课", "恢复课")
         ExposedDropdownMenuBox(expanded = lessonTypeExpanded, onExpandedChange = { lessonTypeExpanded = !lessonTypeExpanded }) {
-            OutlinedTextField(
+            AppTextField(
                 value = lesson.lessonType,
                 onValueChange = { input -> vm.updateLesson { it.copy(lessonType = input) } },
                 readOnly = false,
                 label = { Text("课时类型（可自定义）") },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = lessonTypeExpanded) },
                 modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true),
-
-             shape = AppTextFieldShape,
-             colors = appTextFieldColors(),)
+)
             ExposedDropdownMenu(expanded = lessonTypeExpanded, onDismissRequest = { lessonTypeExpanded = false }) {
                 lessonTypes.forEach { t ->
                     DropdownMenuItem(text = { Text(t) }, onClick = {
@@ -217,16 +208,14 @@ private fun InfoCard(lesson: com.shangmentiyu.sportscoach.data.model.Lesson, vm:
         var attendanceExpanded by remember { mutableStateOf(false) }
         val attendances = listOf("准时", "迟到", "请假", "旷课")
         ExposedDropdownMenuBox(expanded = attendanceExpanded, onExpandedChange = { attendanceExpanded = !attendanceExpanded }) {
-            OutlinedTextField(
+            AppTextField(
                 value = lesson.attendance,
                 onValueChange = { input -> vm.updateLesson { it.copy(attendance = input) } },
                 readOnly = false,
                 label = { Text("出勤状态（可自定义）") },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = attendanceExpanded) },
                 modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true),
-
-             shape = AppTextFieldShape,
-             colors = appTextFieldColors(),)
+)
             ExposedDropdownMenu(expanded = attendanceExpanded, onDismissRequest = { attendanceExpanded = false }) {
                 attendances.forEach { a ->
                     DropdownMenuItem(text = { Text(a) }, onClick = {
@@ -426,16 +415,14 @@ private fun EvalCard(lesson: com.shangmentiyu.sportscoach.data.model.Lesson, vm:
         Spacer(modifier = Modifier.height(8.dp))
 
         // 训练态度：可自由输入的文本框
-        OutlinedTextField(
+        AppTextField(
             value = attitude,
             onValueChange = { attitude = it },
             label = { Text("训练态度") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             supportingText = { Text("可自由输入或选择下方快捷项", style = MaterialTheme.typography.bodySmall) },
-
-         shape = AppTextFieldShape,
-         colors = appTextFieldColors(),)
+)
         Spacer(modifier = Modifier.height(4.dp))
         // 训练态度快捷选项
         val quickAttitudes = listOf("认真", "专注", "积极", "一般", "需努力", "散漫", "分心", "懒散")
@@ -474,31 +461,27 @@ private fun EvalCard(lesson: com.shangmentiyu.sportscoach.data.model.Lesson, vm:
 
         Spacer(modifier = Modifier.height(8.dp))
         // 下次课目标
-        OutlinedTextField(
+        AppTextField(
             value = nextGoal,
             onValueChange = { nextGoal = it },
             label = { Text("下次课目标") },
             modifier = Modifier.fillMaxWidth(),
             minLines = 2,
-
-         shape = AppTextFieldShape,
-         colors = appTextFieldColors(),)
+)
         LaunchedEffect(nextGoal) {
             if (nextGoal != lesson.nextGoal) vm.updateLesson { it.copy(nextGoal = nextGoal) }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
         // 教练寄语（自由编辑，给家长的寄语）
-        OutlinedTextField(
+        AppTextField(
             value = coachComment,
             onValueChange = { coachComment = it },
             label = { Text("教练寄语") },
             placeholder = { Text("自由填写给家长的寄语，分享时随报告一起发送", style = MaterialTheme.typography.bodySmall) },
             modifier = Modifier.fillMaxWidth(),
             minLines = 3,
-
-         shape = AppTextFieldShape,
-         colors = appTextFieldColors(),)
+)
         LaunchedEffect(coachComment) {
             if (coachComment != lesson.coachComment) vm.updateLesson { it.copy(coachComment = coachComment) }
         }
@@ -634,7 +617,7 @@ private fun SummaryFeedbackCard(lesson: com.shangmentiyu.sportscoach.data.model.
         Spacer(modifier = Modifier.height(8.dp))
 
         // 总结多行文本框
-        OutlinedTextField(
+        AppTextField(
             value = summary,
             onValueChange = { summary = it },
             label = { Text("本节课训练总结") },
@@ -647,9 +630,7 @@ private fun SummaryFeedbackCard(lesson: com.shangmentiyu.sportscoach.data.model.
             modifier = Modifier.fillMaxWidth(),
             minLines = 4,
             maxLines = 8,
-
-         shape = AppTextFieldShape,
-         colors = appTextFieldColors(),)
+)
         Spacer(modifier = Modifier.height(8.dp))
 
         // 快捷模板：点击追加到总结末尾
@@ -760,23 +741,19 @@ private fun CustomExerciseDialog(onDismiss: () -> Unit, onAdd: (ExerciseItem) ->
         title = "自定义动作",
         content = {
             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("动作名称 *") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                 shape = AppTextFieldShape,
-                 colors = appTextFieldColors(),)
-                OutlinedTextField(value = sets, onValueChange = { sets = it }, label = { Text("组数") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                 shape = AppTextFieldShape,
-                 colors = appTextFieldColors(),)
-                OutlinedTextField(value = reps, onValueChange = { reps = it }, label = { Text("次数/时长") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                 shape = AppTextFieldShape,
-                 colors = appTextFieldColors(),)
+                AppTextField(value = name, onValueChange = { name = it }, label = { Text("动作名称 *") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+)
+                AppTextField(value = sets, onValueChange = { sets = it }, label = { Text("组数") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+)
+                AppTextField(value = reps, onValueChange = { reps = it }, label = { Text("次数/时长") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+)
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     listOf("低", "中", "高", "极限").forEach { i ->
                         FilterChip(selected = intensity == i, onClick = { intensity = i }, label = { Text(i) })
                     }
                 }
-                OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("备注") }, modifier = Modifier.fillMaxWidth(),
-                 shape = AppTextFieldShape,
-                 colors = appTextFieldColors(),)
+                AppTextField(value = note, onValueChange = { note = it }, label = { Text("备注") }, modifier = Modifier.fillMaxWidth(),
+)
             }
         },
         confirmButton = {

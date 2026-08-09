@@ -15,14 +15,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.EmojiEvents
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -30,10 +29,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -52,8 +49,8 @@ import com.shangmentiyu.sportscoach.ui.theme.ScoreFail
 import com.shangmentiyu.sportscoach.ui.theme.ScoreGood
 import com.shangmentiyu.sportscoach.ui.theme.ScorePass
 import kotlinx.coroutines.launch
-import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
-import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
+import com.shangmentiyu.sportscoach.ui.theme.AppTextField
+import com.shangmentiyu.sportscoach.ui.theme.StyledDropdown
 
 /**
  * 录入成绩 Tab：学员选择 + 体测项目成绩输入 + 保存。
@@ -73,43 +70,38 @@ fun ScoreInputTab() {
     val standards by vm.standards.collectAsStateWithLifecycle()
     val scoreInputs by vm.scoreInputs.collectAsStateWithLifecycle()
     val scoreResults by vm.scoreResults.collectAsStateWithLifecycle()
-    var studentExpanded by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
     Box(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            // 学员选择器
-            ExposedDropdownMenuBox(
-                expanded = studentExpanded,
-                onExpandedChange = { studentExpanded = !studentExpanded },
-                modifier = Modifier.padding(16.dp)
-            ) {
-                OutlinedTextField(
-                    value = selectedStudent?.let { "${it.name} (${it.gender} ${Standards.gradeLabel(it.grade)})" } ?: "",
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("选择学员") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = studentExpanded) },
-                    modifier = Modifier.fillMaxWidth().menuAnchor(
-                        MenuAnchorType.PrimaryNotEditable,
-                        enabled = true
-                    ),
-
-                 shape = AppTextFieldShape,
-                 colors = appTextFieldColors(),)
-                ExposedDropdownMenu(expanded = studentExpanded, onDismissRequest = { studentExpanded = false }) {
-                    students.forEach { student ->
-                        DropdownMenuItem(
-                            text = { Text("${student.name} (${student.gender} ${Standards.gradeLabel(student.grade)})") },
-                            onClick = {
-                                vm.selectStudent(student)
-                                studentExpanded = false
-                            }
-                        )
-                    }
+        // === v50：学员列表为空时显示清晰空状态，避免无内容的下拉框 ===
+        if (students.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "暂无学员，请先添加",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "请在「学员管理」中添加学员后录入成绩",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                    )
                 }
             }
+        } else {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // 学员选择器（统一 StyledDropdown 视觉）
+            StyledDropdown(
+                selected = selectedStudent,
+                options = students,
+                optionLabel = { "${it.name} (${it.gender} ${Standards.gradeLabel(it.grade)})" },
+                optionIcon = { Icons.Outlined.Person },
+                onSelected = { vm.selectStudent(it) },
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
+            )
 
             if (selectedStudent == null) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -158,6 +150,7 @@ fun ScoreInputTab() {
                 }
             }
         }
+        } // else：学员列表非空
         FloatingSnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier.align(Alignment.BottomCenter)
@@ -195,15 +188,14 @@ private fun ScoreInputRow(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            OutlinedTextField(
+            AppTextField(
                 value = inputValue,
                 onValueChange = onValueChange,
                 label = { Text("输入成绩(${std.unit})") },
+                leadingIcon = { Icon(Icons.Outlined.EmojiEvents, contentDescription = null) },
                 modifier = Modifier.weight(1f),
-                singleLine = true,
-
-             shape = AppTextFieldShape,
-             colors = appTextFieldColors(),)
+                singleLine = true
+            )
             Spacer(modifier = Modifier.width(8.dp))
             if (result != null && result.ok && result.score != null) {
                 val scoreColor = when (result.grade) {

@@ -21,7 +21,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -34,14 +33,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.shangmentiyu.sportscoach.data.repo.OperationRepository
+import com.shangmentiyu.sportscoach.ui.theme.AppTextField
 import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.theme.GlassCard
 import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
 import com.shangmentiyu.sportscoach.ui.theme.ScoreFail
 import com.shangmentiyu.sportscoach.ui.theme.ScorePass
 import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
-import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
-import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 /**
  * 阶段性总结页面：选择学员 + 时间范围，展示聚合统计与进步对比。
@@ -84,15 +82,13 @@ fun StageSummaryScreen(onBack: () -> Unit) {
                     Text("暂无学员", style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.outline)
                 } else {
-                    OutlinedTextField(
+                    AppTextField(
                         value = selectedStudent,
                         onValueChange = { vm.selectStudent(it) },
                         label = { Text("学员姓名") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-
-                     shape = AppTextFieldShape,
-                     colors = appTextFieldColors(),)
+)
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("可选学员：", style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline)

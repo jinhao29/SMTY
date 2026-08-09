@@ -32,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -299,4 +300,10 @@ private fun LessonEffectCard(
             ) { Text("查看课时详情", color = MaterialTheme.colorScheme.primary) }
         }
     }
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFFF5F7FA)
+@Composable
+private fun CoachDailyReportScreenPreview() {
+    CoachDailyReportScreen(onBack = {}, onOpenLesson = {})
 }

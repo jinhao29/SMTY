@@ -1,5 +1,6 @@
 package com.shangmentiyu.sportscoach.ui.home
 
+import com.shangmentiyu.sportscoach.ui.theme.ShadowTokens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,7 +27,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.shangmentiyu.sportscoach.ui.theme.LightOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
 import com.shangmentiyu.sportscoach.ui.theme.LightSecondary
 import com.shangmentiyu.sportscoach.ui.theme.LightTertiary
@@ -47,7 +47,7 @@ import com.shangmentiyu.sportscoach.ui.theme.appSurface
  * 供主页 4 个 Tab 复用，保持视觉一致性。
  */
 
-/** iOS Inset Grouped 卡片：纯白 + 10dp 圆角 + 4.dp 柔和阴影 */
+/** iOS Inset Grouped 卡片：纯白 + 16dp 圆角 + 4.dp 柔和阴影（与 StudentListItem 统一） */
 @Composable
 internal fun IosCard(
     modifier: Modifier = Modifier,
@@ -57,14 +57,14 @@ internal fun IosCard(
         modifier = modifier
             .shadow(
                 elevation = 4.dp,
-                shape = RoundedCornerShape(10.dp),
-                // ponytail: 投影色保持 M3 默认黑（0x1A000000），明暗主题通用，无对应令牌
-                ambientColor = Color(0x1A000000),
-                spotColor = Color(0x1A000000)
+                shape = RoundedCornerShape(16.dp),
+                // ponytail: 投影色保持 M3 默认黑（0x1A000000），对应 ShadowTokens.strong
+                ambientColor = ShadowTokens.strongAmbient,
+                spotColor = ShadowTokens.strongSpot
             )
             .background(
                 color = appSurface(),
-                shape = RoundedCornerShape(10.dp)
+                shape = RoundedCornerShape(16.dp)
             )
     ) {
         content()
@@ -82,13 +82,13 @@ internal fun IosGroupedListCard(
             .fillMaxWidth()
             .shadow(
                 elevation = 4.dp,
-                shape = RoundedCornerShape(10.dp),
-                ambientColor = Color(0x1A000000),
-                spotColor = Color(0x1A000000)
+                shape = RoundedCornerShape(16.dp),
+                ambientColor = ShadowTokens.strongAmbient,
+                spotColor = ShadowTokens.strongSpot
             )
             .background(
                 color = appSurface(),
-                shape = RoundedCornerShape(10.dp)
+                shape = RoundedCornerShape(16.dp)
             )
     ) {
         content()
@@ -170,12 +170,13 @@ internal fun RemainingBadge(remaining: Int) {
 }
 
 /** 根据姓名首字符 hash 分配珊瑚橙暖色系头像背景 */
+@Composable
 internal fun avatarColorFor(name: String): Color {
     val colors = listOf(
         LightPrimary,            // 主珊瑚橙 #FF6B47
         LightSecondary,           // 浅橙 #FF9E7A
         LightTertiary,           // 暖金黄 #FFB74D
-        LightOnSurfaceVariant    // 中灰 #6B6B6B
+        MaterialTheme.colorScheme.onSurfaceVariant    // 中灰，暗色模式自动变浅
     )
     val idx = name.firstOrNull()?.code?.rem(4) ?: 0
     return colors[(idx + 4).rem(4)]
@@ -280,8 +281,8 @@ internal fun FloatingStatCard(
             .shadow(
                 elevation = 4.dp,
                 shape = RoundedCornerShape(24.dp),
-                ambientColor = Color(0x0D000000),
-                spotColor = Color(0x14000000)
+                ambientColor = ShadowTokens.cardAmbient,
+                spotColor = ShadowTokens.cardSpot
             )
             .clip(RoundedCornerShape(24.dp))
             .background(appSurface())
@@ -352,8 +353,8 @@ internal fun WeeklyProgressDots(
             .shadow(
                 elevation = 4.dp,
                 shape = RoundedCornerShape(24.dp),
-                ambientColor = Color(0x0D000000),
-                spotColor = Color(0x14000000)
+                ambientColor = ShadowTokens.cardAmbient,
+                spotColor = ShadowTokens.cardSpot
             )
             .clip(RoundedCornerShape(24.dp))
             .background(appSurface())

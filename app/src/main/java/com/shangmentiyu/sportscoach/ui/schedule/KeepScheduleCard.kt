@@ -1,5 +1,6 @@
 package com.shangmentiyu.sportscoach.ui.schedule
 
+import com.shangmentiyu.sportscoach.ui.theme.ShadowTokens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
@@ -78,7 +79,7 @@ fun KeepScheduleCard(
             .shadow(
                 elevation = 4.dp,
                 shape = RoundedCornerShape(16.dp),
-                ambientColor = Color.Black.copy(alpha = 0.04f),
+                ambientColor = ShadowTokens.softAmbient,
                 spotColor = Color.Black.copy(alpha = 0.08f)
             )
             .clip(RoundedCornerShape(16.dp))
@@ -181,19 +182,19 @@ fun KeepScheduleCard(
                             )
                         }
                     }
-                    // === v49 体验课标签：浅紫色胶囊，明显标识临时体验课 ===
+                    // === v49 体验课标签：浅珊瑚橙胶囊，明显标识临时体验课 ===
                     if (schedule.isTrial) {
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(4.dp))
-                                .background(Color(0xFFEDE7F6))
+                                .background(appPrimary().copy(alpha = 0.12f))
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                         ) {
                             Text(
                                 text = "体验课",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Medium,
-                                color = Color(0xFF7B1FA2)
+                                color = appPrimary()
                             )
                         }
                     }

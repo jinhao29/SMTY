@@ -28,7 +28,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
@@ -55,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shangmentiyu.sportscoach.data.model.Student
 import com.shangmentiyu.sportscoach.domain.HeightPredictionResult
+import com.shangmentiyu.sportscoach.ui.theme.AppTextField
 import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.theme.FloatingSnackbarHost
 import com.shangmentiyu.sportscoach.ui.theme.BrandGradientStart
@@ -68,8 +68,6 @@ import com.shangmentiyu.sportscoach.ui.theme.appOnSuccessContainer
 import com.shangmentiyu.sportscoach.ui.theme.appOnWarningContainer
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 import com.shangmentiyu.sportscoach.ui.theme.appSurface
-import com.shangmentiyu.sportscoach.ui.theme.AppTextFieldShape
-import com.shangmentiyu.sportscoach.ui.theme.appTextFieldColors
 
 // === 修正值语义色（仅用于小字修正值文本，非卡片背景色块） ===
 // 加分绿 / 扣分橙，v48 起走主题令牌（appOnSuccessContainer / appOnWarningContainer）
@@ -298,7 +296,7 @@ private fun NumberInputRow(
             style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.width(80.dp)
         )
-        OutlinedTextField(
+        AppTextField(
             value = value,
             onValueChange = onValueChange,
             modifier = Modifier.weight(1f),
@@ -313,9 +311,7 @@ private fun NumberInputRow(
                     color = appOnSurface().copy(alpha = 0.5f)
                 )
             },
-            colors = appTextFieldColors(),
-            shape = AppTextFieldShape
-        )
+)
     }
 }
 
