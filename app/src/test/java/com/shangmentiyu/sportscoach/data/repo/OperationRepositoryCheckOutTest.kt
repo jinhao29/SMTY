@@ -54,7 +54,8 @@ class OperationRepositoryCheckOutTest {
                 db.scheduleDao(), db.lessonDao(), db.lessonPackageDao(), db.studentDao(), db
             ),
             trainingCycleRepo = TrainingCycleRepository(db.trainingCycleDao()),
-            stageSummaryRepo = StageSummaryRepository()
+            stageSummaryRepo = StageSummaryRepository(),
+            signInDao = db.signInDao()
         )
     }
 

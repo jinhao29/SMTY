@@ -67,8 +67,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.shangmentiyu.sportscoach.core.JsonSafe
-import com.shangmentiyu.sportscoach.core.PhotoCrypto
+import com.shangmentiyu.sportscoach.data.internal.JsonSafe
+import com.shangmentiyu.sportscoach.app.framework.PhotoCrypto
 import com.shangmentiyu.sportscoach.data.model.ExerciseItem
 import com.shangmentiyu.sportscoach.data.model.Lesson
 import com.shangmentiyu.sportscoach.ui.theme.AppTextField

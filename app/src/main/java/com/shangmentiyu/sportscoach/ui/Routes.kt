@@ -31,14 +31,17 @@ object Routes {
     // === 工具类 ===
     const val BMI_CALCULATOR = "bmi_calculator"
 
+    // === 体育中考标准 ===
+    const val SPORT_CATEGORY = "sport_category"
+    const val SPORT_STANDARD_DETAIL = "sport_standard_detail/{sportId}"
+
     // === 话术管理（设置页二级入口） ===
     const val SCRIPT_LIST = "script_list"
     const val SCRIPT_DETAIL = "script_detail/{scriptId}"
 
     fun scriptDetail(scriptId: String?) = if (scriptId.isNullOrBlank()) "script_detail/new" else "script_detail/$scriptId"
 
-    // === 运营/排课（保留为二级页面，供主页课前准备 Tab 调用） ===
-    const val OPERATION = "operation"
+    // === 排课/签到 ===
     const val LESSON_CHECKIN = "lesson_checkin"
     const val SCHEDULE = "schedule"
 
@@ -53,4 +56,5 @@ object Routes {
     fun heightPrediction(studentName: String) = "height_prediction/$studentName"
     fun dietManage(studentName: String) = "diet_manage/$studentName"
     fun editStudent(studentName: String) = "edit_student/$studentName"
+    fun sportStandardDetail(sportId: String) = "sport_standard_detail/$sportId"
 }

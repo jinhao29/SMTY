@@ -72,7 +72,6 @@ fun HomeScreen(
     onGrowth: (String) -> Unit,
     onEditStudent: (Student) -> Unit = {},
     onLessonCheckIn: () -> Unit = {},
-    onOperation: () -> Unit = {},
     onSchedule: () -> Unit = {},
     onHeightPrediction: (String) -> Unit = {},
     onDietManage: (String) -> Unit = {}
@@ -157,7 +156,7 @@ fun HomeScreen(
                 when (index) {
                     0 -> PreClassTab(vm = vm, onLessonCheckIn = onLessonCheckIn, onSchedule = onSchedule)
                     1 -> LessonManageTab(vm = vm)
-                    2 -> PostClassTab(vm = vm, onSign = onSign, onOperation = onOperation)
+                    2 -> PostClassTab(vm = vm, onSign = onSign)
                     3 -> StudentListTab(
                         vm = vm,
                         onSign = onSign,
@@ -303,7 +302,6 @@ private fun HomeScreenPreview() {
         onGrowth = {},
         onEditStudent = {},
         onLessonCheckIn = {},
-        onOperation = {},
         onSchedule = {},
         onHeightPrediction = {},
         onDietManage = {}

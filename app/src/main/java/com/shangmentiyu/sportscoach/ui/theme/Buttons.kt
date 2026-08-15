@@ -1,11 +1,8 @@
 package com.shangmentiyu.sportscoach.ui.theme
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,12 +11,9 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -153,101 +147,6 @@ fun SecondaryButton(
             text = text,
             fontWeight = FontWeight.Medium,
             fontSize = 15.sp
-        )
-    }
-}
-
-/**
- * 危险按钮（Danger Button）— 红色填充背景 + 白字。
- *
- * 用于：删除学员、清空全部排课等不可撤销的破坏性操作。
- * 必须配合二次确认对话框使用。
- *
- * 视觉规格：
- * - 背景：MaterialTheme.colorScheme.error（红色）
- * - 文字：Color.White，SemiBold，16sp
- * - 圆角：10dp
- * - 高度：44dp
- *
- * @param text 按钮文字（如"删除"、"清空全部"）
- * @param onClick 点击回调
- * @param modifier 修饰符
- * @param icon 可选前缀图标（如 Icons.Outlined.Delete）
- */
-@Composable
-fun DangerButton(
-    text: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    icon: ImageVector? = null,
-    enabled: Boolean = true
-) {
-    Button(
-        onClick = onClick,
-        modifier = modifier.height(44.dp),
-        shape = RoundedCornerShape(10.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = MaterialTheme.colorScheme.error,
-            contentColor = Color.White,
-            disabledContainerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.38f),
-            disabledContentColor = Color.White.copy(alpha = 0.38f)
-        ),
-        elevation = ButtonDefaults.buttonElevation(
-            defaultElevation = 0.dp,
-            pressedElevation = 0.dp,
-            disabledElevation = 0.dp
-        ),
-        enabled = enabled
-    ) {
-        if (icon != null) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(Modifier.width(Spacing.sm))
-        }
-        Text(
-            text = text,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 16.sp
-        )
-    }
-}
-
-/**
- * 文字按钮（Ghost Button）— 无背景无边框。
- *
- * 用于：对话框"取消"、列表项"查看全部"、次要链接操作。
- *
- * 视觉规格：
- * - 背景：透明
- * - 文字：appPrimary()（珊瑚橙）或 appOnSurfaceVariant()（次级灰）
- * - 字重 Medium，14sp
- *
- * @param text 按钮文字
- * @param onClick 点击回调
- * @param modifier 修饰符
- * @param destructive 是否破坏性（true=红色文字，false=主色文字）
- */
-@Composable
-fun GhostButton(
-    text: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    destructive: Boolean = false
-) {
-    TextButton(
-        onClick = onClick,
-        modifier = modifier,
-        colors = ButtonDefaults.textButtonColors(
-            contentColor = if (destructive) MaterialTheme.colorScheme.error else appPrimary()
-        )
-    ) {
-        Text(
-            text = text,
-            fontWeight = FontWeight.Medium,
-            fontSize = 14.sp
         )
     }
 }

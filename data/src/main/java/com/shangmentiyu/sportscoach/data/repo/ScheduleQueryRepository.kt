@@ -2,7 +2,7 @@ package com.shangmentiyu.sportscoach.data.repo
 
 import android.util.Log
 import androidx.room.withTransaction
-import com.shangmentiyu.sportscoach.core.AutoBackupScheduler
+import com.shangmentiyu.sportscoach.data.internal.AutoBackupScheduler
 import com.shangmentiyu.sportscoach.data.db.AppDatabase
 import com.shangmentiyu.sportscoach.data.db.LessonDao
 import com.shangmentiyu.sportscoach.data.db.LessonPackageDao
@@ -245,6 +245,7 @@ class ScheduleQueryRepository(
                     }
                 }
             // 保存成功后触发自动备份
+            Log.d("ManualSchedule", "手动强制排课已保存，未进行边界校验：id=${schedule.id}, student=${schedule.studentName}")
             AutoBackupScheduler.notifyDataChange()
             true
         } catch (e: ScheduleQuotaExceededException) {
@@ -324,10 +325,14 @@ class ScheduleQueryRepository(
      * @param fromDate 起始日期 YYYY-MM-DD（含）
      * @return true=仍有余额可排课；false=余额已用完
      */
-    suspend fun canScheduleMoreLessons(studentName: String, fromDate: String): Boolean =
-        // 集中校验：与手动保存 / 长期生成统一走 ValidateScheduleUseCase，
-        // 消除原先分散在仓库内的余额计算歧义（getRemainingSummary + lessonDao.countUnconsumedFrom）
-        validate.hasRemainingCapacity(studentName, fromDate)
+    suspend fun canScheduleMoreLessons(studentName: String, fromDate: String): Boolean {
+        val breakdown = validate.quotaBreakdown(studentName, fromDate)
+        val can = breakdown.available > 0
+        Log.d("ScheduleQuota", "canScheduleMoreLessons student=$studentName fromDate=$fromDate " +
+            "总余额=${breakdown.totalRemaining} 已消耗=${breakdown.consumed} 待消耗=${breakdown.pending} " +
+            "可用=${breakdown.available} canSchedule=$can")
+        return can
+    }
 
     /**
      * === v49 三要素公式：已签退课时数（「已消耗」） ===
@@ -361,6 +366,12 @@ class ScheduleQueryRepository(
         return lessonDao.countPendingPlaceholderLessonsDual(sid, studentName, fromDate)
     }
 
+    /** 根治口径：已排但未签退（signOutTime 为空、非体验课）的待消耗课时数，额度计算主口径 */
+    override suspend fun countUncheckedOutLessons(studentName: String, today: String): Int {
+        val sid = resolveStudentId(studentName)
+        return lessonDao.countUncheckedOutLessonsDual(sid, studentName, today)
+    }
+
     /**
      * 根据长期排课 Schedule 生成一条课时记录（Lesson）。
      *
@@ -386,6 +397,12 @@ class ScheduleQueryRepository(
             date = dateStr,
             time = sched.startTime,
             studentName = sched.studentName,
+            // === v51 断链修复：必须继承模板的 studentId ===
+            // 此前长期自动生成的课时 studentId 恒为 null，只能靠 studentName 兜底关联；
+            // 一旦学员按 studentId 级联改名（renameStudentCascadeById → updateStudentNameByStudentId），
+            // 这些课时不会被改名，studentName 断链导致该学员历史课时全部丢失。
+            // 双通道查询虽可兜底旧数据，但新生成的课时必须从源头携带唯一软关联键。
+            studentId = sched.studentId,
             content = sched.content,
             duration = sched.durationMinutes,
             coach = sched.coachName,
@@ -393,6 +410,7 @@ class ScheduleQueryRepository(
             lessonType = "${sched.lessonType}(长期自动)",
             attendance = "准时",
             packageId = "",
+            status = "待签到",
             isTrial = sched.isTrial
         )
         lessonDao.insert(lesson)
@@ -432,7 +450,30 @@ class ScheduleQueryRepository(
         if (longTerm.isEmpty()) return 0
         // 剩余可排课时 = 总课时 - 已消耗 - 待消耗（三要素公式），<= 0 直接不生成
         val available = validate.availableQuota(studentName, today)
-        if (available <= 0) return 0
+        val pendingForLog = countPendingPlaceholderLessons(studentName, today)
+        Log.d("ScheduleGen", "=== generateLongTermLessonsForStudent 入口 student=$studentName " +
+            "weekStart=$weekStart today=$today | 可用额度=$available 待消耗占位=$pendingForLog 长期模板数=${longTerm.size} ===")
+        if (available <= 0) {
+            Log.w("ScheduleGen", "generateLongTermLessonsForStudent 退出：可用额度<=0，不生成 student=$studentName")
+            return 0
+        }
+        // === v50 获取课时包绝对边界 ===
+        // 下界：学员首次购买日期（历史事实，含已过期/已耗尽包，无则 null 不拦截）
+        // 回退：earliestPurchaseDateOf 返回 null 时，从活跃课时包中取最早 purchaseDate 兜底
+        var firstPurchase = earliestPurchaseDateOf(studentName)
+        if (firstPurchase == null) {
+            firstPurchase = getActivePackagesByStudent(studentName)
+                .map { it.purchaseDate }
+                .filter { it.isNotBlank() }
+                .minOrNull()
+        }
+        // 上界：所有活跃课时包中最晚的 expireDate；
+        // 任一活跃包无过期日期（永不过期）→ 无限大（null，不拦截）
+        val latestExpire = getActivePackagesByStudent(studentName)
+            .map { it.expireDate }
+            .let { dates -> if (dates.any { it.isBlank() }) null else dates.maxOrNull() }
+        // === v50 历史占位排除：已有待消耗占位（未签退）先从额度中扣除 ===
+        val pending = countPendingPlaceholderLessons(studentName, today)
         // 该学员已有课时记录的日期集合（当天已排则跳过）
         val bookedDates = lessonDao.getByStudentDualOnce(sid, studentName)
             .map { it.date }
@@ -441,15 +482,23 @@ class ScheduleQueryRepository(
             studentSchedules = longTerm,
             weekStart = weekStart,
             today = today,
-            availableQuota = available,
+            // 传入「总课时-已消耗」（未扣待消耗），由规划器先扣 pendingSlots，
+            // 确保 生成总量 + 已有待消耗 <= 总剩余额度
+            availableQuota = available + pending,
+            pendingSlots = pending,
             alreadyBookedDates = bookedDates,
-            windowDays = windowDays
+            firstPurchaseDate = firstPurchase,
+            expireDate = latestExpire,
+            windowDays = windowDays,
+            studentName = studentName
         )
         var generated = 0
         for (plan in plans) {
             generateLongTermLesson(plan.schedule, plan.date)
             generated++
         }
+        Log.d("ScheduleGen", "=== generateLongTermLessonsForStudent 出口 student=$studentName " +
+            "本次生成数=$generated 入口可用额度=$available 待消耗占位=$pending ===")
         return generated
     }
 
@@ -490,7 +539,16 @@ class ScheduleQueryRepository(
             for (student in activeStudents) {
                 val name = student.name
                 val sid = student.studentId
-                val earliestPurchase = earliestPurchaseDateOf(name)
+                // === v52 兜底：earliestPurchaseDateOf 返回 null 时，主动查询 lesson_packages 表取最早 purchaseDate ===
+                // earliestPurchaseDateOf 内部已有双通道查询+姓名回退，但仍可能因异常返回 null；
+                // 此处再从活跃课时包取最早 purchaseDate 作为最终兜底，确保通道1不会因 null 跳过清理。
+                var earliestPurchase = earliestPurchaseDateOf(name)
+                if (earliestPurchase == null) {
+                    earliestPurchase = getActivePackagesByStudent(name)
+                        .map { it.purchaseDate }
+                        .filter { it.isNotBlank() }
+                        .minOrNull()
+                }
                 var touched = false
 
                 // 通道1：删除所有 startDate 早于首次购买日期的无效排课
@@ -515,7 +573,7 @@ class ScheduleQueryRepository(
                 }
 
                 // 占位课时超额清理：仅"长期自动 + 未签退 + date >= today"，优先删除日期靠后的。
-                // 占位可占用额度上限 = 总课时 - 已消耗（已签退），不按当天生效额度过滤。
+                // 占位可占用额度上限 = 剩余课时（totalQuota 已扣除消耗），不按当天生效额度过滤。
                 // 体验课占位（isTrial=true）不占用课时包额度，一律排除
                 val placeholders = getLessonsByStudentOnce(name)
                     .filter {
@@ -526,8 +584,9 @@ class ScheduleQueryRepository(
                     }
                     .sortedBy { it.date }
                 if (placeholders.isNotEmpty()) {
-                    val consumed = countCheckedOutLessons(name)
-                    val quotaForPlaceholders = (totalQuota - consumed).coerceAtLeast(0)
+                    // totalQuota 为剩余课时（已扣除 usedLessons），占位总数不得超过剩余课时，
+                    // 无需再减「已签退」，否则会重复扣减导致误删占位。
+                    val quotaForPlaceholders = totalQuota.coerceAtLeast(0)
                     val excess = placeholders.size - quotaForPlaceholders
                     if (excess > 0) {
                         placeholders.takeLast(excess).forEach {
@@ -590,7 +649,13 @@ class ScheduleQueryRepository(
         return try {
             // v46：双通道查询（studentId 优先、studentName 回退）
             val sid = resolveStudentId(studentName)
-            pkgDao.getByStudentDual(sid, studentName).first()
+            var packages = pkgDao.getByStudentDual(sid, studentName).first()
+            // 回退：双通道查询在 studentId 为 null 但课时包已回填 studentId 的场景下可能漏查，
+            // 降级为纯 studentName 查询兜底，确保有课时包的学员一定能拿到最早购买日期
+            if (packages.isEmpty()) {
+                packages = pkgDao.getByStudent(studentName).first()
+            }
+            packages
                 .map { it.purchaseDate }
                 .filter { it.isNotBlank() }
                 .minOrNull()
@@ -610,7 +675,12 @@ class ScheduleQueryRepository(
     override suspend fun getActivePackagesByStudent(studentName: String): List<LessonPackage> {
         // v46：双通道查询（studentId 优先、studentName 回退），杜绝改名断链
         val sid = resolveStudentId(studentName)
-        return pkgDao.getByStudentDual(sid, studentName).first()
+        var packages = pkgDao.getByStudentDual(sid, studentName).first()
+        // 回退：双通道查询漏查时降级为纯姓名查询兜底
+        if (packages.isEmpty()) {
+            packages = pkgDao.getByStudent(studentName).first()
+        }
+        return packages
             .filter { it.status == "活跃" && !it.isExhausted && !it.isExpired }
             .sortedBy { it.purchaseDate }
     }

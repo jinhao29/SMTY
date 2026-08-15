@@ -50,7 +50,11 @@ fun <T> StyledDropdown(
     optionIcon: (T) -> ImageVector,
     onSelected: (T) -> Unit,
     modifier: Modifier = Modifier,
-    placeholder: String = "请选择"
+    placeholder: String = "请选择",
+    // === v52 闪退加固：数据源为空时自动禁用 ===
+    // options 为空（如 Room Flow 首帧未到达 / 学员列表为空 / 无历史记忆）时，
+    // 点击不再展开空菜单，显示 placeholder 占位文字，绝不允许访问 items[0] 等越界行为。
+    enabled: Boolean = options.isNotEmpty()
 ) {
     var expanded by remember { mutableStateOf(false) }
 
@@ -70,7 +74,7 @@ fun <T> StyledDropdown(
                 )
                 .clip(RoundedCornerShape(16.dp))
                 .background(Color.White)
-                .clickable { expanded = true }
+                .clickable(enabled = enabled) { expanded = true }
                 .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {

@@ -1,10 +1,11 @@
-package com.shangmentiyu.sportscoach.core
+package com.shangmentiyu.sportscoach.app.framework
 
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.security.crypto.EncryptedFile
 import androidx.security.crypto.MasterKey
+import com.shangmentiyu.sportscoach.data.internal.BackupManager
 import com.shangmentiyu.sportscoach.data.repo.SettingsRepository
 import java.io.ByteArrayOutputStream
 import java.io.File

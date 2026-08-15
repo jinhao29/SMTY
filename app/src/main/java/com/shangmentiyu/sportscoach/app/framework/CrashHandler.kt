@@ -1,4 +1,4 @@
-package com.shangmentiyu.sportscoach.core
+package com.shangmentiyu.sportscoach.app.framework
 
 import android.content.Context
 import android.os.Build

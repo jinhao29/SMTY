@@ -1,7 +1,7 @@
 package com.shangmentiyu.sportscoach.data.repo
 
-import com.shangmentiyu.sportscoach.core.AutoBackupScheduler
-import com.shangmentiyu.sportscoach.core.JsonSafe
+import com.shangmentiyu.sportscoach.data.internal.AutoBackupScheduler
+import com.shangmentiyu.sportscoach.data.internal.JsonSafe
 import com.shangmentiyu.sportscoach.data.db.LessonDao
 import com.shangmentiyu.sportscoach.data.db.ScheduleDao
 import com.shangmentiyu.sportscoach.data.model.ExerciseItem
@@ -65,6 +65,10 @@ class ScheduleRepository(
 
     suspend fun getById(id: String): Schedule? = dao.getById(id)
 
+    /** 小班课：查询同 groupScheduleId 的所有排课记录 */
+    suspend fun getByGroupScheduleId(groupScheduleId: String): List<Schedule> =
+        dao.getByGroupScheduleId(groupScheduleId)
+
     /**
      * 教练时间冲突检测（v23 引入）。
      *
@@ -87,7 +91,8 @@ class ScheduleRepository(
         coachName: String,
         dayOfWeek: Int,
         startTime: String,
-        excludeScheduleId: String? = null
+        excludeScheduleId: String? = null,
+        groupScheduleId: String? = null
     ) {
         val normalizedCoach = coachName.ifBlank { "默认教练" }
         val normalizedStart = startTime.trim()
@@ -99,7 +104,9 @@ class ScheduleRepository(
                 s.id != excludeScheduleId &&
                 s.coachName.ifBlank { "默认教练" } == normalizedCoach &&
                 s.dayOfWeek == dayOfWeek &&
-                s.startTime.trim() == normalizedStart
+                s.startTime.trim() == normalizedStart &&
+                // 小班课：同 groupScheduleId 的排课不视为冲突（允许同教练同时段多学员）
+                !(groupScheduleId != null && s.groupScheduleId == groupScheduleId)
         } ?: return
         throw CoachConflictException(
             coachName = normalizedCoach,
@@ -114,6 +121,7 @@ class ScheduleRepository(
      *
      * 保存前调用 [checkCoachConflict] 检测教练时间冲突，冲突时抛出 [CoachConflictException]
      * 并阻止本次写入（dao.insert 不会执行），由 ViewModel 捕获并弹窗提示。
+     * [skipConflictCheck] 为 true 时跳过冲突检测（按课时包排课允许同一时段多学员）。
      *
      * @param isLongTerm 是否长期排课，勾选后每周自动生成对应时间的课表
      * @return 新建的排课 ID
@@ -136,10 +144,13 @@ class ScheduleRepository(
         note: String = "",
         equipment: List<String> = emptyList(),
         endDate: String = "",
-        startDate: String = ""
+        startDate: String = "",
+        skipConflictCheck: Boolean = false
     ): String {
-        // 冲突检测：新建场景无需排除自身
-        checkCoachConflict(coachName, dayOfWeek, startTime, excludeScheduleId = null)
+        // 冲突检测：新建场景无需排除自身；按课时包排课允许同一时段多学员，跳过检测
+        if (!skipConflictCheck) {
+            checkCoachConflict(coachName, dayOfWeek, startTime, excludeScheduleId = null)
+        }
 
         val schedule = Schedule(
             studentName = studentName,
@@ -367,6 +378,20 @@ class ScheduleRepository(
     }
 
     /**
+     * 小班课：直接插入排课模板（供课表周历显示）。
+     *
+     * 不做教练冲突 / 额度校验——额度已被 [OperationRepository.batchAutoScheduleGroup]
+     * 生成的占位课时占用，此处仅插入模板供日历展示，避免同教练同时段多学员被误判冲突。
+     *
+     * @param schedules 待插入的排课模板（已携带相同 groupScheduleId）
+     */
+    suspend fun insertGroupScheduleTemplates(schedules: List<Schedule>) {
+        if (schedules.isEmpty()) return
+        schedules.forEach { dao.insert(it) }
+        AutoBackupScheduler.notifyDataChange()
+    }
+
+    /**
      * 解析上课器材 JSON 为字符串列表。
      * 使用 [JsonSafe] 兜底：脏数据返回空列表，不崩溃。
      */
@@ -466,31 +491,20 @@ class ScheduleRepository(
         }
 
     /**
-     * === Bug 修复2：一键清理"历史废弃占位排课" ===
+     * === v32：清理无效课表（仅设置页手动触发） ===
      *
-     * 业务背景：
-     * - 长期排课（schedule.isLongTerm=true）会自动按 dayOfWeek 生成 Lesson 记录
-     * - 历史 Bug 导致即使不勾选长期排课、或为已过去的日期也生成了大量 Lesson 占位记录
-     * - 这些记录污染了历史周历视图，导致页面"乱七八糟"
+     * 修正后的清理规则（在 [LessonDao.deleteExpiredUnsignedLessons] 中执行）：
+     * 1. date < 今天 —— 仅清理已过期课表，不删除未来课表
+     * 2. status = '待签到' —— 仅清理「排课后从未签到」的占位课时
+     * 3. signOutTime 为空 —— 兜底排除已签退记录
      *
-     * 清理逻辑（在 [LessonDao.deleteUnfinishedPastLongTermLessons] 中执行）：
-     * 1. status != '已签退'（保留已签退的历史真实记录，作为学员上课凭证）
-     * 2. date < 今天（只清理过去日期，不影响今天及未来）
-     * 3. lessonType LIKE '%(长期自动)%'（仅清理长期排课自动生成的占位记录）
+     * 已签到 / 已签退的真实课时记录是业务凭证，绝不在本方法中清理。
      *
-     * 已签退的真实课时记录（学员已实际消课）不会被清理，仍保留在历史周历中，
-     * 由 UI 层通过置灰 + "已过去"角标区分展示。
-     *
-     * 物理删除 vs 逻辑删除：
-     * - 物理删除（DELETE）：因为这些 Lesson 是无价值的占位记录，从未实际签到，
-     *   不需要保留审计痕迹，物理删除可释放存储空间并避免再次污染视图。
-     * - 已签退的记录属于业务凭证，绝不在本方法中清理。
-     *
-     * @return 被物理删除的记录数（供 UI 通过 toast 反馈清理结果，如"已清理 23 条过去无效排课"）
+     * @return 被物理删除的记录数（供 UI 弹窗反馈清理数量）
      */
-    suspend fun clearUnfinishedPastLongTermLessons(): Int {
+    suspend fun clearExpiredUnsignedLessons(): Int {
         val today = todayDateStr()
-        val deleted = lessonDao.deleteUnfinishedPastLongTermLessons(today)
+        val deleted = lessonDao.deleteExpiredUnsignedLessons(today)
         // v30：清理属于核心数据变更，触发自动备份防抖
         if (deleted > 0) {
             AutoBackupScheduler.notifyDataChange()

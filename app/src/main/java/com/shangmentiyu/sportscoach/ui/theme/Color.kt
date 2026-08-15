@@ -35,7 +35,6 @@ import androidx.compose.ui.graphics.Color
 
 // === 1. 亮色主题（Light）===
 val LightBackground = Color(0xFFFAFAFA)              // 暖白主背景
-val LightGroupedBackground = Color(0xFFF2F2F5)       // 暖灰分组背景
 val LightSurface = Color(0xFFFFFFFF)                 // 纯白卡片表面
 val LightSurfaceVariant = Color(0xFFF2F2F5)           // 次级表面（输入框底色）
 
@@ -61,7 +60,6 @@ val BrandGradientEnd = Color(0xFFFF9E7A)
 
 // === 2. 暗色主题（Night，跟随系统）===
 val NightBackground = Color(0xFF000000)
-val NightGroupedBackground = Color(0xFF1C1C1E)
 val NightSurface = Color(0xFF2C2C2E)
 val NightSurfaceVariant = Color(0xFF3A3A3C)
 val NightPrimary = Color(0xFFFF8A65)                // 暗色珊瑚橙（更亮保证对比度）
@@ -77,7 +75,6 @@ val NightOnSurfaceVariant = Color(0xFF9E9E9E)
 val NightOutline = Color(0xFF38383A)
 val NightDivider = Color(0x33FFFFFF)                 // White 20%
 val NightGlassSurface = Color(0xFF1C1C1E)
-val NightGlassSurfaceStrong = Color(0xFF2C2C2E)
 
 // === 2. 语义色令牌（v48 补充：信息横幅/状态提示，M3 无对应字段）===
 val LightSuccessContainer = Color(0xFFE8F5E9)        // 成功/健康建议容器（浅绿）
@@ -197,9 +194,6 @@ fun appOnSecondary(): Color = MaterialTheme.colorScheme.onSecondary
 fun appTertiary(): Color = MaterialTheme.colorScheme.tertiary
 
 @Composable
-fun appOnBackground(): Color = MaterialTheme.colorScheme.onBackground
-
-@Composable
 fun appOnSurface(): Color = MaterialTheme.colorScheme.onSurface
 
 /**
@@ -221,12 +215,6 @@ fun appDividerColor(): Color = MaterialTheme.colorScheme.outlineVariant
 
 @Composable
 fun appOutline(): Color = MaterialTheme.colorScheme.outline
-
-@Composable
-fun appGlassSurface(): Color = MaterialTheme.colorScheme.surface
-
-@Composable
-fun appGlassSurfaceStrong(): Color = MaterialTheme.colorScheme.surface
 
 // === 7. 语义色访问器（v48：信息横幅/状态提示，随主题切换）===
 // M3 1.3.1 无 success/warning 字段，按当前生效色板（三态开关已收敛到

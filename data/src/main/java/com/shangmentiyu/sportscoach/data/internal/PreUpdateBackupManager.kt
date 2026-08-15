@@ -1,4 +1,4 @@
-package com.shangmentiyu.sportscoach.core
+package com.shangmentiyu.sportscoach.data.internal
 
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase

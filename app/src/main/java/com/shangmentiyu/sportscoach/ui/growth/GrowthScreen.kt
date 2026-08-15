@@ -55,7 +55,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.shangmentiyu.sportscoach.core.AbilityAnalyzer
+import com.shangmentiyu.sportscoach.data.internal.AbilityAnalyzer
 import com.shangmentiyu.sportscoach.core.BmiProcessor
 import com.shangmentiyu.sportscoach.core.Standards
 import com.shangmentiyu.sportscoach.data.model.Lesson

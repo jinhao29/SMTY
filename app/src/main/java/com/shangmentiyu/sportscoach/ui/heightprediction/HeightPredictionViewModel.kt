@@ -52,7 +52,7 @@ class HeightPredictionViewModel(
     private val _toast = MutableStateFlow<String?>(null)
     val toast: StateFlow<String?> = _toast.asStateFlow()
     private val appExceptionHandler =
-        com.shangmentiyu.sportscoach.core.CoroutineExt.createAppExceptionHandler(_toast, "HeightPredictionViewModel")
+        com.shangmentiyu.sportscoach.app.framework.CoroutineExt.createAppExceptionHandler(_toast, "HeightPredictionViewModel")
 
     /** 当前操作的学员（保存时使用） */
     private var currentStudent: Student? = null

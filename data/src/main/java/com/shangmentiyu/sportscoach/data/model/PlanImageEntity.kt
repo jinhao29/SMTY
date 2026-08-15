@@ -1,6 +1,5 @@
 package com.shangmentiyu.sportscoach.data.model
 
-import androidx.compose.runtime.Stable
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -24,7 +23,6 @@ import androidx.room.PrimaryKey
  * === v25 新增：跨端训练计划截图同步 ===
  * === v48：studentId 双通道 ===
  */
-@Stable
 @Entity(
     tableName = "student_plan_images",
     indices = [

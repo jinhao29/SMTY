@@ -1,6 +1,6 @@
 package com.shangmentiyu.sportscoach.data.repo
 
-import com.shangmentiyu.sportscoach.core.ReportGenerator
+import com.shangmentiyu.sportscoach.data.internal.ReportGenerator
 import com.shangmentiyu.sportscoach.data.db.ParentReportDao
 import com.shangmentiyu.sportscoach.data.model.Lesson
 import com.shangmentiyu.sportscoach.data.model.ParentReport

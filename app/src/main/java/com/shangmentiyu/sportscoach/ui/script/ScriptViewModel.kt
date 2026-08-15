@@ -24,7 +24,7 @@ class ScriptViewModel(
     val toast: StateFlow<String?> = _toast.asStateFlow()
 
     private val appExceptionHandler =
-        com.shangmentiyu.sportscoach.core.CoroutineExt.createAppExceptionHandler(_toast, "ScriptViewModel")
+        com.shangmentiyu.sportscoach.app.framework.CoroutineExt.createAppExceptionHandler(_toast, "ScriptViewModel")
 
     /** 所有话术列表（按更新时间倒序） */
     val scripts: StateFlow<List<ScriptRepository.ScriptItem>> = repo.scripts

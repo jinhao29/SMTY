@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -19,7 +18,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -99,21 +97,6 @@ fun GlassSectionTitle(text: String, modifier: Modifier = Modifier) {
 }
 
 /**
- * 区块副标题：组标题下方的一行说明文字。
- */
-@Composable
-fun GlassSectionSubtitle(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp)
-    )
-}
-
-/**
  * 活力风格 TopAppBar 配色：暖白背景 + 深色文字 + 珊瑚橙返回按钮。
  *
  * 11 个页面通过此函数自动获得统一的活力顶栏风格 + Dark Mode。
@@ -131,125 +114,5 @@ fun glassTopAppBarColors(): TopAppBarColors {
         titleContentColor = MaterialTheme.colorScheme.onBackground,
         navigationIconContentColor = MaterialTheme.colorScheme.primary,
         actionIconContentColor = MaterialTheme.colorScheme.primary
-    )
-}
-
-/**
- * 活力主按钮渐变色对：珊瑚橙渐变（BrandGradientStart→End）。
- * 用于 Button 的 containerColor（通过 Brush.linearGradient 在 Box 中模拟）。
- */
-val VitalButtonGradient = listOf(BrandGradientStart, BrandGradientEnd)
-
-/**
- * 活力大标题：可选全宽珊瑚橙渐变背景头部，或仅珊瑚橙文字。
- *
- * 用于无 TopAppBar 的列表/设置页顶部，营造活力感。
- *
- * @param withGradientBg 是否使用全宽珊瑚橙渐变背景（默认 false，仅文字着色）
- *                       false 时标题用珊瑚橙；true 时背景珊瑚橙渐变 + 白色文字
- */
-@Composable
-fun VitalLargeTitle(
-    title: String,
-    subtitle: String,
-    modifier: Modifier = Modifier,
-    withGradientBg: Boolean = false
-) {
-    if (withGradientBg) {
-        // 全宽渐变背景 + 白色文字（渐变背景保留亮色，文字保持白色对比）
-        Column(
-            modifier = modifier
-                .fillMaxWidth()
-                .background(
-                    brush = Brush.linearGradient(
-                        colors = listOf(BrandGradientStart, BrandGradientEnd)
-                    ),
-                    shape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp)
-                )
-                .padding(horizontal = Spacing.screenH, vertical = Spacing.xl)
-        ) {
-            Text(
-                title,
-                style = MaterialTheme.typography.displayLarge,
-                color = Color.White
-            )
-            Spacer(modifier = Modifier.height(Spacing.xs))
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.85f)
-            )
-        }
-    } else {
-        // 仅文字着色（用于有滚动动画的页面，标题会随滚动淡出）
-        Column(modifier = modifier) {
-            Text(
-                title,
-                style = MaterialTheme.typography.displayLarge,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Spacer(modifier = Modifier.height(Spacing.xs))
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-            )
-        }
-    }
-}
-
-/**
- * 活力列表卡片：白底 + 10pt 圆角 + 顶部 4dp 渐变装饰条。
- *
- * 用于替代各页面本地 IosGroupedListCard，统一注入珊瑚橙装饰条 + Dark Mode。
- *
- * @param accentGradient 是否显示顶部 4dp 渐变装饰条（默认 true）
- */
-@Composable
-fun VitalListCard(
-    modifier: Modifier = Modifier,
-    accentGradient: Boolean = true,
-    content: @Composable () -> Unit
-) {
-    val surfaceColor = MaterialTheme.colorScheme.surface
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(surfaceColor, RoundedCornerShape(10.dp))
-    ) {
-        if (accentGradient) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(4.dp)
-                    .background(
-                        brush = Brush.linearGradient(
-                            colors = listOf(BrandGradientStart, BrandGradientEnd)
-                        )
-                    )
-            )
-        }
-        content()
-    }
-}
-
-/**
- * 活力 Section Header：珊瑚橙小节标题（大写）。
- *
- * 替代各页面本地 IosSectionHeader，统一珊瑚橙 + Dark Mode。
- */
-@Composable
-fun VitalSectionHeader(
-    text: String,
-    modifier: Modifier = Modifier
-) {
-    Text(
-        text = text.uppercase(),
-        style = MaterialTheme.typography.labelMedium,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp, vertical = Spacing.xs)
     )
 }

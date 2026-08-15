@@ -2,7 +2,7 @@ package com.shangmentiyu.sportscoach.ui.summary
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.shangmentiyu.sportscoach.core.JsonSafe
+import com.shangmentiyu.sportscoach.data.internal.JsonSafe
 import com.shangmentiyu.sportscoach.core.Standards
 import com.shangmentiyu.sportscoach.data.model.ExerciseItem
 import com.shangmentiyu.sportscoach.data.model.Lesson
@@ -30,7 +30,7 @@ class SummaryViewModel(
     private val _toast = MutableStateFlow<String?>(null)
     val toast: StateFlow<String?> = _toast.asStateFlow()
     private val appExceptionHandler =
-        com.shangmentiyu.sportscoach.core.CoroutineExt.createAppExceptionHandler(_toast, "SummaryViewModel")
+        com.shangmentiyu.sportscoach.app.framework.CoroutineExt.createAppExceptionHandler(_toast, "SummaryViewModel")
 
     private val _lesson = MutableStateFlow<Lesson?>(null)
     val lesson: StateFlow<Lesson?> = _lesson.asStateFlow()

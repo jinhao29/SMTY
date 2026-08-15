@@ -30,7 +30,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.shangmentiyu.sportscoach.core.AbilityAnalyzer
+import com.shangmentiyu.sportscoach.data.internal.AbilityAnalyzer
 import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
 import com.shangmentiyu.sportscoach.ui.theme.BrandGradientEnd
 import com.shangmentiyu.sportscoach.ui.theme.BrandGradientStart

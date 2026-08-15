@@ -6,7 +6,7 @@ import android.net.Uri
 import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.shangmentiyu.sportscoach.core.AbilityAnalyzer
+import com.shangmentiyu.sportscoach.data.internal.AbilityAnalyzer
 import com.shangmentiyu.sportscoach.data.model.BodyMetricHistory
 import com.shangmentiyu.sportscoach.data.model.Lesson
 import com.shangmentiyu.sportscoach.data.model.Student
@@ -45,7 +45,7 @@ class GrowthViewModel(
     private val _toast = MutableStateFlow<String?>(null)
     val toast: StateFlow<String?> = _toast.asStateFlow()
     private val appExceptionHandler =
-        com.shangmentiyu.sportscoach.core.CoroutineExt.createAppExceptionHandler(_toast, "GrowthViewModel")
+        com.shangmentiyu.sportscoach.app.framework.CoroutineExt.createAppExceptionHandler(_toast, "GrowthViewModel")
 
     private val _student = MutableStateFlow<Student?>(null)
     val student: StateFlow<Student?> = _student.asStateFlow()

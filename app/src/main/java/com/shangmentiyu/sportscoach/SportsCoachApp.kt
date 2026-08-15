@@ -5,12 +5,14 @@ import android.content.Intent
 import android.os.Build
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.lifecycleScope
-import com.shangmentiyu.sportscoach.core.AutoBackupScheduler
-import com.shangmentiyu.sportscoach.core.CrashHandler
-import com.shangmentiyu.sportscoach.core.PreUpdateBackupManager
-import com.shangmentiyu.sportscoach.core.ScheduleReminderManager
-import com.shangmentiyu.sportscoach.core.UdpDesktopDiscoveryService
+import com.shangmentiyu.sportscoach.data.internal.AutoBackupScheduler
+import com.shangmentiyu.sportscoach.app.framework.CrashHandler
+import com.shangmentiyu.sportscoach.data.internal.DataRecoveryHelper
+import com.shangmentiyu.sportscoach.data.internal.PreUpdateBackupManager
+import com.shangmentiyu.sportscoach.app.framework.ScheduleReminderManager
+import com.shangmentiyu.sportscoach.app.framework.UdpDesktopDiscoveryService
 import com.shangmentiyu.sportscoach.data.db.AppDatabase
+import com.shangmentiyu.sportscoach.data.repo.OperationRepository
 import com.shangmentiyu.sportscoach.data.repo.StudentRepository
 import com.shangmentiyu.sportscoach.di.appModule
 import com.shangmentiyu.sportscoach.update.UpdateManager
@@ -18,6 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
 import org.koin.core.context.startKoin
+import org.koin.core.context.GlobalContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -54,6 +57,18 @@ class SportsCoachApp : Application() {
         // - 失败仅记录日志，不抛异常，不阻塞 App 启动
         // - 保留最近 3 份，超出自动清理最旧文件夹
         runCatching { PreUpdateBackupManager.backupIfDbExists(this) }
+
+        // === 急救备份数据验证：独立于 Room，用原生 SQLite 读取急救备份并验证数据完整性 ===
+        // 若存在急救备份（EmergencyBackup），提取到 RecoveryTemp 临时目录，
+        // 用原生 SQLite 只读打开并统计学员数量，确保数据完好可恢复。
+        // 绝不修改原始数据库文件，失败仅记录日志不阻塞启动。
+        runCatching {
+            val count = DataRecoveryHelper.restoreFromEmergencyBackup(this)
+            if (count >= 0) {
+                android.util.Log.i("SportsCoachApp",
+                    "急救备份数据验证完成，学员数量：$count 人")
+            }
+        }
 
         // === v46 架构层四：Koin 依赖注入容器初始化 ===
         // 在业务初始化之前启动；失败仅记录日志不阻塞启动（koinViewModel 调用方会有兜底）
@@ -124,6 +139,19 @@ class SportsCoachApp : Application() {
                     val repo = StudentRepository(db.studentDao(), db, db.studentFtsDao())
                     repo.backfillStudentIds()
                 }
+                // === v52 冷启动自动修正历史排课 + 重排（已禁用） ===
+                // 用户反馈：每次启动自动修复排课导致课表被错误修改。
+                // 已取消冷启动自动执行 fixHistoricalScheduleErrors，如需修正请手动触发。
+                // runCatching {
+                //     val opRepo = GlobalContext.get().get<OperationRepository>()
+                //     val result = opRepo.fixHistoricalScheduleErrors()
+                //     val totalCleaned = result.deletedSchedules + result.deletedPlaceholders
+                //     android.util.Log.d("ScheduleFix",
+                //         "历史排课修正完成，共清理 $totalCleaned 条错误排课")
+                // }.onFailure { e ->
+                //     android.util.Log.e("ScheduleFix",
+                //         "历史排课修正失败：${e.message}", e)
+                // }
             }
             // 首次启动延迟 3 秒再检查更新，让首屏完全渲染完
             delay(3000)

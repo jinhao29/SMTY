@@ -1,18 +1,20 @@
 package com.shangmentiyu.sportscoach.data.repo
 
 import androidx.room.withTransaction
-import com.shangmentiyu.sportscoach.core.AutoBackupScheduler
+import com.shangmentiyu.sportscoach.data.internal.AutoBackupScheduler
 import com.shangmentiyu.sportscoach.data.db.AppDatabase
 import com.shangmentiyu.sportscoach.data.db.ArchivedLessonDao
 import com.shangmentiyu.sportscoach.data.db.CoachDao
 import com.shangmentiyu.sportscoach.data.db.LessonDao
 import com.shangmentiyu.sportscoach.data.db.LessonPackageDao
+import com.shangmentiyu.sportscoach.data.db.SignInDao
 import com.shangmentiyu.sportscoach.data.db.StudentDao
 import com.shangmentiyu.sportscoach.data.model.ArchivedLesson
 import com.shangmentiyu.sportscoach.data.model.Coach
 import com.shangmentiyu.sportscoach.data.model.Lesson
 import com.shangmentiyu.sportscoach.data.model.LessonPackage
 import com.shangmentiyu.sportscoach.data.model.Schedule
+import com.shangmentiyu.sportscoach.data.model.SignInRecord
 import com.shangmentiyu.sportscoach.data.model.TrainingCycle
 import com.shangmentiyu.sportscoach.domain.scheduling.EffectiveRemainingCalculator
 import com.shangmentiyu.sportscoach.domain.scheduling.LongTermSchedulePlanner
@@ -57,7 +59,9 @@ class OperationRepository(
     private val scheduleRepo: ScheduleRepository,
     private val scheduleQueryRepo: ScheduleQueryRepository,
     private val trainingCycleRepo: TrainingCycleRepository,
-    private val stageSummaryRepo: StageSummaryRepository
+    private val stageSummaryRepo: StageSummaryRepository,
+    /** v32：签到记录 DAO（排课与签到分离 + 防重） */
+    private val signInDao: SignInDao
 ) : ScheduleValidationSource {
 
     /**
@@ -153,6 +157,114 @@ class OperationRepository(
         AutoBackupScheduler.notifyDataChange()
     }
 
+    /** v32：清理无效课表（委托 ScheduleRepository，仅设置页手动触发），返回清理数量 */
+    suspend fun clearExpiredUnsignedLessons(): Int = scheduleRepo.clearExpiredUnsignedLessons()
+
+    /**
+     * === v32：签到结果 ===
+     */
+    data class SignInResult(
+        val success: Boolean,
+        val lessonId: String = "",
+        val alreadySigned: Boolean = false,
+        val message: String = ""
+    )
+
+    /**
+     * === v32：教练手动签到（排课与签到分离） ===
+     *
+     * 签到不再由排课自动触发，而是独立操作：
+     * 1. 查该学员今日首条「未签退」课时（排课占位或已签到），存在则翻转 status="已签到"；
+     *    不存在则新建一条 Lesson(status="已签到", packageId="")。
+     * 2. 写入 sign_in_records(type="签到")，记录时间/学员/课时/操作人。
+     *
+     * 防重（双防线）：
+     * - 应用层：占位课时已是「已签到」状态则直接拒绝；
+     * - 数据库层：sign_in_records 唯一索引(studentName, lessonId, type) 冲突时 insert 返回 -1，
+     *   回滚事务并拒绝，杜绝同一学员+同一课时+同一日期时间重复签到。
+     *
+     * @param operator 操作人（教练名，可空）
+     */
+    suspend fun signIn(
+        studentName: String,
+        studentId: String?,
+        operator: String = ""
+    ): SignInResult {
+        val database = db ?: return SignInResult(
+            success = false,
+            message = "签到失败：数据库未初始化"
+        )
+        return try {
+            database.withTransaction {
+                val today = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault()))
+                val nowTime = java.time.LocalTime.now().format(
+                    DateTimeFormatter.ofPattern("HH:mm", Locale.getDefault())
+                )
+                val pending = lessonDao.findPendingByStudentDateDual(studentId, studentName, today)
+
+                // 应用层防重：占位已是「已签到」即拒绝
+                if (pending != null && pending.status == "已签到") {
+                    return@withTransaction SignInResult(
+                        success = false,
+                        lessonId = pending.id,
+                        alreadySigned = true,
+                        message = "已签到，请勿重复操作"
+                    )
+                }
+
+                // 翻转占位或新建课时（均不扣课时包，签退时统一扣减）
+                val lesson = if (pending != null) {
+                    lessonDao.update(pending.copy(status = "已签到"))
+                    pending.copy(status = "已签到")
+                } else {
+                    val fresh = Lesson(
+                        id = java.util.UUID.randomUUID().toString().take(12),
+                        date = today,
+                        time = nowTime,
+                        studentName = studentName,
+                        studentId = studentId,
+                        packageId = "",
+                        status = "已签到"
+                    )
+                    lessonDao.insert(fresh)
+                    fresh
+                }
+
+                // 数据库层防重：写签到记录，唯一索引冲突则拒绝
+                val rowId = signInDao.insert(
+                    SignInRecord(
+                        studentName = studentName,
+                        studentId = studentId,
+                        lessonId = lesson.id,
+                        type = "签到",
+                        operator = operator
+                    )
+                )
+                if (rowId == -1L) {
+                    throw RuntimeException("签到记录已存在（唯一索引冲突）")
+                }
+
+                AutoBackupScheduler.notifyDataChange()
+                SignInResult(
+                    success = true,
+                    lessonId = lesson.id,
+                    message = "签到成功（签退时再扣减课时）"
+                )
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("SignInFlow", "签到失败：${studentName} ${e.message}", e)
+            SignInResult(
+                success = false,
+                alreadySigned = e.message?.contains("唯一索引") == true,
+                message = if (e.message?.contains("唯一索引") == true) {
+                    "已签到，请勿重复操作"
+                } else {
+                    "签到失败：${e.message ?: "未知异常"}"
+                }
+            )
+        }
+    }
+
     /**
      * === v27：签退时消耗课时（重构签到消课逻辑） ===
      *
@@ -216,6 +328,17 @@ class OperationRepository(
                 if (affected != 1) {
                     throw RuntimeException("Lesson 更新未生效（affected=$affected）")
                 }
+
+                // v32：写签退记录（唯一索引防重，重复签退已被上方幂等防线拦截，此处正常首次写入）
+                signInDao.insert(
+                    SignInRecord(
+                        studentName = lesson.studentName,
+                        studentId = lesson.studentId,
+                        lessonId = lesson.id,
+                        type = "签退",
+                        operator = lesson.coach
+                    )
+                )
 
                 // 2. 体验课：不消耗课时包余额，仅记录签退时间即完成
                 if (lesson.isTrial) {
@@ -487,6 +610,336 @@ class OperationRepository(
     }
 
     /**
+     * 批量自动排课结果。
+     *
+     * 排课只排课程表（占位），不扣余额；
+     * 余额扣减仅在实际消课（签退）时发生。
+     */
+    data class BatchScheduleResult(
+        val success: Boolean,
+        val createdCount: Int = 0,
+        val skippedCount: Int = 0,
+        val message: String = ""
+    )
+
+    /**
+     * 批量自动排课：在 Room 事务内批量插入课时记录（仅占位，不扣余额）。
+     *
+     * 核心原则：
+     * - 排课只排课程表（占位），不扣余额；扣余额仅在实际消课（签退）时发生
+     * - 所有日期计算在事务外完成（由 LessonDateCalculator 纯内存计算）
+     * - 事务前预查已有排课，过滤重复日期，避免 UNIQUE(studentName, date, time) 冲突
+     * - 事务内仅执行 insertAll，保证批量插入原子性
+     * - 任一步失败整体回滚，数据保持原样
+     *
+     * 去重逻辑：
+     * - 查询学员在日期范围内、指定时间点已存在的排课日期
+     * - 过滤掉已存在的日期，只插入新增日期
+     * - 若全部重复，返回 success=true + skippedCount，不报错
+     *
+     * 课时记录的 packageId 留空，签退时由 [consumeLessonForCheckOut]
+     * 统一执行课时包扣减，实现排课与消课完全分离。
+     *
+     * @param lessonDates 排课日期列表（已由 LessonDateCalculator 计算）
+     * @param studentName 学员姓名
+     * @param studentId 学员唯一 ID
+     * @param coachName 教练姓名
+     * @param startTime 上课时间 HH:mm
+     * @param durationMinutes 单次课时时长（分钟）
+     * @param location 上课地点
+     * @param lessonType 课程类型
+     * @return BatchScheduleResult 携带操作结果（含实际插入数和跳过数）
+     */
+    suspend fun batchAutoSchedule(
+        lessonDates: List<LocalDate>,
+        studentName: String,
+        studentId: String?,
+        coachName: String,
+        startTime: String,
+        durationMinutes: Int,
+        location: String,
+        lessonType: String
+    ): BatchScheduleResult {
+        val database = db ?: return BatchScheduleResult(
+            success = false,
+            message = "排课失败：数据库未初始化"
+        )
+
+        val totalLessons = lessonDates.size
+        if (totalLessons == 0) {
+            return BatchScheduleResult(success = false, message = "排课日期列表为空")
+        }
+
+        val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault())
+
+        // === 去重：查询学员在目标日期范围内、指定时间点已有的排课日期 ===
+        val fromDateStr = lessonDates.min().format(dateFormatter)
+        val toDateStr = lessonDates.max().format(dateFormatter)
+        val existingDates = lessonDao.getExistingDatesByStudentAndTime(
+            studentId, studentName, fromDateStr, toDateStr, startTime
+        ).toSet()
+
+        val newDates = lessonDates.filter { it.format(dateFormatter) !in existingDates }
+        val skippedCount = totalLessons - newDates.size
+
+        // 全部重复：不报错，提示无需重复添加
+        if (newDates.isEmpty()) {
+            return BatchScheduleResult(
+                success = true,
+                createdCount = 0,
+                skippedCount = skippedCount,
+                message = "所选日期均已排课，无需重复添加（跳过 $skippedCount 节）"
+            )
+        }
+
+        val newCount = newDates.size
+
+        return try {
+            database.withTransaction {
+                // 1. 在内存中构建所有 Lesson 对象（packageId 留空，签退时统一扣费）
+                val lessons = newDates.map { date ->
+                    Lesson(
+                        id = java.util.UUID.randomUUID().toString().take(8),
+                        date = date.format(dateFormatter),
+                        time = startTime,
+                        studentName = studentName,
+                        studentId = studentId,
+                        duration = durationMinutes,
+                        coach = coachName,
+                        location = location,
+                        lessonType = lessonType,
+                        packageId = "",
+                        status = "待签到",
+                        isTrial = false
+                    )
+                }
+
+                // 2. 批量插入课时记录（一次性写入，事务保证原子性）
+                lessonDao.insertAll(lessons)
+
+                AutoBackupScheduler.notifyDataChange()
+
+                val msg = if (skippedCount > 0) {
+                    "新增 $newCount 节，跳过 $skippedCount 节重复"
+                } else {
+                    "已排 $newCount 节课"
+                }
+
+                BatchScheduleResult(
+                    success = true,
+                    createdCount = newCount,
+                    skippedCount = skippedCount,
+                    message = msg
+                )
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("BatchAutoSchedule", "批量排课失败：${e.message}", e)
+            BatchScheduleResult(
+                success = false,
+                message = "排课失败：${e.message ?: "未知异常"}"
+            )
+        }
+    }
+
+    /**
+     * 小班课批量排课：为多名学员在同一组日期上批量插入课时占位（仅占位，不扣余额）。
+     *
+     * 与 [batchAutoSchedule] 的区别：为每个学员 × 每个日期都创建一条 Lesson。
+     * 每名学员按其剩余额度（memberQuotas）各自截断节数：额度少的学员排完即退出，
+     * 剩余节数由额度充足的学员单独继续排。每个上课日生成独立的 sessionGroupId，
+     * 签退时由 [consumeLessonForCheckOut] 识别同一天同组学员统一消课（不会跨天误消）。
+     *
+     * @param lessonDates 排课日期列表（已由 LessonDateCalculator 计算，共 N 节）
+     * @param groupStudentIds 小班课学员 studentId 集合（与 groupStudentNames 顺序一致）
+     * @param groupStudentNames 小班课学员姓名列表
+     * @param memberQuotas 每名学员本次可排的节数（与 groupStudentNames 顺序一致，≤ lessonDates.size）
+     */
+    suspend fun batchAutoScheduleGroup(
+        lessonDates: List<LocalDate>,
+        groupStudentIds: Set<String>,
+        groupStudentNames: List<String>,
+        memberQuotas: List<Int>,
+        coachName: String,
+        startTime: String,
+        durationMinutes: Int,
+        location: String,
+        lessonType: String
+    ): BatchScheduleResult {
+        val database = db ?: return BatchScheduleResult(
+            success = false,
+            message = "排课失败：数据库未初始化"
+        )
+        if (lessonDates.isEmpty()) {
+            return BatchScheduleResult(success = false, message = "排课日期列表为空")
+        }
+        if (groupStudentNames.isEmpty()) {
+            return BatchScheduleResult(success = false, message = "请选择学员")
+        }
+
+        val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault())
+        val fromDateStr = lessonDates.min().format(dateFormatter)
+        val toDateStr = lessonDates.max().format(dateFormatter)
+        val studentIds = groupStudentIds.toList()
+        // 每个上课日一个 sessionId：签退时按当天组员统一消课，避免同组跨天误消
+        val sessionIds = lessonDates.associateWith { java.util.UUID.randomUUID().toString().take(8) }
+
+        val lessons = mutableListOf<Lesson>()
+        var skipped = 0
+        groupStudentNames.forEachIndexed { index, name ->
+            val sid = studentIds.getOrNull(index)
+            val maxLessons = memberQuotas.getOrNull(index) ?: 0
+            if (maxLessons <= 0) return@forEachIndexed
+            val existingDates = lessonDao.getExistingDatesByStudentAndTime(
+                sid, name, fromDateStr, toDateStr, startTime
+            ).toSet()
+            for (date in lessonDates.take(maxLessons)) {
+                val dateStr = date.format(dateFormatter)
+                if (dateStr in existingDates) { skipped++; continue }
+                lessons += Lesson(
+                    id = java.util.UUID.randomUUID().toString().take(8),
+                    date = dateStr,
+                    time = startTime,
+                    studentName = name,
+                    studentId = sid,
+                    duration = durationMinutes,
+                    coach = coachName,
+                    location = location,
+                    lessonType = lessonType,
+                    packageId = "",
+                    status = "待签到",
+                    isTrial = false,
+                    groupScheduleId = sessionIds.getValue(date)
+                )
+            }
+        }
+
+        if (lessons.isEmpty()) {
+            return BatchScheduleResult(
+                success = true,
+                createdCount = 0,
+                skippedCount = skipped,
+                message = "所选日期均已排课，无需重复添加（跳过 $skipped 节）"
+            )
+        }
+
+        return try {
+            database.withTransaction {
+                lessonDao.insertAll(lessons)
+                AutoBackupScheduler.notifyDataChange()
+                BatchScheduleResult(
+                    success = true,
+                    createdCount = lessons.size,
+                    skippedCount = skipped,
+                    message = if (skipped > 0) {
+                        "新增 ${lessons.size} 节，跳过 $skipped 节重复"
+                    } else {
+                        "已排 ${lessons.size} 节课"
+                    }
+                )
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("BatchAutoScheduleGroup", "小班课批量排课失败：${e.message}", e)
+            BatchScheduleResult(
+                success = false,
+                message = "排课失败：${e.message ?: "未知异常"}"
+            )
+        }
+    }
+
+    /**
+     * 一次性修复脚本结果：修复自动排课阶段错误扣减的课时包余额。
+     */
+    data class BalanceFixResult(
+        val success: Boolean,
+        val fixedLessonCount: Int = 0,
+        val fixedPackageCount: Int = 0,
+        val details: String = ""
+    )
+
+    /**
+     * 一次性修复脚本：修复自动排课阶段错误扣减的课时包余额。
+     *
+     * 背景：旧版自动排课在排课阶段即扣减课时包余额（增加 usedLessons + 设置 Lesson.packageId），
+     * 导致排课与消课未分离。签退时检测到 packageId 非空会跳过扣费，
+     * 但未签退的排课记录已错误扣减了余额。
+     *
+     * 修复逻辑（单事务原子操作）：
+     * 1. 查询所有 packageId 非空且 status != '已签退' 的课时记录（排课阶段错误扣费的遗留）
+     * 2. 按 packageId 分组统计每个课时包被错误扣减的节数
+     * 3. 回退每个课时包的 usedLessons（减去错误扣减数，不低于 0）
+     * 4. 恢复课时包状态：若 usedLessons 回退后 < totalLessons 且原状态为"已用完"，恢复为"活跃"
+     * 5. 清除这些课时记录的 packageId（恢复为待消课状态，签退时统一扣费）
+     *
+     * 已签退的课时记录不受影响（packageId 保留作为扣费归属记录，usedLessons 计数正确）。
+     *
+     * @return BalanceFixResult 携带修复结果
+     */
+    suspend fun fixPrematureBalanceDeduction(): BalanceFixResult {
+        val database = db ?: return BalanceFixResult(
+            success = false,
+            details = "数据库未初始化"
+        )
+
+        return try {
+            database.withTransaction {
+                // 1. 查询所有未签退但已关联课时包的课时记录
+                val unconsumedLessons = lessonDao.getUnconsumedWithPackageId()
+
+                if (unconsumedLessons.isEmpty()) {
+                    return@withTransaction BalanceFixResult(
+                        success = true,
+                        fixedLessonCount = 0,
+                        fixedPackageCount = 0,
+                        details = "无需修复：没有发现排课阶段错误扣费的遗留数据"
+                    )
+                }
+
+                // 2. 按 packageId 分组统计错误扣减数
+                val deductionByPkg = unconsumedLessons
+                    .groupBy { it.packageId }
+                    .mapValues { it.value.size }
+
+                // 3. 逐个回退课时包 usedLessons
+                var fixedPkgCount = 0
+                val fixDetails = StringBuilder()
+                for ((pkgId, overDeductedCount) in deductionByPkg) {
+                    val pkg = pkgDao.getById(pkgId) ?: continue
+                    val newUsed = maxOf(0, pkg.usedLessons - overDeductedCount)
+                    val newStatus = when {
+                        newUsed >= pkg.totalLessons -> "已用完"
+                        pkg.status == "已用完" -> "活跃"
+                        else -> pkg.status
+                    }
+                    val updatedPkg = pkg.copy(usedLessons = newUsed, status = newStatus)
+                    pkgDao.update(updatedPkg)
+                    fixedPkgCount++
+                    fixDetails.append("课时包「${pkg.name}」(${pkg.studentName})" +
+                        " usedLessons: ${pkg.usedLessons} -> $newUsed" +
+                        " status: ${pkg.status} -> $newStatus\n")
+                }
+
+                // 4. 批量清除未签退课时的 packageId
+                val clearedCount = lessonDao.clearPackageIdForUnconsumed()
+
+                AutoBackupScheduler.notifyDataChange()
+
+                BalanceFixResult(
+                    success = true,
+                    fixedLessonCount = clearedCount,
+                    fixedPackageCount = fixedPkgCount,
+                    details = "已修复 $fixedPkgCount 个课时包，清除 $clearedCount 条课时记录的 packageId\n${fixDetails}"
+                )
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("BalanceFix", "修复余额扣减失败：${e.message}", e)
+            BalanceFixResult(
+                success = false,
+                details = "修复失败：${e.message ?: "未知异常"}"
+            )
+        }
+    }
+
+    /**
      * 续费提醒流：观察所有课时包，过滤出需要续费的项。
      * 触发条件：剩余≤3 / 30天内过期 / 已用完但仍标记活跃。
      */
@@ -559,6 +1012,10 @@ class OperationRepository(
     fun getSchedulesByCoach(name: String): Flow<List<Schedule>> = scheduleRepo.getSchedulesByCoach(name)
     fun getSchedulesByDay(dayOfWeek: Int): Flow<List<Schedule>> = scheduleRepo.getSchedulesByDay(dayOfWeek)
     suspend fun getScheduleById(id: String): Schedule? = scheduleRepo.getById(id)
+
+    /** 小班课：查询同 groupScheduleId 的所有排课记录 */
+    suspend fun getSchedulesByGroupScheduleId(groupScheduleId: String): List<Schedule> =
+        scheduleRepo.getByGroupScheduleId(groupScheduleId)
 
     /**
      * 新增排课（事务写入 + 自动备份防抖）。
@@ -637,6 +1094,10 @@ class OperationRepository(
     override suspend fun countPendingPlaceholderLessons(studentName: String, fromDate: String): Int =
         scheduleQueryRepo.countPendingPlaceholderLessons(studentName, fromDate)
 
+    /** 根治口径：已排但未签退（signOutTime 为空、非体验课、今天及未来）的待消耗课时数，委托子仓库 */
+    override suspend fun countUncheckedOutLessons(studentName: String, today: String): Int =
+        scheduleQueryRepo.countUncheckedOutLessons(studentName, today)
+
     /**
      * === v49 长期排课统一生成入口（独立学员循环 + 逐日 + 额度封顶） ===
      *
@@ -692,7 +1153,13 @@ class OperationRepository(
     override suspend fun getActivePackagesByStudent(studentName: String): List<LessonPackage> {
         // v46：双通道查询（studentId 优先、studentName 回退），杜绝改名断链
         val sid = resolveStudentId(studentName)
-        return pkgDao.getByStudentDual(sid, studentName).first()
+        var packages = pkgDao.getByStudentDual(sid, studentName).first()
+        // 回退：双通道查询在 studentId 与课时包不一致（旧数据回填遗漏）时可能漏查，
+        // 降级为纯姓名查询兜底，确保有课时包的学员一定能算到剩余额度
+        if (packages.isEmpty()) {
+            packages = pkgDao.getByStudent(studentName).first()
+        }
+        return packages
             .filter { it.status == "活跃" && !it.isExhausted && !it.isExpired }
             .sortedBy { it.purchaseDate }
     }
@@ -930,7 +1397,7 @@ class OperationRepository(
      *
      * 用于"智能训练内容推荐"：
      * - 取学员最近一次体测成绩，识别弱项并生成推荐训练内容
-     * - 由 [com.shangmentiyu.sportscoach.core.TrainingContentRecommender] 调用
+     * - 由 [com.shangmentiyu.sportscoach.data.internal.TrainingContentRecommender] 调用
      *
      * 按日期升序返回，便于调用方使用 `lastOrNull()` 取最近一次记录。
      *
@@ -942,6 +1409,10 @@ class OperationRepository(
         val sid = resolveStudentId(studentName)
         return lessonDao.getByStudentDualOnce(sid, studentName).sortedBy { "${it.date} ${it.time}" }
     }
+
+    /** 学员是否有正式课时记录（isTrial=0），用于"首次自动体验课"判断 */
+    suspend fun hasFormalLessonsDual(studentId: String?, name: String): Boolean =
+        lessonDao.countFormalLessonsDual(studentId, name) > 0
 
     /**
      * === v28：智能训练内容推荐（基于体测弱项） ===
@@ -973,9 +1444,9 @@ class OperationRepository(
             // 1. 取学员最近 10 条 lessons（已按日期升序）
             val lessons = getLessonsByStudentOnce(studentName).takeLast(10)
             // 2. 提取所有成绩条目
-            val scores = com.shangmentiyu.sportscoach.core.AbilityAnalyzer.extractScores(lessons)
+            val scores = com.shangmentiyu.sportscoach.data.internal.AbilityAnalyzer.extractScores(lessons)
             // 3. 调用推荐器生成训练内容
-            com.shangmentiyu.sportscoach.core.TrainingContentRecommender.recommend(
+            com.shangmentiyu.sportscoach.data.internal.TrainingContentRecommender.recommend(
                 scores = scores,
                 latestBmi = latestBmi
             )

@@ -26,7 +26,9 @@ class ScriptRepository(private val context: Context) {
     val scripts: StateFlow<List<ScriptItem>> = _scripts.asStateFlow()
 
     init {
-        loadFromDisk()
+        // ponytail: 文件IO+JSON解析移至后台线程，避免Koin初始化时阻塞主线程
+        // 上限：StateFlow初始为空列表，UI订阅后自动收到加载结果
+        Thread { loadFromDisk() }.start()
     }
 
     /** 从磁盘加载话术到内存 */

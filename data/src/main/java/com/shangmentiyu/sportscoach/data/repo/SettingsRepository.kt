@@ -24,7 +24,7 @@ private val Context.dataStore by preferencesDataStore(name = "settings")
  *   - [syncToken] 简单鉴权 token（避免局域网内误投递），客户端与服务端需一致
  * - 照片加密种子（v22 引入）：
  *   - [userPrivateKey] 用户私钥种子，用于跨设备照片解密
- *     （详见 [com.shangmentiyu.sportscoach.core.PhotoCrypto]）
+ *     （详见 [com.shangmentiyu.sportscoach.app.framework.PhotoCrypto]）
  *
  * 所有字段使用 DataStore 持久化，应用卸载后自动清除。
  */
@@ -72,7 +72,7 @@ class SettingsRepository(private val context: Context) {
     /**
      * 用户私钥种子（Flow 形式）。
      *
-     * - 用作 [com.shangmentiyu.sportscoach.core.PhotoCrypto] 派生 AES 密钥的种子
+     * - 用作 [com.shangmentiyu.sportscoach.app.framework.PhotoCrypto] 派生 AES 密钥的种子
      * - 未配置时返回空串，PhotoCrypto 将回退到旧的 EncryptedFile 方案
      * - 用户应在「设置页」配置一个长度 ≥ 8 的随机字符串作为私钥
      * - 跨设备迁移时：用户在新手机输入相同私钥即可解密旧照片
@@ -87,7 +87,7 @@ class SettingsRepository(private val context: Context) {
     /**
      * 同步阻塞读取用户私钥。
      *
-     * 仅供 [com.shangmentiyu.sportscoach.core.PhotoCrypto] 等无法在协程上下文中
+     * 仅供 [com.shangmentiyu.sportscoach.app.framework.PhotoCrypto] 等无法在协程上下文中
      * 调用挂起函数的场景使用。读取频繁时建议由调用方缓存结果。
      */
     fun getUserPrivateKeyBlocking(): String = runBlocking {
@@ -138,7 +138,7 @@ class SettingsRepository(private val context: Context) {
      * 自动备份启用开关（Flow 形式）。
      *
      * - 默认开启：DataStore 中未配置时返回 true
-     * - 监听本 Flow 的调用方（[com.shangmentiyu.sportscoach.core.AutoBackupScheduler]）
+     * - 监听本 Flow 的调用方（[com.shangmentiyu.sportscoach.data.internal.AutoBackupScheduler]）
      *   在用户切换开关时通过 [reloadSettings] 重新读取
      * - 关闭时已 pending 的防抖任务会被立即取消
      */

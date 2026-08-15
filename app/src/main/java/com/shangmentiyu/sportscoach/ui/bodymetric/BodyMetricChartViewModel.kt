@@ -25,7 +25,7 @@ class BodyMetricChartViewModel(
     private val _toast = MutableStateFlow<String?>(null)
     val toast: StateFlow<String?> = _toast.asStateFlow()
     private val appExceptionHandler =
-        com.shangmentiyu.sportscoach.core.CoroutineExt.createAppExceptionHandler(_toast, "BodyMetricChartViewModel")
+        com.shangmentiyu.sportscoach.app.framework.CoroutineExt.createAppExceptionHandler(_toast, "BodyMetricChartViewModel")
 
     private val _students = MutableStateFlow<List<String>>(emptyList())
     val students: StateFlow<List<String>> = _students.asStateFlow()

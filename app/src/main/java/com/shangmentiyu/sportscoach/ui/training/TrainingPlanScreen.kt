@@ -42,8 +42,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.shangmentiyu.sportscoach.core.TrainingPlanGenerator
-import com.shangmentiyu.sportscoach.core.TrainingPlanGenerator.RecommendedExercise
+import com.shangmentiyu.sportscoach.data.internal.TrainingPlanGenerator
+import com.shangmentiyu.sportscoach.data.internal.TrainingPlanGenerator.RecommendedExercise
 import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.growth.RadarChart
 import com.shangmentiyu.sportscoach.ui.theme.GlassCard

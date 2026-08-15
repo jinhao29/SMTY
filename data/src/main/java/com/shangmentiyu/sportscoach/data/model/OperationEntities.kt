@@ -1,6 +1,5 @@
 package com.shangmentiyu.sportscoach.data.model
 
-import androidx.compose.runtime.Stable
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -13,7 +12,6 @@ import androidx.room.PrimaryKey
  */
 @Entity(tableName = "lesson_packages")
 // v26 优化2：@Stable 让 LazyColumn 课时包列表按字段对比，避免无效重组
-@Stable
 data class LessonPackage(
     @PrimaryKey val id: String = java.util.UUID.randomUUID().toString().take(8),
     val studentName: String,              // 学员姓名（软关联，保留用于显示）
@@ -22,6 +20,9 @@ data class LessonPackage(
     val totalLessons: Int,                // 总课时数
     val usedLessons: Int = 0,             // 已用课时数
     val price: Double = 0.0,              // 价格（元）
+    // v32：实收金额（元）。-1 = 未单独记录（历史数据，视同已付清，统计时按 price 计）
+    @androidx.room.ColumnInfo(defaultValue = "-1.0")
+    val paidAmount: Double = -1.0,
     val purchaseDate: String,             // 购买日期 YYYY-MM-DD
     val expireDate: String = "",          // 过期日期 YYYY-MM-DD（空=永不过期）
     val status: String = "活跃",          // 活跃 / 已用完 / 已过期 / 已退费
@@ -79,7 +80,6 @@ data class LessonPackage(
  */
 @Entity(tableName = "coaches")
 // v26 优化2：@Stable 让 LazyColumn 教练列表按字段对比，避免无效重组
-@Stable
 data class Coach(
     @PrimaryKey val name: String,         // 教练姓名（主键）
     val phone: String = "",               // 联系电话
@@ -111,7 +111,6 @@ data class Coach(
     ]
 )
 // v26 优化2：@Stable 让 LazyColumn 排课列表按字段对比，避免无效重组
-@Stable
 data class Schedule(
     @PrimaryKey val id: String = java.util.UUID.randomUUID().toString().take(8),
     val studentName: String,              // 学员姓名（软关联，保留用于显示）
@@ -133,6 +132,8 @@ data class Schedule(
     val preClassTask: String = "[]",      // 课前任务 JSON（已废弃，保留字段避免迁移）
     val color: String = "blue",           // 卡片颜色标识：blue/green/orange/purple/pink/teal
     val equipment: String = "[]",         // 上课器材 JSON（字符串列表，如 ["绳梯","小栏架"]）
+    // === 小班课：同组学员共享同一 groupScheduleId，允许同教练同时段多学员 ===
+    val groupScheduleId: String? = null,  // 小班课分组ID（null=普通排课，非空=小班课成员）
     val createdAt: Long = System.currentTimeMillis()
 ) {
     /** 结束时间（HH:mm） */
@@ -156,7 +157,6 @@ data class Schedule(
  */
 @Entity(tableName = "schedule_memory", primaryKeys = ["coachName", "field", "value"])
 // v26 优化2：@Stable 让 LazyColumn 记忆列表按字段对比，避免无效重组
-@Stable
 data class ScheduleMemory(
     val coachName: String,               // 教练姓名
     val field: String,                   // 字段名："time" 或 "location"

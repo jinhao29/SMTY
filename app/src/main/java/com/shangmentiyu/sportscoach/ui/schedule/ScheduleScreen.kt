@@ -19,13 +19,11 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
-import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CleaningServices
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteSweep
@@ -36,7 +34,6 @@ import androidx.compose.material.icons.outlined.PersonRemove
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -117,7 +114,6 @@ private data class DayItem(
  * - 课程卡片：左侧大字号时间（开始 + 结束），右侧白色卡片（学员、时长/地点/类型、状态）
  * - 点击课程卡片：进入编辑（复用 ScheduleEditDialog）
  * - 长按课程卡片：弹出修改/删除操作菜单
- * - 右下角 FAB：为当前选中的星期几快速新增课程
  *
  * 数据流与业务逻辑保持不变：ScheduleScreen → OperationViewModel → ScheduleRepository → Room
  *
@@ -139,7 +135,7 @@ fun ScheduleScreen(
     val schedulesLoaded by vm.schedulesLoaded.collectAsStateWithLifecycle()
 
     var showEditDialog by remember { mutableStateOf(false) }
-    var isCreate by remember { mutableStateOf(true) }
+    var isCreate by remember { mutableStateOf(false) }
     var prefillDay by remember { mutableStateOf<Int?>(null) }
     var showClearAllDialog by remember { mutableStateOf(false) }
     // === 按学员删除排课对话框状态 ===
@@ -182,9 +178,10 @@ fun ScheduleScreen(
         }
     }
 
-    // === Bug 修复2：进入排课页时自动清理历史废弃占位排课 ===
-    // 静默模式：仅在确有清理时通过 toast 反馈，避免每次进入页面都弹"无清理"提示
-    LaunchedEffect(Unit) { vm.cleanupOnEnter() }
+    // === v32：移除进入排课页自动清理历史占位排课 ===
+    // 清理无效课表改为仅在设置页手动触发，避免每次进入周课表都触发清理，
+    // 且旧清理规则会误删未来/未签退课时。生成本周长期排课的补调保留。
+    LaunchedEffect(Unit) { vm.ensureLongTermLessonsForWeek() }
 
     // 计算本周 7 天对应的 Date 与 dayOfWeek（1=周一 ... 7=周日）
     // 日期格式化线程安全：Date→LocalDate 转换后用 [DateTimeFormatter] 格式化
@@ -249,9 +246,17 @@ fun ScheduleScreen(
     val isSelectedDatePast = selectedDateLocal.isBefore(todayLocal)
 
     // 当前选中日期的课程列表（按开始时间升序，已暂停置底）
-    val daySchedules = remember(schedules, selectedDayOfWeek) {
+    // === 数据流对齐：与日历红点共享完全一致的过滤条件 ===
+    // 活跃 + 非体验课(isTrial=0) + 周几命中 + 模板生效期(startDate~endDate)，
+    // 与 scheduledDates 同一函数计算，杜绝"日历有红点但下方列表为空"
+    val daySchedules = remember(schedules, selectedDayOfWeek, selectedDateLocal) {
+        val fmt = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd")
+        val selStr = selectedDateLocal.format(fmt)
         schedules
-            .filter { it.dayOfWeek == selectedDayOfWeek }
+            .filter {
+                it.dayOfWeek == selectedDayOfWeek &&
+                    isScheduleEffective(it, selStr)
+            }
             .sortedWith(compareBy({ if (it.isActive) 0 else 1 }, { it.startTime }))
     }
 
@@ -267,10 +272,6 @@ fun ScheduleScreen(
     // 月历和概览卡作为 LazyColumn 的第一个 item，随列表一起滚动
     // 向下滑动时日历自然滚出视图顶部，避免遮挡学员排课详情
     // 回到顶部时日历自然滚回，完全无抖动（避免 AnimatedVisibility 反馈循环）
-    // Schedule 是按"周几"重复的模板，提取所有排课的 dayOfWeek 集合
-    val scheduledDaysOfWeek = remember(schedules) {
-        schedules.map { it.dayOfWeek }.toSet()
-    }
     // 根据 weekStart + selectedDayOfWeek 计算当前选中日期字符串
     val selectedDateStr = remember(weekStart, selectedDayOfWeek) {
         try {
@@ -282,6 +283,26 @@ fun ScheduleScreen(
             android.util.Log.e("CalendarCrash", "计算选中日期字符串失败", e)
             LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"))
         }
+    }
+    // === 数据流对齐：红点改为"具体日期"集合 ===
+    // 遍历当前显示月（42 格含上下邻月填充），仅对"生效期内活跃非体验课模板"命中的日期标红；
+    // 与 daySchedules 共享同一过滤函数 isScheduleEffective，同一 Flow（OperationViewModel.schedules），
+    // 彻底消除"日历有红点但下方列表为空"（体验课模板 / 已过生效期模板不再产生红点）
+    val scheduledDates = remember(schedules, selectedDateStr) {
+        val fmt = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd")
+        val base = try {
+            java.time.LocalDate.parse(selectedDateStr, fmt)
+        } catch (e: Exception) {
+            LocalDate.now()
+        }
+        val month = java.time.YearMonth.from(base)
+        val first = month.atDay(1)
+        val leading = first.dayOfWeek.value - 1
+        val gridStart = first.minusDays(leading.toLong())
+        (0 until 42).map { gridStart.plusDays(it.toLong()) }
+            .filter { date -> schedules.any { s -> isScheduleEffective(s, date.format(fmt)) && s.dayOfWeek == date.dayOfWeek.value } }
+            .map { it.format(fmt) }
+            .toSet()
     }
 
     // === 性能优化：把日历点击 lambda 提取到 remember ===
@@ -364,18 +385,9 @@ fun ScheduleScreen(
                             // 颜色规范：珊瑚橙 #FF6B47（appPrimary）/ 深灰 #6B6B6B（appOnSurfaceVariant）
                             ScheduleActionButton(
                                 icon = Icons.Outlined.EventRepeat,
-                                label = "周历",
+                                label = "排课",
                                 tint = appPrimary(),
                                 onClick = { showAutoScheduleDialog = true }
-                            )
-                            // === Bug 修复2：手动触发"清理过去无效排课"按钮 ===
-                            // 即使启动时已自动清理，仍保留手动按钮供用户主动触发
-                            // （如数据库被外部同步污染后可一键再次清理）
-                            ScheduleActionButton(
-                                icon = Icons.Outlined.CleaningServices,
-                                label = "清理",
-                                tint = appPrimary(),
-                                onClick = { vm.cleanupPastLessonsManually() }
                             )
                             // === 按学员删除排课入口 ===
                             ScheduleActionButton(
@@ -508,7 +520,7 @@ fun ScheduleScreen(
                         item(key = "calendar") {
                             ScheduleCalendar(
                                 selectedDate = selectedDateStr,
-                                scheduledDaysOfWeek = scheduledDaysOfWeek,
+                                scheduledDates = scheduledDates,
                                 onDateSelected = onCalendarDateSelected
                             )
                         }
@@ -559,7 +571,7 @@ fun ScheduleScreen(
                         item(key = "calendar") {
                             ScheduleCalendar(
                                 selectedDate = selectedDateStr,
-                                scheduledDaysOfWeek = scheduledDaysOfWeek,
+                                scheduledDates = scheduledDates,
                                 onDateSelected = onCalendarDateSelected
                             )
                         }
@@ -587,8 +599,7 @@ fun ScheduleScreen(
                                             selectedScheduleIds[s.id] = true
                                         }
                                     } else {
-                                        // === Bug 修复3：过去日期的排课不可操作（避免误编辑历史记录）===
-                                        if (isSelectedDatePast) return@KeepScheduleCard
+                                        // 允许编辑过去日期的排课（支持补录/恢复历史排课）
                                         isCreate = false
                                         prefillDay = null
                                         vm.startEdit(s.id)
@@ -604,8 +615,7 @@ fun ScheduleScreen(
                                             selectedScheduleIds[s.id] = true
                                         }
                                     } else {
-                                        // === Bug 修复3：过去日期的排课不可操作 ===
-                                        if (isSelectedDatePast) return@KeepScheduleCard
+                                        // 允许长按过去日期的排课进入多选（支持补录/恢复历史排课）
                                         // 非多选模式下长按进入多选模式并选中当前
                                         isMultiSelectMode = true
                                         selectedScheduleIds[s.id] = true
@@ -615,30 +625,6 @@ fun ScheduleScreen(
                         }
                     }
                 }
-            }
-        }
-        // === FAB：移出 Scaffold，置于外层 Box 底部右端，z 高于 SnackbarHost ===
-        // 多选模式下隐藏 FAB，避免与底部操作栏冲突
-        if (!isMultiSelectMode) {
-            FloatingActionButton(
-                onClick = {
-                    isCreate = true
-                    prefillDay = selectedDayOfWeek
-                    vm.startCreate()
-                    showEditDialog = true
-                },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .windowInsetsPadding(WindowInsets.navigationBars)
-                    .padding(Spacing.lg),
-                shape = CircleShape,
-                containerColor = appPrimary()
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Add,
-                    contentDescription = "新增课程",
-                    tint = Color.White
-                )
             }
         }
     }
@@ -1223,4 +1209,15 @@ private fun ScheduleActionButton(
 @Composable
 private fun ScheduleScreenPreview() {
     ScheduleScreen(onBack = {})
+}
+
+/**
+ * 排课模板在指定日期是否生效 —— 日历红点与下方列表共享的唯一过滤条件：
+ * 活跃 + 非体验课(isTrial=0) + 日期落在模板生效期 startDate~endDate 内（空边界视为不限）。
+ * 数据源均为 OperationViewModel.schedules（同一 Room Flow），保证红点与列表恒一致。
+ */
+private fun isScheduleEffective(s: Schedule, dateStr: String): Boolean {
+    return s.isActive && !s.isTrial &&
+        (s.startDate.isBlank() || dateStr >= s.startDate) &&
+        (s.endDate.isBlank() || dateStr <= s.endDate)
 }

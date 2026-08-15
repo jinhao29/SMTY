@@ -315,7 +315,8 @@ fun PreClassTab(
                 WeeklyProgressDots(
                     selectedDate = selectedDate,
                     schedules = schedules,
-                    lessons = lessons
+                    lessons = lessons,
+                    onSelectDate = { dailyVm.selectDate(it) }
                 )
             }
         }

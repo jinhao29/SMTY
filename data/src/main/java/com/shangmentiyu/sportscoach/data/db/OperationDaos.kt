@@ -207,4 +207,8 @@ interface ScheduleDao {
     /** 双通道：删除超出额度的多余长排，仅保留按 startDate 升序的前 keep 条（修正历史排课通道2）。体验课不占课时包额度，不参与清理 */
     @Query("DELETE FROM schedules WHERE isLongTerm = 1 AND isTrial = 0 AND (studentId = :studentId OR (studentId IS NULL AND studentName = :name)) AND id NOT IN (SELECT id FROM schedules WHERE isLongTerm = 1 AND isTrial = 0 AND (studentId = :studentId OR (studentId IS NULL AND studentName = :name)) ORDER BY startDate LIMIT :keep)")
     suspend fun deleteLongTermSchedulesBeyondQuotaDual(studentId: String?, name: String, keep: Int): Int
+
+    /** 小班课：查询同 groupScheduleId 的所有排课记录 */
+    @Query("SELECT * FROM schedules WHERE groupScheduleId = :groupScheduleId AND isActive = 1")
+    suspend fun getByGroupScheduleId(groupScheduleId: String): List<Schedule>
 }

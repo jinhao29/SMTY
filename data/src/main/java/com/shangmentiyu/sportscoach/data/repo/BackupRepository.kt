@@ -2,7 +2,7 @@ package com.shangmentiyu.sportscoach.data.repo
 
 import android.content.Context
 import android.net.Uri
-import com.shangmentiyu.sportscoach.core.BackupManager
+import com.shangmentiyu.sportscoach.data.internal.BackupManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -101,7 +101,7 @@ class BackupRepository(
                 if (ok) {
                     Result(
                         success = true,
-                        message = "恢复成功，应用将重启以加载新数据",
+                        message = "数据恢复完成，请手动重启 App",
                         needRestart = true
                     )
                 } else {

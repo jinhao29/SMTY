@@ -38,6 +38,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,11 +48,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shangmentiyu.sportscoach.data.model.LessonPackage
+import com.shangmentiyu.sportscoach.data.model.Student
+import com.shangmentiyu.sportscoach.core.Standards
 import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.operation.OperationViewModel
 import com.shangmentiyu.sportscoach.ui.schedule.AutoScheduleFromPackageDialog
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import android.content.Context
+import android.content.Intent
+import androidx.core.content.FileProvider
 
 /**
  * 课时管理 Tab：展示所有学员的课时包余额，支持增添/减少/赠送。
@@ -67,6 +77,12 @@ fun LessonManageTab(vm: HomeViewModel) {
         val opVm: OperationViewModel = koinViewModel()
 
     val packages by opVm.packages.collectAsStateWithLifecycle()
+    val students by vm.students.collectAsStateWithLifecycle()
+
+    // === v32：全体学员课时/费用统计（纯内存计算，依赖 packages 与 students） ===
+    val stats = remember(packages, students) { computeLessonStats(packages, students) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     var adjustingPkg by remember { mutableStateOf<LessonPackage?>(null) }
     var adjustMode by remember { mutableStateOf("") } // "add" / "reduce" / "gift"
@@ -90,22 +106,73 @@ fun LessonManageTab(vm: HomeViewModel) {
         contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 160.dp),
         verticalArrangement = Arrangement.spacedBy(Spacing.md)
     ) {
-        // 概览
+        // === v32：全体学员课时统计 + 费用统计 + 年级分组导出 ===
         item(key = "overview") {
-            IosCard {
-                Column(modifier = Modifier.padding(Spacing.md)) {
-                    Text("课时包概览", style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(Spacing.sm))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly
-                    ) {
-                        StatItem(label = "课时包数", value = "${packages.size}")
-                        val totalRemain = packages.sumOf { it.remainingLessons }
-                        StatItem(label = "剩余总数", value = "$totalRemain")
-                        val totalUsed = packages.sumOf { it.totalLessons - it.remainingLessons }
-                        StatItem(label = "已用总数", value = "$totalUsed")
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                // 课时统计卡片
+                IosCard {
+                    Column(modifier = Modifier.padding(Spacing.md)) {
+                        Text("课时统计", style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(Spacing.sm))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            StatItem(label = "总学员数", value = "${stats.totalStudents}")
+                            StatItem(label = "总课时数", value = "${stats.totalLessons}")
+                        }
+                        Spacer(Modifier.height(Spacing.sm))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            StatItem(label = "总已消课时", value = "${stats.totalUsed}")
+                            StatItem(label = "全体剩余课时", value = "${stats.totalRemaining}")
+                        }
+                    }
+                }
+                // 费用统计卡片
+                IosCard {
+                    Column(modifier = Modifier.padding(Spacing.md)) {
+                        Text("费用统计", style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(Spacing.sm))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            StatItem(label = "总应收", value = money(stats.totalReceivable))
+                            StatItem(label = "总实收", value = money(stats.totalReceived))
+                            StatItem(label = "总待收", value = money(stats.totalPending))
+                        }
+                    }
+                }
+                // 年级分组统计 + 导出
+                IosCard {
+                    Column(modifier = Modifier.padding(Spacing.md)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("按年级分组统计", style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                            TextButton(onClick = {
+                                scope.launch { exportStatsCsv(context, stats) }
+                            }) { Text("导出") }
+                        }
+                        if (stats.gradeGroups.isEmpty()) {
+                            Spacer(Modifier.height(4.dp))
+                            Text("暂无课时包数据", style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.outline)
+                        } else {
+                            stats.gradeGroups.forEach { g ->
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    "${g.grade}：${g.studentCount} 人 · 剩 ${g.remaining} 课时 · " +
+                                        "应收 ${money(g.receivable)} · 待收 ${money(g.pending)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -187,7 +254,7 @@ fun LessonManageTab(vm: HomeViewModel) {
                 opVm.updatePackage(pkg.copy(usedLessons = newUsed, status = newStatus))
                 editingPkg = null
             },
-            onSave = { newPurchase, newExpire, newUsed ->
+            onSave = { newPurchase, newExpire, newUsed, newPrice, newPaid ->
                 val safeUsed = newUsed.coerceIn(0, pkg.totalLessons)
                 val today = java.time.LocalDate.now()
                     .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd", java.util.Locale.getDefault()))
@@ -200,7 +267,9 @@ fun LessonManageTab(vm: HomeViewModel) {
                     purchaseDate = newPurchase,
                     expireDate = newExpire,
                     usedLessons = safeUsed,
-                    status = newStatus
+                    status = newStatus,
+                    price = newPrice,
+                    paidAmount = newPaid
                 ))
                 editingPkg = null
             }
@@ -289,7 +358,10 @@ private fun PackageCard(
                 RemainingBadge(pkg.remainingLessons)
             }
             Spacer(Modifier.height(4.dp))
-            Text("${pkg.name} · ${pkg.price}元",
+            val paid = if (pkg.paidAmount < 0) pkg.price else pkg.paidAmount
+            val pending = pkg.price - paid
+            Text("${pkg.name} · 应收 ${money(pkg.price)} · 实收 ${money(paid)}" +
+                if (pending > 0.001) " · 待收 ${money(pending)}" else "",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.outline)
             Spacer(Modifier.height(4.dp))
@@ -474,11 +546,14 @@ private fun EditPackageDialog(
     pkg: LessonPackage,
     onDismiss: () -> Unit,
     onConsume: () -> Unit,
-    onSave: (purchaseDate: String, expireDate: String, usedLessons: Int) -> Unit
+    onSave: (purchaseDate: String, expireDate: String, usedLessons: Int, price: Double, paidAmount: Double) -> Unit
 ) {
     var purchaseDate by remember { mutableStateOf(pkg.purchaseDate) }
     var expireDate by remember { mutableStateOf(pkg.expireDate) }
     var usedText by remember { mutableStateOf(pkg.usedLessons.toString()) }
+    // v32：金额可编辑。实收留空表示"已付清"（paidAmount = -1）
+    var priceText by remember { mutableStateOf(amountText(pkg.price)) }
+    var paidText by remember { mutableStateOf(if (pkg.paidAmount >= 0) amountText(pkg.paidAmount) else "") }
 
     GlassAlertDialog(
         onDismissRequest = onDismiss,
@@ -513,6 +588,20 @@ private fun EditPackageDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
 )
+                AppTextField(
+                    value = priceText,
+                    onValueChange = { priceText = it.filter { c -> c.isDigit() || c == '.' } },
+                    label = { Text("价格 / 应收（元）") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+)
+                AppTextField(
+                    value = paidText,
+                    onValueChange = { paidText = it.filter { c -> c.isDigit() || c == '.' } },
+                    label = { Text("实收金额（元，留空=已付清）") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+)
 
                 // 直接消课按钮
                 Button(
@@ -531,10 +620,123 @@ private fun EditPackageDialog(
             TextButton(
                 onClick = {
                     val used = usedText.toIntOrNull() ?: pkg.usedLessons
-                    onSave(purchaseDate.trim(), expireDate.trim(), used)
+                    val price = priceText.toDoubleOrNull() ?: pkg.price
+                    val paid = if (paidText.isBlank()) -1.0 else (paidText.toDoubleOrNull() ?: -1.0)
+                    onSave(purchaseDate.trim(), expireDate.trim(), used, price, paid)
                 }
             ) { Text("保存") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )
+}
+
+// === v32：课时统计 ===
+
+/** 全体学员课时/费用统计聚合结果 */
+private data class LessonStats(
+    val totalStudents: Int,
+    val totalLessons: Int,
+    val totalUsed: Int,
+    val totalRemaining: Int,
+    val totalReceivable: Double,
+    val totalReceived: Double,
+    val totalPending: Double,
+    val gradeGroups: List<GradeStat>
+)
+
+/** 按年级分组的统计项 */
+private data class GradeStat(
+    val grade: String,
+    val studentCount: Int,
+    val remaining: Int,
+    val receivable: Double,
+    val pending: Double
+)
+
+/** 金额格式化：整数元（无小数） */
+private fun money(v: Double): String = "¥${kotlin.math.round(v).toInt()}"
+
+/** 金额文本：去掉尾随 .0，便于在输入框展示（如 100.0 → "100"） */
+private fun amountText(v: Double): String =
+    if (v == v.toLong().toDouble()) v.toLong().toString() else v.toString()
+
+/**
+ * 纯内存聚合：总学员/总课时/总已消/总剩余 + 总应收/实收/待收 + 按年级分组。
+ *
+ * 实收规则：paidAmount < 0（历史数据未记录）视同已付清，实收 = price。
+ * 年级分组按课时包归属学员的年级（gradeFullLabel）聚合，同名学员按姓名关联。
+ */
+private fun computeLessonStats(
+    packages: List<LessonPackage>,
+    students: List<Student>
+): LessonStats {
+    val gradeByStudent = students.associateBy { it.name }
+    fun gradeOf(name: String): String {
+        val s = gradeByStudent[name]
+        return if (s == null) "未知" else Standards.gradeFullLabel(s.grade)
+    }
+    fun paid(p: LessonPackage): Double = if (p.paidAmount < 0) p.price else p.paidAmount
+
+    val totalLessons = packages.sumOf { it.totalLessons }
+    val totalUsed = packages.sumOf { it.usedLessons }
+    val totalRemaining = packages.sumOf { it.remainingLessons }
+    val totalReceivable = packages.sumOf { it.price }
+    val totalReceived = packages.sumOf { paid(it) }
+
+    val gradeGroups = packages.groupBy { gradeOf(it.studentName) }
+        .map { (grade, pkgs) ->
+            GradeStat(
+                grade = grade,
+                studentCount = pkgs.map { it.studentName }.toSet().size,
+                remaining = pkgs.sumOf { it.remainingLessons },
+                receivable = pkgs.sumOf { it.price },
+                pending = pkgs.sumOf { it.price - paid(it) }
+            )
+        }
+        .sortedBy { it.grade }
+
+    return LessonStats(
+        totalStudents = students.size,
+        totalLessons = totalLessons,
+        totalUsed = totalUsed,
+        totalRemaining = totalRemaining,
+        totalReceivable = totalReceivable,
+        totalReceived = totalReceived,
+        totalPending = totalReceivable - totalReceived,
+        gradeGroups = gradeGroups
+    )
+}
+
+/**
+ * 导出课时统计 CSV：写入 cacheDir 后经 FileProvider 发起系统分享。
+ * CSV 列：年级、学员数、总课时、总已消、剩余、应收、实收、待收。
+ */
+private suspend fun exportStatsCsv(context: Context, stats: LessonStats) {
+    val csv = buildString {
+        appendLine("年级,学员数,总课时,总已消,剩余课时,应收,实收,待收")
+        stats.gradeGroups.forEach { g ->
+            val received = g.receivable - g.pending
+            appendLine(
+                "${g.grade},${g.studentCount},${g.remaining + 0},${g.remaining}," +
+                    "${g.receivable.toInt()},${received.toInt()},${g.pending.toInt()}"
+            )
+        }
+        appendLine(
+            "合计,${stats.totalStudents},${stats.totalLessons},${stats.totalUsed}," +
+                "${stats.totalRemaining},${stats.totalReceivable.toInt()}," +
+                "${stats.totalReceived.toInt()},${stats.totalPending.toInt()}"
+        )
+    }
+    withContext(Dispatchers.IO) {
+        val file = File(context.cacheDir, "课时统计_${System.currentTimeMillis()}.csv")
+        file.writeText(csv)
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/csv"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_SUBJECT, "课时统计")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(intent, "导出课时统计"))
+    }
 }

@@ -2,6 +2,7 @@ package com.shangmentiyu.sportscoach.ui.home
 
 import com.shangmentiyu.sportscoach.ui.theme.ShadowTokens
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -318,12 +319,14 @@ internal fun FloatingStatCard(
  * @param selectedDate 当前选中日期（yyyy-MM-dd）
  * @param schedules 当日排课列表（用于判断是否有课）
  * @param lessons 当日已签到课时列表（用于判断是否已上课）
+ * @param onSelectDate 点击某日期圆圈时回调（触发 ViewModel.selectDate 刷新清单）
  */
 @Composable
 internal fun WeeklyProgressDots(
     selectedDate: String,
     schedules: List<com.shangmentiyu.sportscoach.data.model.Schedule>,
-    lessons: List<com.shangmentiyu.sportscoach.data.model.Lesson>
+    lessons: List<com.shangmentiyu.sportscoach.data.model.Lesson>,
+    onSelectDate: (String) -> Unit = {}
 ) {
     // === 计算本周 7 天的日期与状态 ===
     // 用 remember 缓存，避免每次重组都重新计算
@@ -372,7 +375,8 @@ internal fun WeeklyProgressDots(
                     isToday = isToday,
                     isCurrentSelected = dateStr == selectedDate,
                     hasSchedule = isToday && todaySchedulesCount > 0,
-                    isCompleted = isToday && todayLessonsCount > 0
+                    isCompleted = isToday && todayLessonsCount > 0,
+                    onClick = { onSelectDate(dateStr) }
                 )
             }
         }
@@ -392,6 +396,7 @@ internal fun WeeklyProgressDots(
  * @param isCurrentSelected 是否是当前选中日期
  * @param hasSchedule 当天是否有排课
  * @param isCompleted 当天是否已完成签到
+ * @param onClick 点击该日期圆圈的响应
  */
 @Composable
 private fun WeeklyDayDot(
@@ -400,7 +405,8 @@ private fun WeeklyDayDot(
     isToday: Boolean,
     isCurrentSelected: Boolean,
     hasSchedule: Boolean,
-    isCompleted: Boolean
+    isCompleted: Boolean,
+    onClick: () -> Unit = {}
 ) {
     val dayNum = remember(dateStr) {
         dateStr.substring(8).trimStart('0').ifEmpty { "1" }
@@ -432,7 +438,8 @@ private fun WeeklyDayDot(
             modifier = Modifier
                 .size(32.dp)
                 .clip(CircleShape)
-                .background(circleColor),
+                .background(circleColor)
+                .clickable(onClick = onClick),
             contentAlignment = androidx.compose.ui.Alignment.Center
         ) {
             Text(

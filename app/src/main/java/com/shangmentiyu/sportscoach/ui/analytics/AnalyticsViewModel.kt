@@ -2,7 +2,7 @@ package com.shangmentiyu.sportscoach.ui.analytics
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.shangmentiyu.sportscoach.core.JsonSafe
+import com.shangmentiyu.sportscoach.data.internal.JsonSafe
 import com.shangmentiyu.sportscoach.data.model.Lesson
 import com.shangmentiyu.sportscoach.data.model.Student
 import com.shangmentiyu.sportscoach.data.repo.LessonRepository
@@ -11,7 +11,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
@@ -23,6 +26,7 @@ import org.json.JSONObject
  *
  * 不再使用 DataAnalyzer 进行 AI 虚拟分析（趋势预测/分位对比/雷达聚合）。
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class AnalyticsViewModel(
     private val studentRepo: StudentRepository,
     private val lessonRepo: LessonRepository
@@ -31,7 +35,7 @@ class AnalyticsViewModel(
     private val _toast = MutableStateFlow<String?>(null)
     val toast: StateFlow<String?> = _toast.asStateFlow()
     private val appExceptionHandler =
-        com.shangmentiyu.sportscoach.core.CoroutineExt.createAppExceptionHandler(_toast, "AnalyticsViewModel")
+        com.shangmentiyu.sportscoach.app.framework.CoroutineExt.createAppExceptionHandler(_toast, "AnalyticsViewModel")
 
     /** 所有学员 */
     private val _students = MutableStateFlow<List<Student>>(emptyList())
@@ -59,6 +63,27 @@ class AnalyticsViewModel(
 
     init {
         loadStudents()
+        // === v51 断流修复：持续订阅选中学员的课时 Flow（Room 自动回流）===
+        // 原实现 selectStudent 用 lessonRepo.getLessonsByStudentDual(...).first() 一次性查询，
+        // 成绩在「录入成绩」Tab 保存后，本页（查看成绩）LazyColumn 不会自动刷新，
+        // 必须手动重新 selectStudent 才能看到新成绩 —— 数据流断裂。
+        // 现改为：选中学员 + 学员列表（studentId 可能因改名/回填变化）combine 后
+        // flatMapLatest 订阅 Room Flow，数据库任何变更（成绩保存/删除/改名）都会自动
+        // 触发 rebuildRecords → recordsByProject / overview 自动刷新，无需手动 refresh。
+        viewModelScope.launch(appExceptionHandler) {
+            combine(_selectedStudent, _students) { name, list ->
+                name to list.firstOrNull { it.name == name }?.studentId
+            }.flatMapLatest { (name, studentId) ->
+                if (name == null) {
+                    flowOf(emptyList())
+                } else {
+                    lessonRepo.getLessonsByStudentDual(studentId, name)
+                }
+            }.collect { list ->
+                _lessons.value = list
+                rebuildRecords(list)
+            }
+        }
     }
 
     /** 加载学员列表并默认选中第一个 */
@@ -83,19 +108,13 @@ class AnalyticsViewModel(
         }
     }
 
-    /** 选择学员，加载其课时并按项目聚合 */
+    /**
+     * 选择学员，切换当前订阅源（课时数据由 init 中的 Room Flow 自动加载并聚合）。
+     *
+     * 仅需更新 [_selectedStudent]：flatMapLatest 会取消旧订阅并订阅新学员的 Flow。
+     */
     fun selectStudent(name: String) {
         _selectedStudent.value = name
-        viewModelScope.launch(appExceptionHandler) {
-            val list = try {
-                val studentId = _students.value.firstOrNull { it.name == name }?.studentId
-                lessonRepo.getLessonsByStudentDual(studentId, name).first()
-            } catch (_: Exception) {
-                emptyList()
-            }
-            _lessons.value = list
-            rebuildRecords(list)
-        }
     }
 
     /** 从课时列表解析成绩记录，按项目分组 */

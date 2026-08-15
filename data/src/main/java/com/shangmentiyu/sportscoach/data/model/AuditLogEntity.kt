@@ -1,6 +1,5 @@
 package com.shangmentiyu.sportscoach.data.model
 
-import androidx.compose.runtime.Stable
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -37,7 +36,6 @@ import androidx.room.PrimaryKey
     ]
 )
 // v26 优化2：@Stable 让 LazyColumn 操作日志列表按字段对比，避免无效重组
-@Stable
 data class AuditLogEntity(
     @PrimaryKey val id: String = java.util.UUID.randomUUID().toString().take(12),
     val operator: String = "教练",         // 操作人（默认教练，多教练场景填入教练名）

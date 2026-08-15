@@ -27,6 +27,7 @@ class ValidateScheduleUseCaseTest {
         override suspend fun getActivePackagesByStudent(studentName: String) = packages
         override suspend fun countCheckedOutLessons(studentName: String) = checkedOut
         override suspend fun countPendingPlaceholderLessons(studentName: String, fromDate: String) = pendingPlaceholders
+        override suspend fun countUncheckedOutLessons(studentName: String, today: String) = pendingPlaceholders
         override suspend fun earliestPurchaseDateOf(studentName: String) = earliestPurchase
     }
 
@@ -120,10 +121,10 @@ class ValidateScheduleUseCaseTest {
     }
 
     @Test
-    fun `场景3_总课时被已签退与占位全部占用时不可排`() = runTest {
-        // 总课时=10，已签退=6，占位=4 → 剩余 0 → 不可排
+    fun `场景3_剩余课时被待消耗占满时不可排`() = runTest {
+        // 10 节包已用 6 节（剩余 4），已排未签退 4 节 → 剩余可排 0 → 不可排
         val source = FakeSource(
-            packages = listOf(pkg(total = 10, purchaseDate = "2025-07-01")),
+            packages = listOf(pkg(total = 10, purchaseDate = "2025-07-01", used = 6)),
             checkedOut = 6,
             pendingPlaceholders = 4
         )
@@ -134,14 +135,28 @@ class ValidateScheduleUseCaseTest {
 
     @Test
     fun `场景3_仍有剩余可排课时允许排课`() = runTest {
+        // 10 节包已用 6 节（剩余 4），已排未签退 3 节 → 剩余可排 1
         val source = FakeSource(
-            packages = listOf(pkg(total = 10, purchaseDate = "2025-07-01")),
+            packages = listOf(pkg(total = 10, purchaseDate = "2025-07-01", used = 6)),
             checkedOut = 6,
             pendingPlaceholders = 3
         )
         val useCase = ValidateScheduleUseCase(source)
         assertThat(useCase.availableQuota("张三", "2025-07-20")).isEqualTo(1)
         assertThat(useCase.hasRemainingCapacity("张三", "2025-07-20")).isTrue()
+    }
+
+    @Test
+    fun `有剩余课时但有已签退时_剩余可排不为零_修复重复扣减`() = runTest {
+        // 10 节包已用 4 节（剩余 6），已签退 4、已排未签退 2 → 剩余可排 4
+        // 旧公式会把已签退再扣一次，得到 6-4-2=0（错误地显示无课可排）
+        val source = FakeSource(
+            packages = listOf(pkg(total = 10, purchaseDate = "2025-07-01", used = 4)),
+            checkedOut = 4,
+            pendingPlaceholders = 2
+        )
+        val useCase = ValidateScheduleUseCase(source)
+        assertThat(useCase.availableQuota("张三", "2025-07-20")).isEqualTo(4)
     }
 
     // === 三要素公式 ===
@@ -163,28 +178,75 @@ class ValidateScheduleUseCaseTest {
     }
 
     @Test
-    fun `未来可用额度等于总课时减去已占用_下限为零`() = runTest {
-        // 总课时=8（10节包已用2），已占用=3 → 可用 5
+    fun `未来可用额度等于剩余课时减去待消耗_下限为零`() = runTest {
+        // 10 节包已用 2 节（剩余 8），已排未签退 2 节 → 剩余可排 6
         val source = FakeSource(
             packages = listOf(pkg(total = 10, purchaseDate = "2025-07-01", used = 2)),
-            checkedOut = 1,
+            checkedOut = 2,
             pendingPlaceholders = 2
         )
         val useCase = ValidateScheduleUseCase(source)
-        assertThat(useCase.futureAvailableLessons("张三", "2025-07-20")).isEqualTo(5)
-        source.checkedOut = 100
+        assertThat(useCase.futureAvailableLessons("张三", "2025-07-20")).isEqualTo(6)
+        // 待消耗超过剩余课时 → 下限 0
+        source.pendingPlaceholders = 10
         assertThat(useCase.futureAvailableLessons("张三", "2025-07-20")).isEqualTo(0)
     }
 
     @Test
-    fun `三要素公式_剩余等于总课时减已签退减占位`() = runTest {
+    fun `剩余可排等于剩余课时减去待消耗`() = runTest {
         val source = FakeSource(
             packages = listOf(pkg(total = 15, purchaseDate = "2025-07-01"), pkg(total = 5, purchaseDate = "2025-07-01")),
             checkedOut = 3,
             pendingPlaceholders = 7
         )
         val useCase = ValidateScheduleUseCase(source)
-        // 总课时 = 15 + 5 = 20；剩余 = 20 - 3 - 7 = 10
-        assertThat(useCase.availableQuota("张三", "2025-07-20")).isEqualTo(10)
+        // 剩余课时 = 15 + 5 = 20；剩余可排 = 20 - 7 = 13（已签退已包含在 usedLessons 中，不再重复扣）
+        assertThat(useCase.availableQuota("张三", "2025-07-20")).isEqualTo(13)
+    }
+
+    // === 回退测试：earliestPurchaseDateOf 返回 null 但学员有课时包时，从活跃包回退取最早购买日期 ===
+
+    @Test
+    fun `回退_earliestPurchaseDateOf为null但有多个课时包时_从活跃包回退拦截购买日前排课`() = runTest {
+        // 模拟：earliestPurchaseDateOf 返回 null（双通道查询漏查），
+        // 但 getActivePackagesByStudent 返回 3 个课时包，最早购买日期为 2025-06-15
+        val source = FakeSource(
+            packages = listOf(
+                pkg(total = 10, purchaseDate = "2025-07-01"),
+                pkg(total = 10, purchaseDate = "2025-06-15"),
+                pkg(total = 10, purchaseDate = "2025-08-01")
+            ),
+            earliestPurchase = null
+        )
+        val useCase = ValidateScheduleUseCase(source)
+        // 早于最早购买日(06-15) → 应被拦截
+        assertThat(useCase.isDateValid("张三", "2025-06-14")).isFalse()
+        val e = runCatching { useCase.validateStartDateOrThrow("张三", "2025-06-14") }
+            .exceptionOrNull()
+        assertThat(e).isInstanceOf(IllegalArgumentException::class.java)
+        assertThat(e?.message).contains("2025-06-15")
+        // 购买日当天及之后 → 通过
+        assertThat(useCase.isDateValid("张三", "2025-06-15")).isTrue()
+        assertThat(useCase.isDateValid("张三", "2025-09-01")).isTrue()
+    }
+
+    @Test
+    fun `回退_earliestPurchaseDateOf为null且活跃包purchaseDate均为空时_不拦截`() = runTest {
+        // 所有活跃包的 purchaseDate 均为空串 → 回退也拿不到 → 不拦截（无约束可执行）
+        val source = FakeSource(
+            packages = listOf(pkg(total = 10, purchaseDate = "")),
+            earliestPurchase = null
+        )
+        val useCase = ValidateScheduleUseCase(source)
+        assertThat(useCase.isDateValid("张三", "2020-01-01")).isTrue()
+        useCase.validateStartDateOrThrow("张三", "2020-01-01")
+    }
+
+    @Test
+    fun `回退_earliestPurchaseDateOf为null且无任何课时包时_不拦截`() = runTest {
+        val source = FakeSource(packages = emptyList(), earliestPurchase = null)
+        val useCase = ValidateScheduleUseCase(source)
+        assertThat(useCase.isDateValid("张三", "2020-01-01")).isTrue()
+        useCase.validateStartDateOrThrow("张三", "2020-01-01")
     }
 }

@@ -12,12 +12,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.EmojiEvents
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -29,8 +32,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -42,6 +47,9 @@ import com.shangmentiyu.sportscoach.core.Std
 import com.shangmentiyu.sportscoach.core.Standards
 import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.scoring.ScoringViewModel
+import com.shangmentiyu.sportscoach.ui.scoring.CustomScoreRow
+import com.shangmentiyu.sportscoach.ui.scoring.EntryModeChip
+import com.shangmentiyu.sportscoach.ui.scoring.AddCustomProjectDialog
 import com.shangmentiyu.sportscoach.ui.theme.FloatingSnackbarHost
 import com.shangmentiyu.sportscoach.ui.theme.GlassCard
 import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
@@ -70,6 +78,9 @@ fun ScoreInputTab() {
     val standards by vm.standards.collectAsStateWithLifecycle()
     val scoreInputs by vm.scoreInputs.collectAsStateWithLifecycle()
     val scoreResults by vm.scoreResults.collectAsStateWithLifecycle()
+    val isCustomMode by vm.isCustomMode.collectAsStateWithLifecycle()
+    val customProjects by vm.customProjects.collectAsStateWithLifecycle()
+    var showAddCustomDialog by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -108,45 +119,85 @@ fun ScoreInputTab() {
                     Text("请先选择学员", color = MaterialTheme.colorScheme.outline)
                 }
             } else {
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(standards, key = { it.name }) { std ->
-                        ScoreInputRow(
-                            std = std,
-                            gender = selectedStudent!!.gender,
-                            inputValue = scoreInputs[std.name] ?: "",
-                            result = scoreResults[std.name],
-                            onValueChange = { vm.updateScore(std.name, it) }
-                        )
+                // === v32：学龄前固定自定义录入，学龄后可切换标准/自定义 ===
+                val isPreschool = selectedStudent!!.grade == "0" || selectedStudent!!.grade.isBlank()
+                Column(modifier = Modifier.weight(1f)) {
+                    if (!isPreschool) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            EntryModeChip("标准录入", selected = !isCustomMode) { vm.setCustomMode(false) }
+                            EntryModeChip("自定义录入", selected = isCustomMode) { vm.setCustomMode(true) }
+                        }
                     }
-                }
-                Button(
-                    onClick = {
-                        vm.save(
-                            onSuccess = {
-                                scope.launch {
-                                    snackbarHostState.showSnackbar(
-                                        message = "保存成功",
-                                        duration = SnackbarDuration.Short
-                                    )
-                                }
-                            },
-                            onError = { msg ->
-                                scope.launch {
-                                    snackbarHostState.showSnackbar(
-                                        message = msg,
-                                        duration = SnackbarDuration.Long
-                                    )
-                                }
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // 标准体测项目（自定义模式下不显示）
+                        if (!isCustomMode) {
+                            items(standards, key = { it.name }) { std ->
+                                ScoreInputRow(
+                                    std = std,
+                                    gender = selectedStudent!!.gender,
+                                    inputValue = scoreInputs[std.name] ?: "",
+                                    result = scoreResults[std.name],
+                                    onValueChange = { vm.updateScore(std.name, it) }
+                                )
                             }
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth().padding(16.dp)
-                ) {
-                    Text("保存成绩")
+                        }
+                        // 自定义项目（项目名称/成绩值/单位/备注）
+                        items(customProjects.toList(), key = { it.name }) { project ->
+                            CustomScoreRow(
+                                project = project,
+                                inputValue = scoreInputs[project.name] ?: "",
+                                onValueChange = { vm.updateScore(project.name, it) },
+                                onRemove = { vm.removeCustomProject(project.name) }
+                            )
+                        }
+                        // 添加自定义项目
+                        item {
+                            AssistChip(
+                                onClick = { showAddCustomDialog = true },
+                                label = { Text("+ 添加自定义项目") },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Outlined.Add,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                    }
+                    Button(
+                        onClick = {
+                            vm.save(
+                                onSuccess = {
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar(
+                                            message = "保存成功",
+                                            duration = SnackbarDuration.Short
+                                        )
+                                    }
+                                },
+                                onError = { msg ->
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar(
+                                            message = msg,
+                                            duration = SnackbarDuration.Long
+                                        )
+                                    }
+                                }
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth().padding(16.dp)
+                    ) {
+                        Text("保存成绩")
+                    }
                 }
             }
         }
@@ -155,6 +206,25 @@ fun ScoreInputTab() {
             hostState = snackbarHostState,
             modifier = Modifier.align(Alignment.BottomCenter)
         )
+
+        // 添加自定义项目对话框
+        if (showAddCustomDialog) {
+            AddCustomProjectDialog(
+                onDismiss = { showAddCustomDialog = false },
+                onConfirm = { name, unit, note ->
+                    if (vm.addCustomProject(name, unit, note)) {
+                        showAddCustomDialog = false
+                    } else {
+                        scope.launch {
+                            snackbarHostState.showSnackbar(
+                                message = "项目名已存在或为空",
+                                duration = SnackbarDuration.Short
+                            )
+                        }
+                    }
+                }
+            )
+        }
     }
 }
 

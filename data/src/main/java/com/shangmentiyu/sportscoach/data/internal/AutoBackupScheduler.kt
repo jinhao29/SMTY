@@ -1,4 +1,4 @@
-package com.shangmentiyu.sportscoach.core
+package com.shangmentiyu.sportscoach.data.internal
 
 import android.content.Context
 import android.util.Log
@@ -37,7 +37,7 @@ import java.util.Locale
  * - [BackupManager] 是无状态处理器，负责打包/解包 ZIP
  * - 本调度器是协调层，负责「何时备份、备份到哪、清理哪些」的策略决策
  *
- * 与 [com.shangmentiyu.sportscoach.core.ScheduleReminderManager] 的区别：
+ * 与 [com.shangmentiyu.sportscoach.app.framework.ScheduleReminderManager] 的区别：
  * - ScheduleReminderManager 基于 WorkManager 周期任务（每日固定时刻触发）
  * - 本调度器基于内存协程 + 防抖（数据变更后 10 分钟触发），更精准且省电
  *

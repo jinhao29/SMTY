@@ -44,7 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.shangmentiyu.sportscoach.R
-import com.shangmentiyu.sportscoach.core.PhotoCrypto
+import com.shangmentiyu.sportscoach.app.framework.PhotoCrypto
 import com.shangmentiyu.sportscoach.ui.theme.GlassCard
 import com.shangmentiyu.sportscoach.ui.theme.PrimaryButton
 import com.shangmentiyu.sportscoach.ui.theme.SafeAsyncImage

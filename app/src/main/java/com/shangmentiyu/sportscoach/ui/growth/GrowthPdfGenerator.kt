@@ -53,12 +53,11 @@ object GrowthPdfGenerator {
 
     /** 珊瑚橙主题色（与 App 一致） */
     private const val COLOR_PRIMARY = 0xFFFF6B47.toInt()
-    private const val COLOR_TEXT = 0xFF1F2937.toInt()
-    private const val COLOR_TEXT_LIGHT = 0xFF6B7280.toInt()
+    private const val COLOR_TEXT = 0xFF1A1A1A.toInt()
+    private const val COLOR_TEXT_LIGHT = 0xFF6B6B6B.toInt()
     private const val COLOR_DIVIDER = 0xFFE5E7EB.toInt()
-    private const val COLOR_CARD_BG = 0xFFF9FAFB.toInt()
+    private const val COLOR_CARD_BG = 0xFFFAFAFA.toInt()
     private const val COLOR_BLUE = 0xFF3B82F6.toInt()
-    private const val COLOR_ORANGE = 0xFFFF6B47.toInt()
     private const val COLOR_PURPLE = 0xFF8B5CF6.toInt()
     private const val COLOR_GREEN = 0xFF10B981.toInt()
 
@@ -242,7 +241,7 @@ object GrowthPdfGenerator {
         val cardH = 70f
         val cards = listOf(
             Triple("身高", "${student.heightCm} cm", COLOR_BLUE),
-            Triple("体重", "${student.weightKg} kg", COLOR_ORANGE),
+            Triple("体重", "${student.weightKg} kg", COLOR_PRIMARY),
             Triple("BMI", "%.1f".format(student.bmi), COLOR_PURPLE)
         )
         cards.forEachIndexed { index, (label, value, color) ->

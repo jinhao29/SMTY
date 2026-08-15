@@ -13,7 +13,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Logout
+import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.SportsScore
 import androidx.compose.material.icons.outlined.Summarize
 import androidx.compose.material3.*
@@ -28,6 +28,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.shangmentiyu.sportscoach.core.TemplateData
 import com.shangmentiyu.sportscoach.data.model.ExerciseItem
 import com.shangmentiyu.sportscoach.ui.theme.AppTextField
+import com.shangmentiyu.sportscoach.ui.theme.StyledSuggestionField
 import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.theme.GlassCard
 import com.shangmentiyu.sportscoach.ui.theme.PrimaryButton
@@ -151,80 +152,30 @@ private fun InfoCard(lesson: com.shangmentiyu.sportscoach.data.model.Lesson, vm:
 )
             // 地点：接入 ScheduleMemoryRepository(field="checkin_location") 历史记忆下拉建议
             val locationMemories by vm.locationMemories.collectAsStateWithLifecycle()
-            var locationExpanded by remember { mutableStateOf(false) }
-            ExposedDropdownMenuBox(
-                expanded = locationExpanded,
-                onExpandedChange = { locationExpanded = !locationExpanded }
-            ) {
-                AppTextField(
-                    value = location,
-                    onValueChange = { location = it },
-                    label = { Text("地点") },
-                    modifier = Modifier.weight(1f)
-                        .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true),
-                    singleLine = true,
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(locationExpanded) },
-)
-                ExposedDropdownMenu(
-                    expanded = locationExpanded,
-                    onDismissRequest = { locationExpanded = false }
-                ) {
-                    (locationMemories + location).distinct().filter { it.isNotBlank() }.forEach { loc ->
-                        DropdownMenuItem(
-                            text = { Text(loc) },
-                            onClick = {
-                                location = loc
-                                locationExpanded = false
-                            }
-                        )
-                    }
-                }
-            }
+            StyledSuggestionField(
+                value = location,
+                onValueChange = { location = it },
+                label = "地点",
+                presets = (locationMemories + location).distinct().filter { it.isNotBlank() },
+                modifier = Modifier.weight(1f)
+            )
         }
         Spacer(modifier = Modifier.height(8.dp))
         // 课时类型（自定义输入 + 快捷下拉建议）
-        var lessonTypeExpanded by remember { mutableStateOf(false) }
-        val lessonTypes = listOf("训练课", "体测课", "技术课", "恢复课")
-        ExposedDropdownMenuBox(expanded = lessonTypeExpanded, onExpandedChange = { lessonTypeExpanded = !lessonTypeExpanded }) {
-            AppTextField(
-                value = lesson.lessonType,
-                onValueChange = { input -> vm.updateLesson { it.copy(lessonType = input) } },
-                readOnly = false,
-                label = { Text("课时类型（可自定义）") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = lessonTypeExpanded) },
-                modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true),
-)
-            ExposedDropdownMenu(expanded = lessonTypeExpanded, onDismissRequest = { lessonTypeExpanded = false }) {
-                lessonTypes.forEach { t ->
-                    DropdownMenuItem(text = { Text(t) }, onClick = {
-                        vm.updateLesson { it.copy(lessonType = t) }
-                        lessonTypeExpanded = false
-                    })
-                }
-            }
-        }
+        StyledSuggestionField(
+            value = lesson.lessonType,
+            onValueChange = { input -> vm.updateLesson { it.copy(lessonType = input) } },
+            label = "课时类型（可自定义）",
+            presets = listOf("训练课", "体测课", "技术课", "恢复课")
+        )
         Spacer(modifier = Modifier.height(8.dp))
         // 出勤状态（自定义输入 + 快捷下拉建议）
-        var attendanceExpanded by remember { mutableStateOf(false) }
-        val attendances = listOf("准时", "迟到", "请假", "旷课")
-        ExposedDropdownMenuBox(expanded = attendanceExpanded, onExpandedChange = { attendanceExpanded = !attendanceExpanded }) {
-            AppTextField(
-                value = lesson.attendance,
-                onValueChange = { input -> vm.updateLesson { it.copy(attendance = input) } },
-                readOnly = false,
-                label = { Text("出勤状态（可自定义）") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = attendanceExpanded) },
-                modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true),
-)
-            ExposedDropdownMenu(expanded = attendanceExpanded, onDismissRequest = { attendanceExpanded = false }) {
-                attendances.forEach { a ->
-                    DropdownMenuItem(text = { Text(a) }, onClick = {
-                        vm.updateLesson { it.copy(attendance = a) }
-                        attendanceExpanded = false
-                    })
-                }
-            }
-        }
+        StyledSuggestionField(
+            value = lesson.attendance,
+            onValueChange = { input -> vm.updateLesson { it.copy(attendance = input) } },
+            label = "出勤状态（可自定义）",
+            presets = listOf("准时", "迟到", "请假", "旷课")
+        )
         // 保存时长/教练/地点（失焦保存）
         LaunchedEffect(duration) {
             val d = duration.toIntOrNull() ?: 60
@@ -508,7 +459,7 @@ private fun SignOutCard(lesson: com.shangmentiyu.sportscoach.data.model.Lesson, 
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                Icons.Outlined.Logout,
+                Icons.AutoMirrored.Outlined.Logout,
                 contentDescription = null,
                 tint = if (signedOut) ScoreExcellent else MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(20.dp)
@@ -570,7 +521,7 @@ private fun SignOutCard(lesson: com.shangmentiyu.sportscoach.data.model.Lesson, 
                 Spacer(Modifier.width(4.dp))
                 Text("已完成签退")
             } else {
-                Icon(Icons.Outlined.Logout, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(Icons.AutoMirrored.Outlined.Logout, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(4.dp))
                 Text("完成签退（结算本次课时）")
             }

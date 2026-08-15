@@ -1,6 +1,7 @@
-package com.shangmentiyu.sportscoach.core
+package com.shangmentiyu.sportscoach.data.internal
 
-import com.shangmentiyu.sportscoach.core.AbilityAnalyzer.AbilityRadar
+import com.shangmentiyu.sportscoach.core.Exercise
+import com.shangmentiyu.sportscoach.data.internal.AbilityAnalyzer.AbilityRadar
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale

@@ -29,6 +29,14 @@ object UpdateProgressBus {
     sealed class UpdateProgress {
         /** 空闲：无下载任务 */
         data object Idle : UpdateProgress()
+        /**
+         * 发现新版本，等待用户确认是否更新（v51 新增）。
+         *
+         * UI 收到此事件后弹出"是否更新"确认弹窗：
+         * - 用户选择"是" → 调用 UpdateManager.startDownload() 触发下载
+         * - 用户选择"否" → 调用 UpdateManager.declineUpdate() 记录拒绝，本次不再下载
+         */
+        data class AskToUpdate(val version: String, val releaseNotes: String) : UpdateProgress()
         /** 下载中：UI 据此显示进度浮层 */
         data class Downloading(val percent: Int, val version: String) : UpdateProgress()
         /** 下载完成：UI 据此显示"准备安装"提示，并触发安装流程 */

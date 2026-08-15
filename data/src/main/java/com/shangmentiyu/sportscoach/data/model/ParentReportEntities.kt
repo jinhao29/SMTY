@@ -1,6 +1,5 @@
 package com.shangmentiyu.sportscoach.data.model
 
-import androidx.compose.runtime.Stable
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -10,7 +9,6 @@ import androidx.room.PrimaryKey
  *
  * 性能：v26 优化2添加 [Stable] 注解，作为 Compose State 使用时避免无效重组。
  */
-@Stable
 @Entity(tableName = "parent_reports")
 data class ParentReport(
     @PrimaryKey val id: String,                  // UUID

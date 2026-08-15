@@ -1,7 +1,7 @@
 package com.shangmentiyu.sportscoach.data.repo
 
 import androidx.room.withTransaction
-import com.shangmentiyu.sportscoach.core.AutoBackupScheduler
+import com.shangmentiyu.sportscoach.data.internal.AutoBackupScheduler
 import com.shangmentiyu.sportscoach.data.db.AppDatabase
 import com.shangmentiyu.sportscoach.data.db.LessonPackageDao
 import com.shangmentiyu.sportscoach.data.db.ScheduleDao

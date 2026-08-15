@@ -2,7 +2,7 @@ package com.shangmentiyu.sportscoach.ui.lesson
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.shangmentiyu.sportscoach.core.JsonSafe
+import com.shangmentiyu.sportscoach.data.internal.JsonSafe
 import com.shangmentiyu.sportscoach.data.model.ExerciseItem
 import com.shangmentiyu.sportscoach.data.model.Lesson
 import com.shangmentiyu.sportscoach.data.model.ScoreItem
@@ -14,6 +14,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -44,7 +45,7 @@ class LessonViewModel(
     private val _toast = MutableStateFlow<String?>(null)
     val toast: StateFlow<String?> = _toast.asStateFlow()
     private val appExceptionHandler =
-        com.shangmentiyu.sportscoach.core.CoroutineExt.createAppExceptionHandler(_toast, "LessonViewModel")
+        com.shangmentiyu.sportscoach.app.framework.CoroutineExt.createAppExceptionHandler(_toast, "LessonViewModel")
 
     private val _lesson = MutableStateFlow<Lesson?>(null)
     val lesson: StateFlow<Lesson?> = _lesson.asStateFlow()
@@ -245,16 +246,16 @@ class LessonViewModel(
     override fun onCleared() {
         super.onCleared()
         // ViewModel 销毁时确保最后一次改动已写库：
-        // saveScope 独立于 viewModelScope，不会随 onCleared 取消
+        // 使用 NonCancellable 保证写库协程在 scope.cancel() 后仍能完成
         saveJob?.cancel()
         val current = _lesson.value
         if (current != null) {
-            saveScope.launch {
+            saveScope.launch(NonCancellable) {
                 lessonRepo.updateLesson(current)
             }
         }
-        // 留出窗口让挂起的写库完成（不阻塞主线程）
-        // saveScope 不主动 cancel，由 JVM 回收
+        // 取消 saveScope 防止内存泄漏，NonCancellable 协程不受影响
+        saveScope.cancel()
     }
 
     fun updateExercises(newList: List<ExerciseItem>) {

@@ -74,6 +74,7 @@ import com.shangmentiyu.sportscoach.ui.theme.ScoreFail
 import com.shangmentiyu.sportscoach.ui.theme.ScoreGood
 import com.shangmentiyu.sportscoach.ui.theme.ScorePass
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
+import com.shangmentiyu.sportscoach.ui.theme.AppTextField
 import com.shangmentiyu.sportscoach.ui.theme.StyledDropdown
 
 /**
@@ -569,7 +570,7 @@ private fun IosFormRow(
                     modifier = Modifier.weight(1f)
                 )
             } else {
-                androidx.compose.material3.OutlinedTextField(
+                AppTextField(
                     value = value,
                     onValueChange = onValueChange,
                     placeholder = {
@@ -582,15 +583,6 @@ private fun IosFormRow(
                         { Text(unit, style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)) }
                     } else null,
-                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                        unfocusedBorderColor = Color.Transparent,
-                        focusedBorderColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        focusedContainerColor = Color.Transparent,
-                        focusedTextColor = MaterialTheme.colorScheme.onBackground,
-                        unfocusedTextColor = MaterialTheme.colorScheme.onBackground,
-                        cursorColor = MaterialTheme.colorScheme.primary
-                    ),
                     textStyle = MaterialTheme.typography.bodyLarge
                 )
             }
@@ -858,7 +850,8 @@ private fun AddStudentScreenPreview() {
                         db.scheduleDao(), db.lessonDao(), db.lessonPackageDao(), db.studentDao(), db
                     ),
                     trainingCycleRepo = TrainingCycleRepository(db.trainingCycleDao()),
-                    stageSummaryRepo = StageSummaryRepository()
+                    stageSummaryRepo = StageSummaryRepository(),
+                    signInDao = db.signInDao()
                 )
             )
         }

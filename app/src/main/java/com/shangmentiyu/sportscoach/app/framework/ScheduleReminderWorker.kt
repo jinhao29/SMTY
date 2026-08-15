@@ -1,4 +1,4 @@
-package com.shangmentiyu.sportscoach.core
+package com.shangmentiyu.sportscoach.app.framework
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -102,7 +102,7 @@ class ScheduleReminderWorker(
             // 取代旧版仅"长期未上课"的单一维度，新增课时包余额/即将过期/今日冲突
             val digest = AlertNotifier.buildDailyAlertDigest(db)
 
-            createNotificationChannel()
+            NotificationUtils.createChannel(applicationContext, CHANNEL_ID, CHANNEL_NAME, "每日 7:30 提醒今日的排课记录", enableVibration = true, enableLights = false)
 
             // 4. 今日有排课 → 发送今日排课通知（含预警汇总作为补充段）
             if (lessons.isNotEmpty()) {
@@ -133,28 +133,6 @@ class ScheduleReminderWorker(
     private fun isAppOpened(): Boolean {
         val prefs = applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         return prefs.getBoolean(KEY_APP_OPENED, false)
-    }
-
-    /**
-     * 创建通知渠道（Android 8.0+ 要求）。
-     * 幂等：重复调用不会报错。
-     */
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                CHANNEL_NAME,
-                NotificationManager.IMPORTANCE_DEFAULT
-            ).apply {
-                description = "每日 7:30 提醒今日的排课记录"
-                enableVibration(true)
-                enableLights(false)
-            }
-            val manager = applicationContext.getSystemService(
-                Context.NOTIFICATION_SERVICE
-            ) as NotificationManager
-            manager.createNotificationChannel(channel)
-        }
     }
 
     /**

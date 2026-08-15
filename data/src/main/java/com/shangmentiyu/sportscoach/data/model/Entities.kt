@@ -1,6 +1,5 @@
 package com.shangmentiyu.sportscoach.data.model
 
-import androidx.compose.runtime.Stable
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
@@ -19,8 +18,18 @@ import androidx.room.PrimaryKey
  *
  * 适用场景：所有在 Compose UI 中作为 State 暴露的数据类。
  */
-@Stable
-@Entity(tableName = "students")
+@Entity(
+    tableName = "students",
+    indices = [
+        // === v51 数据流加固：studentId 唯一索引 ===
+        // 必须与 AppDatabase.MIGRATION_29_30 手动创建的索引完全一致：
+        // 迁移创建 + 实体声明二者缺一不可，否则 Room 迁移后的 schema 校验
+        // （TableInfo 索引集合精确比对）会因"多余/缺失索引"抛
+        // IllegalStateException("Migration didn't properly handle") 导致启动闪退。
+        // SQLite 唯一索引允许多个 NULL，历史 studentId=NULL 的行不受影响。
+        Index(value = ["studentId"], name = "idx_students_student_id", unique = true)
+    ]
+)
 data class Student(
     @PrimaryKey val name: String,        // 姓名（主键）
     val gender: String = "男",            // 性别
@@ -72,7 +81,6 @@ data class Student(
     ]
 )
 // v26 优化2：@Stable 让 LazyColumn 课时列表按字段对比，避免无效重组
-@Stable
 data class Lesson(
     @PrimaryKey val id: String,           // UUID前8位
     val date: String,                     // YYYY-MM-DD
@@ -96,19 +104,21 @@ data class Lesson(
     val signOutTime: String = "",         // 签退时间 HH:mm（空=未签退）
     val signOutPhotoPath: String = "",    // 签退照片路径（空=未拍照）
     val contentImages: String = "[]",     // 课后反馈训练内容图片路径 JSON（字符串列表，便于反馈给家长）
-    // === v27：签到/签退状态字段 ===
-    // 取值："已签到"（默认，签到时写入但未扣减课时包）/ "已签退"（签退时扣减课时包并标记）
-    // 配合"签退后消耗课时"重构：签到时仅创建 Lesson(status="已签到", packageId="")
+    // === v27/v32：签到/签退状态字段 ===
+    // 取值："待签到"（排课占位，尚未上课）/ "已签到"（教练手动签到，未扣课时包）/ "已签退"（签退扣减课时包）
+    // 排课只写"待签到"占位；签到由教练手动触发（翻转占位或新建）；
     // 签退时事务内：consumeLesson 扣减课时包 + 更新 Lesson(status="已签退", packageId, signOutTime)
-    val status: String = "已签到",         // 课时状态：已签到 / 已签退
+    // 默认值保持"已签到"以兼容 v24 迁移的列默认值与旧数据（老占位课时视同已签到）
+    val status: String = "已签到",         // 课时状态：待签到 / 已签到 / 已签退
     // === v49 体验课：未注册学员临时体验课占位/签到记录，签退不扣减课时包 ===
     val isTrial: Boolean = false,
+    // === 小班课：关联同组学员的统一签到/签退 ===
+    val groupScheduleId: String? = null,  // 小班课分组ID（null=普通排课，非空=小班课成员）
     val createdAt: Long = System.currentTimeMillis()
 )
 
 /** 训练内容项（用于JSON序列化） */
 // v26 优化2：@Stable 让训练内容 LazyColumn 列表项按字段对比，避免无效重组
-@Stable
 data class ExerciseItem(
     val name: String = "",
     val sets: Int = 3,
@@ -120,7 +130,6 @@ data class ExerciseItem(
 
 /** 成绩项（用于JSON序列化） */
 // v26 优化2：@Stable 让成绩 LazyColumn 列表项按字段对比，避免无效重组
-@Stable
 data class ScoreItem(
     val value: String = "",
     val score: Double = 0.0,

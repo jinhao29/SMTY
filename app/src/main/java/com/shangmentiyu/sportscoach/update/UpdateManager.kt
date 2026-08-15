@@ -23,6 +23,13 @@ import java.util.concurrent.TimeUnit
  * 4. 失败重试策略（v22 引入）：检查失败后分别在 1 小时、6 小时后台重试，
  *    超过最大重试次数后等待下次定期任务。
  *
+ * v51（先确认后下载）：
+ * - 检查到新版本后【不再自动下载】，而是先弹窗询问用户是否更新
+ * - 用户选"是" → [startDownload] 投递下载任务（断点续传 + 进度通知）
+ * - 用户选"否" → [declineUpdate] 记录拒绝版本，同版本不再自动提示
+ * - 待确认更新信息持久化（[promptNewVersion] / [getPendingUpdate]），
+ *   进程被杀后 App 重启仍能恢复确认弹窗
+ *
  * 使用方式：
  * - Application.onCreate() 中调用 UpdateManager.schedulePeriodicCheck(context)
  * - Application.onCreate() 中调用 UpdateManager.checkNow(context) 进行首次即时检查
@@ -55,6 +62,17 @@ object UpdateManager {
 
     /** Worker 输入数据 Key：当前重试次数（0=首次检查，1=第一次重试，2=第二次重试） */
     const val KEY_RETRY_COUNT = "retry_count"
+
+    /**
+     * Worker 输入数据 Key：待下载的 APK 直链（v51 新增）。
+     *
+     * 传入此 Key 时 Worker 进入"纯下载模式"（跳过版本检查，直接下载），
+     * 用于用户点击"是否更新"弹窗的"是"之后触发下载。
+     */
+    const val KEY_DOWNLOAD_URL = "download_url"
+
+    /** Worker 输入数据 Key：待下载的版本号（与 [KEY_DOWNLOAD_URL] 配对使用） */
+    const val KEY_DOWNLOAD_VERSION = "download_version"
 
     /** 最大重试次数：超过后等待下次定期任务（24h 后自动触发） */
     private const val MAX_RETRY_COUNT = 2
@@ -112,6 +130,9 @@ object UpdateManager {
      * 适用场景：
      * - 应用首次启动
      * - 用户点击"检查更新"按钮（旧版，无反馈）
+     *
+     * v51 变更：本方法只负责"检查 + 提示"，发现新版本后弹窗询问用户，
+     * 用户确认后才由 [startDownload] 触发下载（下载步骤受 Wi-Fi 约束）。
      *
      * 网络约束（v23 强化）：
      * - 改为 [NetworkType.UNMETERED]（Wi-Fi 或不计量网络）
@@ -292,6 +313,31 @@ object UpdateManager {
     /** "等待安装"版本号 Key（值 = 新版本 tagName，如 "v21"） */
     private const val KEY_PENDING_INSTALL_VERSION = "pending_install_version"
 
+    // === v51：发现新版本后"先确认后下载" ===
+    // 用户需求：检查到新版本后先弹窗询问是否更新，选"是"才下载，选"否"跳过。
+    // 因此 Worker 不再自动下载，而是持久化"待确认更新"信息，由 UI 弹窗决策。
+
+    /** "待确认更新"版本号 Key（发现新版本，等待用户选择是否更新） */
+    private const val KEY_PENDING_CONFIRM_VERSION = "pending_confirm_version"
+
+    /** "待确认更新"APK 下载直链 Key */
+    private const val KEY_PENDING_CONFIRM_URL = "pending_confirm_url"
+
+    /** "待确认更新"更新说明 Key */
+    private const val KEY_PENDING_CONFIRM_NOTES = "pending_confirm_notes"
+
+    /** 用户拒绝过的版本号 Key（同版本不再自动提示，避免反复打扰） */
+    private const val KEY_REJECTED_VERSION = "rejected_version"
+
+    /**
+     * 待确认更新信息（[getPendingUpdate] 的返回值）。
+     */
+    data class PendingUpdate(
+        val version: String,
+        val downloadUrl: String,
+        val releaseNotes: String
+    )
+
     /**
      * 标记"已有下载好的更新待安装"。
      *
@@ -360,6 +406,180 @@ object UpdateManager {
             Log.d(TAG, "已清除待安装标志")
         } catch (e: Exception) {
             Log.e(TAG, "清除待安装标志失败：${e.message}", e)
+        }
+    }
+
+    // ==================== v51：发现新版本 → 先弹窗确认 → 再下载 ====================
+
+    /**
+     * 检查某版本是否已被用户拒绝过（v51 新增）。
+     *
+     * 用户点"暂不更新"后记录该版本号，此后 Worker 自动检查时不再对
+     * 同一版本重复弹窗打扰；用户主动"检查更新"不受此限制（尊重主动行为）。
+     *
+     * @param context 上下文
+     * @param version 版本号（tagName）
+     */
+    fun isVersionRejected(context: Context, version: String): Boolean {
+        return try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.getString(KEY_REJECTED_VERSION, null) == version
+        } catch (e: Exception) {
+            Log.e(TAG, "读取拒绝版本失败：${e.message}", e)
+            false
+        }
+    }
+
+    /**
+     * 记录用户拒绝更新的版本号（v51 新增）。
+     *
+     * 调用时机：用户在"是否更新"弹窗中选择"暂不更新"。
+     * 记录后 [isVersionRejected] 对该版本返回 true，自动检查不再提示。
+     *
+     * @param context 上下文
+     * @param version 用户拒绝的版本号
+     */
+    fun declineUpdate(context: Context, version: String) {
+        try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit().putString(KEY_REJECTED_VERSION, version).apply()
+            Log.i(TAG, "用户拒绝更新：$version，同版本不再自动提示")
+        } catch (e: Exception) {
+            Log.e(TAG, "记录拒绝版本失败：${e.message}", e)
+        }
+    }
+
+    /**
+     * 持久化"待确认更新"信息并推送 UI 总线事件（v51 新增）。
+     *
+     * 调用时机：检查到新版本时（Worker 后台检查 / 设置页手动检查）统一入口。
+     * 行为：
+     * 1. 持久化 version / downloadUrl / releaseNotes（进程被杀后 App 启动仍能恢复弹窗）
+     * 2. 向 [UpdateProgressBus] 推送 [UpdateProgressBus.UpdateProgress.AskToUpdate]，
+     *    App 在前台时 UI 立即弹出"是否更新"确认弹窗
+     * 3. 若用户已拒绝过该版本，直接跳过（自动检查场景），手动检查不受限
+     *
+     * @param context 上下文
+     * @param result 检查结果（必须为 [UpdateResult.NewVersionAvailable]）
+     * @param honorRejection 是否尊重用户拒绝记录（true=自动检查，false=手动检查）
+     */
+    fun promptNewVersion(
+        context: Context,
+        result: UpdateResult.NewVersionAvailable,
+        honorRejection: Boolean
+    ) {
+        if (honorRejection && isVersionRejected(context, result.tagName)) {
+            Log.i(TAG, "用户已拒绝版本 ${result.tagName}，自动检查不再提示")
+            return
+        }
+        try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit()
+                .putString(KEY_PENDING_CONFIRM_VERSION, result.tagName)
+                .putString(KEY_PENDING_CONFIRM_URL, result.downloadUrl)
+                .putString(KEY_PENDING_CONFIRM_NOTES, result.releaseNotes)
+                .apply()
+            // 推送 UI 总线事件：App 在前台时立即弹确认弹窗
+            UpdateProgressBus.emit(
+                UpdateProgressBus.UpdateProgress.AskToUpdate(
+                    version = result.tagName,
+                    releaseNotes = result.releaseNotes
+                )
+            )
+            Log.i(TAG, "已持久化待确认更新：${result.tagName}，等待用户选择")
+        } catch (e: Exception) {
+            Log.e(TAG, "持久化待确认更新失败：${e.message}", e)
+        }
+    }
+
+    /**
+     * 读取"待确认更新"信息（不消费，v51 新增）。
+     *
+     * 调用时机：App 启动时检查，若存在待确认更新则弹"是否更新"确认弹窗
+     * （场景：进程被杀后 Worker 已持久化，重启后恢复提示）。
+     *
+     * @return 待确认更新信息；null 表示无
+     */
+    fun getPendingUpdate(context: Context): PendingUpdate? {
+        return try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val version = prefs.getString(KEY_PENDING_CONFIRM_VERSION, null) ?: return null
+            val url = prefs.getString(KEY_PENDING_CONFIRM_URL, null)
+            if (url.isNullOrBlank()) return null
+            PendingUpdate(
+                version = version,
+                downloadUrl = url,
+                releaseNotes = prefs.getString(KEY_PENDING_CONFIRM_NOTES, "") ?: ""
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "读取待确认更新失败：${e.message}", e)
+            null
+        }
+    }
+
+    /**
+     * 清除"待确认更新"信息（v51 新增）。
+     *
+     * 调用时机：用户在确认弹窗中做出选择（是/否）之后。
+     */
+    fun clearPendingUpdate(context: Context) {
+        try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit()
+                .remove(KEY_PENDING_CONFIRM_VERSION)
+                .remove(KEY_PENDING_CONFIRM_URL)
+                .remove(KEY_PENDING_CONFIRM_NOTES)
+                .apply()
+            Log.d(TAG, "已清除待确认更新信息")
+        } catch (e: Exception) {
+            Log.e(TAG, "清除待确认更新失败：${e.message}", e)
+        }
+    }
+
+    /**
+     * 用户确认更新：投递后台下载任务（v51 新增）。
+     *
+     * 调用时机：用户在"是否更新"弹窗中选择"是"。
+     * 行为：读取待确认更新信息，投递 [UpdateCheckWorker] 纯下载任务
+     * （带 [KEY_DOWNLOAD_URL] + [KEY_DOWNLOAD_VERSION]），
+     * 下载进度 / 完成 / 失败继续走现有 [UpdateProgressBus] + 通知链路。
+     * 同时清除待确认信息，避免重复投递。
+     *
+     * @param context 上下文
+     * @return true 投递成功；false 无待确认更新或投递失败
+     */
+    fun startDownload(context: Context): Boolean {
+        val pending = getPendingUpdate(context) ?: run {
+            Log.w(TAG, "startDownload 失败：无待确认更新信息")
+            return false
+        }
+        // 先清除待确认信息（无论投递是否成功，用户已做出选择）
+        clearPendingUpdate(context)
+        try {
+            val constraints = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.UNMETERED)  // 与检查任务一致，仅 Wi-Fi 下载
+                .build()
+
+            val downloadRequest = OneTimeWorkRequestBuilder<UpdateCheckWorker>()
+                .setConstraints(constraints)
+                .setInputData(
+                    workDataOf(
+                        KEY_DOWNLOAD_URL to pending.downloadUrl,
+                        KEY_DOWNLOAD_VERSION to pending.version
+                    )
+                )
+                .build()
+
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                ONESHOT_WORK_NAME,
+                ExistingWorkPolicy.REPLACE,
+                downloadRequest
+            )
+            Log.i(TAG, "用户确认更新 ${pending.version}，已投递下载任务")
+            return true
+        } catch (e: Exception) {
+            Log.e(TAG, "投递下载任务失败：${e.message}", e)
+            return false
         }
     }
 }

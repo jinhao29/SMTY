@@ -41,6 +41,14 @@ val signingProps: Properties = Properties().apply {
     }
 }
 
+// === P0 修复：签名密码从环境变量注入，移除 keystore.properties 中的明文密码 ===
+// - 优先读环境变量 KEYSTORE_PASSWORD / KEY_PASSWORD（CI Secrets 注入）
+// - 本地开发 fallback 到 keystore.properties（该文件已被 .gitignore 忽略，不提交）
+val storePassword: String = System.getenv("KEYSTORE_PASSWORD")
+    ?: signingProps.getProperty("storePassword", "")
+val keyPassword: String = System.getenv("KEY_PASSWORD")
+    ?: signingProps.getProperty("keyPassword", "")
+
 android {
     namespace = "com.shangmentiyu.sportscoach"
     compileSdk = 35
@@ -73,9 +81,9 @@ android {
         if (hasSigningProps) {
             create("release") {
                 storeFile = file(signingProps.getProperty("storeFile", "keystore.jks"))
-                storePassword = signingProps.getProperty("storePassword")
+                storePassword = storePassword
                 keyAlias = signingProps.getProperty("keyAlias")
-                keyPassword = signingProps.getProperty("keyPassword")
+                keyPassword = keyPassword
                 // 启用全签名方案，兼容 Android 5.0+ 至最新版本
                 enableV1Signing = true   // JAR signing（Android 7.0 以下兼容）
                 enableV2Signing = true   // APK Signature Scheme v2（Android 7.0+）

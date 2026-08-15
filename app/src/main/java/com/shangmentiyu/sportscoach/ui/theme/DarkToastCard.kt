@@ -1,10 +1,5 @@
 package com.shangmentiyu.sportscoach.ui.theme
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -15,7 +10,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
@@ -121,42 +115,5 @@ fun DarkToastCard(
                 )
             }
         }
-    }
-}
-
-/**
- * 深色 Toast 卡片 + 进入/退出动画包装器。
- *
- * 用于需要显示/隐藏切换的场景，带从顶部滑入/滑出动画。
- *
- * @param visible 是否显示
- * @param title 主标题
- * @param description 描述文本（可选）
- * @param actionText 交互文字（可选）
- * @param onActionClick 交互回调（可选）
- * @param onDismiss 关闭回调
- */
-@Composable
-fun AnimatedDarkToastCard(
-    visible: Boolean,
-    title: String,
-    description: String? = null,
-    actionText: String? = null,
-    onActionClick: (() -> Unit)? = null,
-    onDismiss: () -> Unit
-) {
-    AnimatedVisibility(
-        visible = visible,
-        enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
-        exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut()
-    ) {
-        DarkToastCard(
-            title = title,
-            description = description,
-            actionText = actionText,
-            onActionClick = onActionClick,
-            onDismiss = onDismiss,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-        )
     }
 }

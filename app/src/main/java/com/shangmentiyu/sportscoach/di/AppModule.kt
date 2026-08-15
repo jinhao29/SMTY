@@ -1,7 +1,7 @@
 package com.shangmentiyu.sportscoach.di
 
 import android.app.Application
-import com.shangmentiyu.sportscoach.core.MomentUploader
+import com.shangmentiyu.sportscoach.app.framework.MomentUploader
 import com.shangmentiyu.sportscoach.data.db.AppDatabase
 import com.shangmentiyu.sportscoach.data.db.ArchivedLessonDao
 import com.shangmentiyu.sportscoach.data.repo.AuditLogRepository
@@ -72,6 +72,7 @@ val appModule = module {
     single { get<AppDatabase>().dietDao() }
     single { get<AppDatabase>().archivedLessonDao() }
     single { get<AppDatabase>().auditLogDao() }
+    single { get<AppDatabase>().signInDao() }
 
     // === 仓库层 ===
     single { AuditLogRepository(get(), get()) }
@@ -83,7 +84,8 @@ val appModule = module {
             get(), get(), get(), get(),
             get<ArchivedLessonDao>(), get<AppDatabase>(),
             get<ScheduleRepository>(), get<ScheduleQueryRepository>(),
-            get<TrainingCycleRepository>(), get<StageSummaryRepository>()
+            get<TrainingCycleRepository>(), get<StageSummaryRepository>(),
+            get<com.shangmentiyu.sportscoach.data.db.SignInDao>()
         )
     }
     single { LessonPackageRepository(get(), get(), get()) }

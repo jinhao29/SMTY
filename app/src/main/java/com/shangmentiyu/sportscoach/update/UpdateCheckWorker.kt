@@ -8,6 +8,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.shangmentiyu.sportscoach.app.framework.NotificationUtils
 
 /**
  * 后台更新检查 Worker（WorkManager 协程 Worker）。
@@ -35,6 +36,7 @@ class UpdateCheckWorker(
         private const val NOTIFICATION_CHANNEL_NAME = "应用更新"
         private const val NOTIFICATION_ID_DOWNLOADING = 1001
         private const val NOTIFICATION_ID_READY = 1002
+        private const val NOTIFICATION_ID_NEW_VERSION = 1003
     }
 
     /**
@@ -45,6 +47,18 @@ class UpdateCheckWorker(
 
     override suspend fun doWork(): Result {
         Log.d(TAG, ">> UpdateCheckWorker.doWork 入口：retryCount=$currentRetryCount")
+
+        // === v51：下载模式 ===
+        // 传入 KEY_DOWNLOAD_URL 时跳过版本检查，直接下载（用户确认更新后触发）
+        val downloadUrl = inputData.getString(UpdateManager.KEY_DOWNLOAD_URL)
+        if (!downloadUrl.isNullOrBlank()) {
+            val downloadVersion = inputData.getString(UpdateManager.KEY_DOWNLOAD_VERSION)
+                ?: "新版本"
+            Log.d(TAG, ">> 下载模式：version=$downloadVersion")
+            return downloadUpdate(downloadUrl, downloadVersion)
+        }
+
+        // === 检查模式：只检查 + 提示，不再自动下载 ===
         return try {
             // 1. 检查更新
             val updateResult = UpdateChecker.checkForUpdate()
@@ -58,68 +72,19 @@ class UpdateCheckWorker(
                     Result.success()
                 }
                 is UpdateResult.NewVersionAvailable -> {
-                    // 2. 有新版本，发送下载中通知（可点击打开 App）
-                    Log.d(TAG, "Worker: 发现新版本 ${updateResult.tagName}，开始下载 APK")
-                    createNotificationChannel()
-                    showDownloadingNotification(updateResult.tagName)
-                    // 同步推送 UI 进度总线：App 在前台时立即显示下载进度浮层
-                    UpdateProgressBus.emit(
-                        UpdateProgressBus.UpdateProgress.Downloading(0, updateResult.tagName)
+                    // === v51：发现新版本不再自动下载，先弹窗询问用户 ===
+                    // 1. 持久化待确认更新 + 推送 UI 总线事件（App 在前台立即弹确认框）
+                    // 2. 发送"发现新版本"通知（App 在后台时提醒，点击打开 App 后弹确认框）
+                    Log.d(TAG, "Worker: 发现新版本 ${updateResult.tagName}，先询问用户是否更新")
+                    UpdateManager.promptNewVersion(
+                        applicationContext,
+                        updateResult,
+                        honorRejection = true
                     )
-
-                    // 3. 下载 APK（带进度回调 + 断点续传）
-                    // === v33 优化：downloadApk 现在会抛 DownloadException ===
-                    // 用一个标志变量记录是否下载失败，避免在 try 中 return（Kotlin 不允许 return@try）
-                    var downloadFailedMessage: String? = null
-                    var success = false
-                    try {
-                        val apkFile = UpdateInstaller.getApkFile(applicationContext)
-                        Log.d(TAG, "Worker: APK 目标路径 = ${apkFile.absolutePath}")
-                        success = UpdateChecker.downloadApk(
-                            downloadUrl = updateResult.downloadUrl,
-                            destFile = apkFile,
-                            onProgress = { progress ->
-                                updateDownloadingProgress(progress)
-                                // 同步 UI 进度总线：每次进度回调都推送，UI 实时刷新
-                                UpdateProgressBus.emit(
-                                    UpdateProgressBus.UpdateProgress.Downloading(
-                                        progress, updateResult.tagName
-                                    )
-                                )
-                            }
-                        )
-                    } catch (e: UpdateChecker.DownloadException) {
-                        // === 功能 4：网络不稳定 / 下载失败友好提示 ===
-                        // userMessage 已是面向用户的文案，直接展示到通知与 UI
-                        Log.e(TAG, "Worker: 下载失败 DownloadException: ${e.userMessage}", e)
-                        downloadFailedMessage = e.userMessage
-                        success = false
-                    }
-
-                    if (success) {
-                        // 4. 下载完成，发送可安装通知（点击直接跳转安装界面）
-                        Log.d(TAG, "Worker: 下载完成，发送可安装通知")
-                        showReadyNotification(updateResult.tagName)
-                        // 同步 UI 进度总线：UI 据此隐藏进度浮层并触发安装
-                        UpdateProgressBus.emit(
-                            UpdateProgressBus.UpdateProgress.Done(updateResult.tagName)
-                        )
-                        // 成功路径：取消可能存在的失败重试链
-                        UpdateManager.cancelRetryChain(applicationContext)
-                        Result.success()
-                    } else {
-                        // 下载失败：发送失败通知 + 排程 1h/6h 后台重试
-                        // 断点续传会在下次重试时继续下载，不重新开始
-                        val failMsg = downloadFailedMessage
-                            ?: "下载失败，将在 1 小时后自动重试"
-                        Log.w(TAG, "Worker: 下载失败，排程重试。failMsg=$failMsg")
-                        showFailedNotification(failMsg)
-                        UpdateProgressBus.emit(
-                            UpdateProgressBus.UpdateProgress.Failed(failMsg)
-                        )
-                        UpdateManager.scheduleRetryIfNeeded(applicationContext, currentRetryCount)
-                        Result.failure()
-                    }
+                    showNewVersionNotification(updateResult.tagName)
+                    // 自动检查链路到此结束（是否下载由用户决定），无需重试
+                    UpdateManager.cancelRetryChain(applicationContext)
+                    Result.success()
                 }
                 is UpdateResult.Error -> {
                     // 检查失败：排程 1h/6h 后台重试
@@ -145,21 +110,79 @@ class UpdateCheckWorker(
         }
     }
 
-    /** 创建通知渠道（Android 8.0+ 要求） */
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                NOTIFICATION_CHANNEL_ID,
-                NOTIFICATION_CHANNEL_NAME,
-                NotificationManager.IMPORTANCE_DEFAULT
-            ).apply {
-                description = "应用更新检测与下载通知"
-                enableVibration(true)
+    /**
+     * 下载并安装新版本（v51 抽出的下载模式核心逻辑，供检查模式与下载模式复用）。
+     *
+     * @param downloadUrl APK 下载直链
+     * @param version 目标版本号
+     */
+    private suspend fun downloadUpdate(downloadUrl: String, version: String): Result {
+        return try {
+            Log.d(TAG, "Worker: 开始下载 APK $version")
+            NotificationUtils.createChannel(applicationContext, NOTIFICATION_CHANNEL_ID, NOTIFICATION_CHANNEL_NAME, "应用更新检测与下载通知", enableVibration = true)
+            showDownloadingNotification(version)
+            // 同步推送 UI 进度总线：App 在前台时立即显示下载进度浮层
+            UpdateProgressBus.emit(
+                UpdateProgressBus.UpdateProgress.Downloading(0, version)
+            )
+
+            // 下载 APK（带进度回调 + 断点续传）
+            var downloadFailedMessage: String? = null
+            var success = false
+            try {
+                val apkFile = UpdateInstaller.getApkFile(applicationContext)
+                Log.d(TAG, "Worker: APK 目标路径 = ${apkFile.absolutePath}")
+                success = UpdateChecker.downloadApk(
+                    downloadUrl = downloadUrl,
+                    destFile = apkFile,
+                    onProgress = { progress ->
+                        updateDownloadingProgress(progress)
+                        // 同步 UI 进度总线：每次进度回调都推送，UI 实时刷新
+                        UpdateProgressBus.emit(
+                            UpdateProgressBus.UpdateProgress.Downloading(
+                                progress, version
+                            )
+                        )
+                    }
+                )
+            } catch (e: UpdateChecker.DownloadException) {
+                // 网络不稳定 / 下载失败友好提示：userMessage 已是面向用户的文案
+                Log.e(TAG, "Worker: 下载失败 DownloadException: ${e.userMessage}", e)
+                downloadFailedMessage = e.userMessage
+                success = false
             }
-            val manager = applicationContext.getSystemService(
-                Context.NOTIFICATION_SERVICE
-            ) as NotificationManager
-            manager.createNotificationChannel(channel)
+
+            if (success) {
+                // 下载完成，发送可安装通知（点击打开 App，由 App 内弹窗确认安装）
+                Log.d(TAG, "Worker: 下载完成，发送可安装通知")
+                showReadyNotification(version)
+                // 同步 UI 进度总线：UI 据此隐藏进度浮层并触发安装确认弹窗
+                UpdateProgressBus.emit(
+                    UpdateProgressBus.UpdateProgress.Done(version)
+                )
+                // 成功路径：取消可能存在的失败重试链
+                UpdateManager.cancelRetryChain(applicationContext)
+                Result.success()
+            } else {
+                // 下载失败：发送失败通知 + 排程 1h/6h 后台重试
+                // 断点续传会在下次重试时继续下载，不重新开始
+                val failMsg = downloadFailedMessage
+                    ?: "下载失败，将在 1 小时后自动重试"
+                Log.w(TAG, "Worker: 下载失败，排程重试。failMsg=$failMsg")
+                showFailedNotification(failMsg)
+                UpdateProgressBus.emit(
+                    UpdateProgressBus.UpdateProgress.Failed(failMsg)
+                )
+                UpdateManager.scheduleRetryIfNeeded(applicationContext, currentRetryCount)
+                Result.failure()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Worker: downloadUpdate 未捕获异常: ${e.javaClass.simpleName}: ${e.message}", e)
+            UpdateManager.scheduleRetryIfNeeded(applicationContext, currentRetryCount)
+            UpdateProgressBus.emit(
+                UpdateProgressBus.UpdateProgress.Failed(e.message ?: "更新下载异常，将在 1 小时后自动重试")
+            )
+            Result.failure()
         }
     }
 
@@ -206,6 +229,30 @@ class UpdateCheckWorker(
             Context.NOTIFICATION_SERVICE
         ) as NotificationManager
         manager.notify(NOTIFICATION_ID_DOWNLOADING, builder.build())
+    }
+
+    /**
+     * "发现新版本"通知（v51 新增）。
+     *
+     * 场景：App 在后台时 Worker 检查到新版本，无法直接弹窗，
+     * 发送通知提醒用户；点击通知打开 App，App 内弹出"是否更新"确认框。
+     */
+    private fun showNewVersionNotification(version: String) {
+        NotificationUtils.createChannel(applicationContext, NOTIFICATION_CHANNEL_ID, NOTIFICATION_CHANNEL_NAME, "应用更新检测与下载通知", enableVibration = true)
+        val manager = applicationContext.getSystemService(
+            Context.NOTIFICATION_SERVICE
+        ) as NotificationManager
+        // 若已有同版本通知，避免重复叠加
+        manager.cancel(NOTIFICATION_ID_NEW_VERSION)
+
+        val builder = NotificationCompat.Builder(applicationContext, NOTIFICATION_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setContentTitle("发现新版本 $version")
+            .setContentText("点击查看更新详情")
+            .setAutoCancel(true)
+            .setContentIntent(UpdateInstaller.createOpenAppPendingIntent(applicationContext))
+
+        manager.notify(NOTIFICATION_ID_NEW_VERSION, builder.build())
     }
 
     /**

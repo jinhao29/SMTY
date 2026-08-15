@@ -44,7 +44,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.shangmentiyu.sportscoach.core.ReportGenerator
+import com.shangmentiyu.sportscoach.data.internal.ReportGenerator
 import com.shangmentiyu.sportscoach.data.model.ParentReport
 import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.theme.GlassCard

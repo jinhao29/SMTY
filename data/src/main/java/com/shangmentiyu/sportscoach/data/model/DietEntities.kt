@@ -1,6 +1,5 @@
 package com.shangmentiyu.sportscoach.data.model
 
-import androidx.compose.runtime.Stable
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -18,7 +17,6 @@ import androidx.room.PrimaryKey
  *
  * 性能：v26 优化2添加 [Stable] 注解，作为 Compose State 使用时避免无效重组。
  */
-@Stable
 @Entity(tableName = "diet_templates")
 data class DietTemplateEntity(
     @PrimaryKey val id: String,                  // 模板 ID：tpl_regular / tpl_training / tpl_fat_loss
@@ -44,7 +42,6 @@ data class DietTemplateEntity(
  *
  * 性能：v26 优化2添加 [Stable] 注解，作为 Compose State 使用时避免无效重组。
  */
-@Stable
 @Entity(tableName = "student_diet_records")
 data class StudentDietRecord(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -73,7 +70,6 @@ data class StudentDietRecord(
  *
  * 性能：v26 优化2添加 [Stable] 注解，作为 Compose State 使用时避免无效重组。
  */
-@Stable
 data class MealItem(
     val category: String = "",                   // 类别：主食 / 优质蛋白 / 蔬果 / 能量补充 / 高蛋白肉类 / 绿叶蔬菜 等
     val content: String = ""                     // 具体内容：如"全麦面包 2 片"

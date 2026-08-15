@@ -1,6 +1,7 @@
 package com.shangmentiyu.sportscoach.core
 
 import com.google.common.truth.Truth.assertThat
+import com.shangmentiyu.sportscoach.data.internal.BackupManager
 import org.junit.Test
 import java.io.File
 import java.nio.file.Files

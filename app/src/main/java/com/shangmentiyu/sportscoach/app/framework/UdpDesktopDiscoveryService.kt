@@ -1,4 +1,4 @@
-package com.shangmentiyu.sportscoach.core
+package com.shangmentiyu.sportscoach.app.framework
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -105,7 +105,7 @@ class UdpDesktopDiscoveryService : Service() {
         super.onCreate()
         Log.i(TAG, "UdpDesktopDiscoveryService onCreate")
 
-        createNotificationChannel()
+        NotificationUtils.createChannel(this, CHANNEL_ID_FOREGROUND, "局域网设备发现", "监听桌面端在线状态，显示绿色指示灯", importance = NotificationManager.IMPORTANCE_LOW, showBadge = false)
 
         // 启动前台通知（Android 8.0+ 要求前台 Service 启动后 5 秒内调用 startForeground）
         startForeground(FOREGROUND_NOTIFICATION_ID, buildForegroundNotification())
@@ -198,22 +198,6 @@ class UdpDesktopDiscoveryService : Service() {
             Log.d(TAG, "收到桌面端心跳：$host:$port")
         } catch (e: Exception) {
             Log.w(TAG, "广播报文解析失败：${e.message}")
-        }
-    }
-
-    /** 创建通知渠道（Android 8.0+ 必需） */
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID_FOREGROUND,
-                "局域网设备发现",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "监听桌面端在线状态，显示绿色指示灯"
-                setShowBadge(false)
-            }
-            val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-            nm.createNotificationChannel(channel)
         }
     }
 

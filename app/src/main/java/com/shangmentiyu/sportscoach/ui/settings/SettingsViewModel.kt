@@ -8,8 +8,8 @@ import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.room.withTransaction
-import com.shangmentiyu.sportscoach.core.AutoBackupScheduler
-import com.shangmentiyu.sportscoach.core.BackupManager
+import com.shangmentiyu.sportscoach.data.internal.AutoBackupScheduler
+import com.shangmentiyu.sportscoach.data.internal.BackupManager
 import com.shangmentiyu.sportscoach.core.ProgressState
 import com.shangmentiyu.sportscoach.data.repo.BackupRepository
 import com.shangmentiyu.sportscoach.data.repo.LessonRepository
@@ -23,6 +23,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -121,6 +123,12 @@ class SettingsViewModel(
     fun fixHistoricalScheduleErrors() {
         safeLaunch {
             try {
+                // === v54：先修复旧版自动排课在排课阶段错误扣减的课时包余额 ===
+                // 旧版自动排课在排课时即增加 usedLessons + 设置 Lesson.packageId，
+                // 导致排课与消课未分离。先回退余额，后续排课修正才能基于正确的剩余额度计算。
+                val balanceFix = withContext(Dispatchers.IO) {
+                    opRepo.fixPrematureBalanceDeduction()
+                }
                 val result = withContext(Dispatchers.IO) {
                     opRepo.fixHistoricalScheduleErrors()
                 }
@@ -129,6 +137,10 @@ class SettingsViewModel(
                     append("（删除排课 ${result.deletedSchedules} 条、")
                     append("占位课时 ${result.deletedPlaceholders} 条，")
                     append("重新生成 ${result.regeneratedLessons} 条）")
+                    if (balanceFix.fixedPackageCount > 0 || balanceFix.fixedLessonCount > 0) {
+                        append("\n已回退 ${balanceFix.fixedPackageCount} 个课时包的提前扣费，")
+                        append("清除 ${balanceFix.fixedLessonCount} 条占位课时的扣费归属")
+                    }
                 }
             } catch (e: Exception) {
                 android.util.Log.e("SettingsVM",
@@ -146,16 +158,40 @@ class SettingsViewModel(
     private val _statusMessage = MutableStateFlow<String?>(null)
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
 
+    // === v32：清理无效课表结果（null=无待展示结果，非负=清理数量，供设置页弹窗） ===
+    private val _cleanupResult = MutableStateFlow<Int?>(null)
+    val cleanupResult: StateFlow<Int?> = _cleanupResult.asStateFlow()
+    fun clearCleanupResult() { _cleanupResult.value = null }
+
+    /**
+     * === v32：清理无效课表（仅设置页手动触发） ===
+     *
+     * 仅删除已过期（date < 今天）且从未签到（status = '待签到'）的占位课时，
+     * 不删除未来课表，不删除已签到/已签退的真实记录。
+     * 清理数量通过 [_cleanupResult] 供 UI 弹窗展示。
+     */
+    fun cleanupInvalidLessons() {
+        safeLaunch {
+            try {
+                val deleted = withContext(Dispatchers.IO) { opRepo.clearExpiredUnsignedLessons() }
+                _cleanupResult.value = deleted
+            } catch (e: Exception) {
+                android.util.Log.e("SettingsVM", "清理无效课表失败：${e.message}", e)
+                _statusMessage.value = "清理失败：${e.message ?: "未知异常"}"
+            }
+        }
+    }
+
     /**
      * === v24 优化4：全局协程异常捕获 ===
      *
      * 应用级异常处理器：拦截 Excel 导出 / 备份 / 恢复过程中可能出现的
      * IO 异常、JSON 解析异常、SQLiteDatabaseLockedException 等，避免 App 闪退。
-     * - 异常落盘：通过 [com.shangmentiyu.sportscoach.core.CrashHandler.writeLog]
+     * - 异常落盘：通过 [com.shangmentiyu.sportscoach.app.framework.CrashHandler.writeLog]
      * - UI 反馈：通过 [_statusMessage] 推送轻量提示
      */
     private val appExceptionHandler =
-        com.shangmentiyu.sportscoach.core.CoroutineExt.createAppExceptionHandler(
+        com.shangmentiyu.sportscoach.app.framework.CoroutineExt.createAppExceptionHandler(
             toastSink = _statusMessage,
             contextTag = "SettingsViewModel"
         )
@@ -396,12 +432,14 @@ class SettingsViewModel(
     override fun onCleared() {
         super.onCleared()
         // ViewModel 销毁时确保最后一次改动已写库：
-        // 优先使用 pendingCoach（用户最近输入但尚未写库的值）
+        // 使用 NonCancellable 保证写库协程在 scope.cancel() 后仍能完成
         saveJob?.cancel()
         val toSave = pendingCoach ?: coach.value
-        saveScope.launch {
+        saveScope.launch(NonCancellable) {
             settingsRepo.setCoach(toSave)
         }
+        // 取消 saveScope 防止内存泄漏，NonCancellable 协程不受影响
+        saveScope.cancel()
     }
 
     /**
@@ -1173,7 +1211,7 @@ class SettingsViewModel(
      * - null：未检测到桌面端
      * - 非 null：包含桌面端 IP 与最后心跳时间
      *
-     * 数据来源：[com.shangmentiyu.sportscoach.core.UdpDesktopDiscoveryService] 收到广播后写入
+     * 数据来源：[com.shangmentiyu.sportscoach.app.framework.UdpDesktopDiscoveryService] 收到广播后写入
      */
     private val _desktopConnection = MutableStateFlow<DesktopConnection?>(null)
     val desktopConnection: StateFlow<DesktopConnection?> = _desktopConnection.asStateFlow()

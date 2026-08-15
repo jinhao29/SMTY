@@ -63,41 +63,26 @@ import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 internal fun StudentListItem(
     student: Student,
     remaining: Int,
-    nextLesson: Lesson?,
+    expireDate: String?,
     onSign: () -> Unit,
     onGrowth: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
-    onEditNextLesson: () -> Unit,
     onHeightPrediction: () -> Unit = {},
     onDietManage: () -> Unit = {}
 ) {
     // === 性能优化：用 remember 缓存字符串/数值计算，避免每次重组重算 ===
-    val basicInfo = remember(student.school, student.age, student.gender, student.grade) {
-        val gradeLabel = com.shangmentiyu.sportscoach.core.Standards.gradeLabel(student.grade)
+    val infoLine = remember(student.grade, student.phone) {
+        val gradeLabel = com.shangmentiyu.sportscoach.core.Standards.gradeFullLabel(student.grade)
         buildString {
-            if (student.school.isNotBlank()) append(student.school)
-            if (student.age > 0) {
+            if (gradeLabel.isNotBlank()) append(gradeLabel)
+            if (student.phone.isNotBlank()) {
                 if (isNotEmpty()) append(" · ")
-                append("${student.age}岁")
-            }
-            if (student.gender.isNotBlank()) {
-                if (isNotEmpty()) append(" · ")
-                append(student.gender)
-            }
-            if (gradeLabel.isNotEmpty()) {
-                if (isNotEmpty()) append(" · ")
-                append(gradeLabel)
+                append(student.phone)
             }
         }
     }
     val avatarBg = avatarColorFor(student.name)
-    val bmiValue = remember(student.bmi, student.heightCm, student.weightKg) {
-        if (student.bmi > 0f) student.bmi
-        else if (student.heightCm > 0 && student.weightKg > 0f)
-            student.weightKg / ((student.heightCm / 100f) * (student.heightCm / 100f))
-        else 0f
-    }
     // 颜色提取，避免每次调用函数
     val onSurfaceColor = appOnSurface()
     val onSurfaceVariantColor = appOnSurfaceVariant()
@@ -158,11 +143,11 @@ internal fun StudentListItem(
             RemainingBadge(remaining)
         }
 
-        // === 第二行：学校 · 年龄 · 性别 · 年级 ===
-        if (basicInfo.isNotBlank()) {
+        // === 第二行：年级 · 联系方式 ===
+        if (infoLine.isNotBlank()) {
             Spacer(Modifier.height(6.dp))
             Text(
-                basicInfo,
+                infoLine,
                 style = MaterialTheme.typography.bodySmall,
                 color = onSurfaceVariantColor,
                 maxLines = 1,
@@ -170,60 +155,17 @@ internal fun StudentListItem(
             )
         }
 
-        // === 第三行：下一节课信息 ===
-        if (nextLesson != null) {
-            Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.Schedule, contentDescription = null,
-                    tint = primaryColor,
-                    modifier = Modifier.size(14.dp))
-                Spacer(Modifier.size(4.dp))
-                Text("下一节：${nextLesson.date} ${nextLesson.time}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = primaryColor)
-                if (!nextLesson.location.isNullOrBlank()) {
-                    Spacer(Modifier.size(8.dp))
-                    Icon(Icons.Outlined.LocationOn, contentDescription = null,
-                        tint = primaryColor,
-                        modifier = Modifier.size(14.dp))
-                    Spacer(Modifier.size(2.dp))
-                    Text(nextLesson.location,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = primaryColor,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false))
-                }
-                Spacer(Modifier.weight(1f))
-                Text(
-                    "编辑",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = primaryColor,
-                    modifier = Modifier.clickable(onClick = onEditNextLesson)
-                )
-            }
+        // === 第三行：到期日 ===
+        if (!expireDate.isNullOrBlank()) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "到期：$expireDate",
+                style = MaterialTheme.typography.labelMedium,
+                color = primaryColor
+            )
         }
 
-        // === 第四行：身高体重BMI chips ===
-        if (student.heightCm > 0 || student.weightKg > 0f || bmiValue > 0f) {
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (student.heightCm > 0) {
-                    MetricChip("${student.heightCm}cm",
-                        com.shangmentiyu.sportscoach.ui.theme.LightPrimary)
-                }
-                if (student.weightKg > 0f) {
-                    MetricChip("${student.weightKg}kg",
-                        com.shangmentiyu.sportscoach.ui.theme.LightPrimary)
-                }
-                if (bmiValue > 0f) {
-                    MetricChip("BMI ${"%.1f".format(bmiValue)}",
-                        com.shangmentiyu.sportscoach.ui.theme.LightPrimary)
-                }
-            }
-        }
-
-        // === 第五行：底部操作按钮组（编辑 / 删除 / 签到）===
+        // === 第四行：底部操作按钮组（编辑 / 删除 / 签到）===
         Spacer(Modifier.height(12.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),

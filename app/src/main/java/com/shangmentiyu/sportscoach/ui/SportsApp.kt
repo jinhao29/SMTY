@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Analytics
 import androidx.compose.material.icons.outlined.Computer
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Home
@@ -59,7 +60,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.shangmentiyu.sportscoach.core.ScheduleReminderWorker
+import com.shangmentiyu.sportscoach.app.framework.ScheduleReminderWorker
 import com.shangmentiyu.sportscoach.ui.growth.GrowthScreen
 import com.shangmentiyu.sportscoach.ui.home.AddStudentScreen
 import com.shangmentiyu.sportscoach.ui.home.HomeScreen
@@ -69,6 +70,8 @@ import com.shangmentiyu.sportscoach.ui.heightprediction.HeightPredictionScreen
 import com.shangmentiyu.sportscoach.ui.lesson.LessonScreen
 import com.shangmentiyu.sportscoach.ui.score.ScoreScreen
 import com.shangmentiyu.sportscoach.ui.settings.SettingsScreen
+import com.shangmentiyu.sportscoach.ui.sportcategory.SportCategoryScreen
+import com.shangmentiyu.sportscoach.ui.sportcategory.SportStandardDetailScreen
 import com.shangmentiyu.sportscoach.ui.settings.SettingsViewModel
 import com.shangmentiyu.sportscoach.ui.summary.SummaryScreen
 import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
@@ -77,7 +80,6 @@ import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
 import com.shangmentiyu.sportscoach.ui.theme.appOnSuccessContainer
 import com.shangmentiyu.sportscoach.ui.theme.appSuccessContainer
 import com.shangmentiyu.sportscoach.ui.training.TrainingPlanScreen
-import com.shangmentiyu.sportscoach.ui.operation.OperationScreen
 import com.shangmentiyu.sportscoach.ui.schedule.ScheduleScreen
 import com.shangmentiyu.sportscoach.update.UpdateInstaller
 import com.shangmentiyu.sportscoach.update.UpdateManager
@@ -101,18 +103,31 @@ data class BottomItem(val route: String, val label: String, val icon: androidx.c
  * - 原代码把 `updateProgress` 订阅放在 SportsApp 顶层，每次进度从 1% → 99% 变化时
  *   都会触发整个 NavHost + FloatingBottomBar 重绘，是主页滑动卡顿的主因之一
  *
- * 行为：
+ * 行为（v51 扩展）：
+ * - [UpdateProgressBus.UpdateProgress.AskToUpdate]：发现新版本，触发外层"是否更新"确认弹窗
  * - [UpdateProgressBus.UpdateProgress.Downloading]：1~99% 显示进度浮层
  * - [UpdateProgressBus.UpdateProgress.Done]：触发外层安装确认弹窗 + 重置总线
  * - [UpdateProgressBus.UpdateProgress.Failed]：短暂提示后重置总线
  * - [UpdateProgressBus.UpdateProgress.Idle]：不渲染
  *
+ * @param onAskToUpdate 发现新版本回调（用于触发外层"是否更新"确认弹窗）
  * @param onDownloadComplete 下载完成回调（用于触发外层 AlertDialog 安装确认弹窗）
  */
 @Composable
-private fun UpdateProgressOverlay(onDownloadComplete: (version: String) -> Unit) {
+private fun UpdateProgressOverlay(
+    onAskToUpdate: (version: String, releaseNotes: String) -> Unit,
+    onDownloadComplete: (version: String) -> Unit
+) {
     val p by UpdateProgressBus.progress.collectAsStateWithLifecycle()
     when (p) {
+        is UpdateProgressBus.UpdateProgress.AskToUpdate -> {
+            val ask = p as UpdateProgressBus.UpdateProgress.AskToUpdate
+            // 用 LaunchedEffect + key(version) 保证每个新版本只触发一次确认弹窗
+            LaunchedEffect(ask.version) {
+                onAskToUpdate(ask.version, ask.releaseNotes)
+                UpdateProgressBus.reset()
+            }
+        }
         is UpdateProgressBus.UpdateProgress.Downloading -> {
             val downloading = p as UpdateProgressBus.UpdateProgress.Downloading
             // 仅在 1~99% 时显示浮层（0% 与 100% 由通知承载，避免闪烁）
@@ -295,8 +310,9 @@ fun SportsApp() {
     val navController = rememberNavController()
     val bottomItems = listOf(
         BottomItem(Routes.HOME, "主页", Icons.Outlined.Home),
-        BottomItem(Routes.SCORE, "成绩查看", Icons.Outlined.SportsScore),
-        BottomItem(Routes.SETTINGS, "设置详情", Icons.Outlined.Settings),
+        BottomItem(Routes.SPORT_CATEGORY, "中考体育", Icons.Outlined.SportsScore),
+        BottomItem(Routes.SCORE, "成绩查看", Icons.Outlined.Analytics),
+        BottomItem(Routes.SETTINGS, "设置", Icons.Outlined.Settings),
     )
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -310,7 +326,7 @@ fun SportsApp() {
     }
     val showBottomBar by remember(currentRoute) {
         derivedStateOf {
-            currentRoute in setOf(Routes.HOME, Routes.SCORE, Routes.SETTINGS)
+            currentRoute in setOf(Routes.HOME, Routes.SPORT_CATEGORY, Routes.SCORE, Routes.SETTINGS)
         }
     }
 
@@ -326,6 +342,15 @@ fun SportsApp() {
     // - pendingInstallVersion：待安装版本号（用于弹窗文案展示）
     var showInstallDialog by remember { mutableStateOf(false) }
     var pendingInstallVersion by remember { mutableStateOf("") }
+
+    // === v51："是否更新"确认弹窗状态（先确认后下载） ===
+    // 检查到新版本后先弹窗询问用户是否更新：
+    // - 点"立即更新" → UpdateManager.startDownload() 触发下载
+    // - 点"暂不更新" → UpdateManager.declineUpdate() 记录拒绝，同版本不再自动提示
+    // - 点外部关闭   → 仅关闭弹窗，不记录拒绝（下次检查还会提示）
+    var showUpdateConfirmDialog by remember { mutableStateOf(false) }
+    var pendingConfirmVersion by remember { mutableStateOf("") }
+    var pendingConfirmNotes by remember { mutableStateOf("") }
 
     // === v28 优化6：订阅首页未签到数与今日排课红点状态 ===
     // 用于底部导航栏主页 Tab 显示数字角标（未签到数）或红点（仅有排课）
@@ -376,6 +401,18 @@ fun SportsApp() {
         }
     }
 
+    // === v51：App 启动时检查"待确认更新"持久化标志 ===
+    // 场景：进程被杀前 Worker 已检查到新版本并持久化待确认信息，
+    // 重启后恢复"是否更新"确认弹窗，保证用户一定能看到更新提示
+    LaunchedEffect(Unit) {
+        val pendingUpdate = UpdateManager.getPendingUpdate(context)
+        if (pendingUpdate != null) {
+            pendingConfirmVersion = pendingUpdate.version
+            pendingConfirmNotes = pendingUpdate.releaseNotes
+            showUpdateConfirmDialog = true
+        }
+    }
+
     // === v28 优化4：监听通知点击 Intent，自动跳转到今日排课页 ===
     // 业务背景：ScheduleReminderWorker 发送的通知点击后会启动 MainActivity，
     // Intent 中带 EXTRA_NAVIGATE_TO = "operation"，SportsApp 读取后跳转
@@ -396,8 +433,7 @@ fun SportsApp() {
     LaunchedEffect(pendingNavigateTarget) {
         when (pendingNavigateTarget) {
             ScheduleReminderWorker.EXTRA_VALUE_OPERATION -> {
-                navController.navigate(Routes.OPERATION) {
-                    // 从主页 Tab 跳过去，主页保留返回栈
+                navController.navigate(Routes.SCHEDULE) {
                     launchSingleTop = true
                 }
             }
@@ -434,7 +470,6 @@ fun SportsApp() {
                     onGrowth = { studentName -> navController.navigate(Routes.growth(studentName)) },
                     onEditStudent = { student -> navController.navigate(Routes.editStudent(student.name)) },
                     onLessonCheckIn = { navController.navigate(Routes.LESSON_CHECKIN) },
-                    onOperation = { navController.navigate(Routes.OPERATION) },
                     onSchedule = { navController.navigate(Routes.SCHEDULE) },
                     onHeightPrediction = { studentName -> navController.navigate(Routes.heightPrediction(studentName)) },
                     onDietManage = { studentName -> navController.navigate(Routes.dietManage(studentName)) }
@@ -560,14 +595,7 @@ fun SportsApp() {
                 )
             }
 
-            // === 运营/排课/签到 ===
-            composable(Routes.OPERATION) {
-                OperationScreen(
-                    onBack = { navController.popBackStack() },
-                    onSign = { _ -> navController.navigate(Routes.LESSON_CHECKIN) },
-                    onOpenLesson = { lessonId -> navController.navigate(Routes.lesson(lessonId)) }
-                )
-            }
+            // === 排课/签到 ===
             composable(Routes.LESSON_CHECKIN) {
                 com.shangmentiyu.sportscoach.ui.lessoncheckin.LessonCheckInScreen(
                     onBack = { navController.popBackStack() },
@@ -604,6 +632,24 @@ fun SportsApp() {
             }
             composable(Routes.BMI_CALCULATOR) {
                 com.shangmentiyu.sportscoach.ui.tools.BmiCalculatorScreen(
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
+            // === 体育中考标准 ===
+            composable(Routes.SPORT_CATEGORY) {
+                SportCategoryScreen(
+                    onBack = { navController.popBackStack() },
+                    onItemClick = { sportId -> navController.navigate(Routes.sportStandardDetail(sportId)) }
+                )
+            }
+            composable(
+                route = Routes.SPORT_STANDARD_DETAIL,
+                arguments = listOf(navArgument("sportId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val sportId = backStackEntry.arguments?.getString("sportId") ?: ""
+                SportStandardDetailScreen(
+                    sportId = sportId,
                     onBack = { navController.popBackStack() }
                 )
             }
@@ -646,6 +692,7 @@ fun SportsApp() {
                 FloatingBottomBar(
                     items = bottomItems,
                     currentRoute = currentRoute,
+                    fabInsertIndex = 2,
                     onNavigate = { route ->
                         navController.navigate(route) {
                             popUpTo(navController.graph.findStartDestination().id) {
@@ -712,11 +759,73 @@ fun SportsApp() {
         // 原代码内联在 SportsApp 顶层 Box 中，每次进度变化触发整树重组
         // 现在 UpdateProgressOverlay 内部独立 collectAsState，重组范围被隔离
         UpdateProgressOverlay(
+            onAskToUpdate = { version, notes ->
+                // 发现新版本：弹出"是否更新"确认弹窗
+                pendingConfirmVersion = version
+                pendingConfirmNotes = notes
+                showUpdateConfirmDialog = true
+            },
             onDownloadComplete = { version ->
                 pendingInstallVersion = version
                 showInstallDialog = true
             }
         )
+
+        // === v51："是否更新"确认弹窗（先确认后下载） ===
+        // 检查到新版本后弹出，用户决定是否下载更新
+        if (showUpdateConfirmDialog) {
+            AlertDialog(
+                onDismissRequest = {
+                    // 点外部关闭：仅关闭弹窗，不记录拒绝（下次检查还会提示）
+                    showUpdateConfirmDialog = false
+                    UpdateManager.clearPendingUpdate(context)
+                },
+                title = {
+                    Text(
+                        text = "发现新版本",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
+                text = {
+                    Column {
+                        Text(text = "发现新版本 $pendingConfirmVersion，是否立即更新？")
+                        if (pendingConfirmNotes.isNotBlank()) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = pendingConfirmNotes.take(200),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                maxLines = 6,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            // 立即更新：触发后台下载（WorkManager 保活 + 断点续传）
+                            showUpdateConfirmDialog = false
+                            UpdateManager.startDownload(context)
+                        }
+                    ) {
+                        Text("立即更新")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            // 暂不更新：记录拒绝版本（同版本不再自动提示），清除待确认信息
+                            showUpdateConfirmDialog = false
+                            UpdateManager.declineUpdate(context, pendingConfirmVersion)
+                            UpdateManager.clearPendingUpdate(context)
+                        }
+                    ) {
+                        Text("暂不更新")
+                    }
+                }
+            )
+        }
 
         // === 安装确认弹窗（无感下载 + 弹窗安装） ===
         // 下载完成后弹出，让用户决定是否立即安装

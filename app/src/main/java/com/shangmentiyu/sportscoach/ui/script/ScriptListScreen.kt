@@ -21,7 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Article
+import androidx.compose.material.icons.automirrored.outlined.Article
 import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -200,7 +200,7 @@ private fun ScriptItemCard(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    Icons.Outlined.Article,
+                    Icons.AutoMirrored.Outlined.Article,
                     contentDescription = null,
                     tint = appPrimary(),
                     modifier = Modifier.size(20.dp)
@@ -252,7 +252,7 @@ private fun EmptyScriptState(modifier: Modifier = Modifier) {
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                Icons.Outlined.Article,
+                Icons.AutoMirrored.Outlined.Article,
                 contentDescription = null,
                 tint = appPrimary(),
                 modifier = Modifier.size(28.dp)

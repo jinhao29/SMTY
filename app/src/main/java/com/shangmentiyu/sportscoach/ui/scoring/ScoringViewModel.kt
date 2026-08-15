@@ -2,7 +2,7 @@ package com.shangmentiyu.sportscoach.ui.scoring
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.shangmentiyu.sportscoach.core.JsonSafe
+import com.shangmentiyu.sportscoach.data.internal.JsonSafe
 import com.shangmentiyu.sportscoach.core.Scorer
 import com.shangmentiyu.sportscoach.core.ScoreResult
 import com.shangmentiyu.sportscoach.core.Standards
@@ -28,7 +28,7 @@ class ScoringViewModel(
     private val _toast = MutableStateFlow<String?>(null)
     val toast: StateFlow<String?> = _toast.asStateFlow()
     private val appExceptionHandler =
-        com.shangmentiyu.sportscoach.core.CoroutineExt.createAppExceptionHandler(_toast, "ScoringViewModel")
+        com.shangmentiyu.sportscoach.app.framework.CoroutineExt.createAppExceptionHandler(_toast, "ScoringViewModel")
 
     private val _students = MutableStateFlow<List<Student>>(emptyList())
     val students: StateFlow<List<Student>> = _students.asStateFlow()
@@ -39,9 +39,20 @@ class ScoringViewModel(
     private val _standards = MutableStateFlow<List<Std>>(emptyList())
     val standards: StateFlow<List<Std>> = _standards.asStateFlow()
 
-    /** 自定义项目名集合（不在体测标准中，仅记录原值，不计算得分） */
-    private val _customProjects = MutableStateFlow<Set<String>>(emptySet())
-    val customProjects: StateFlow<Set<String>> = _customProjects.asStateFlow()
+    // === v32：自定义录入模式 ===
+    // 学龄前（grade=0）无体测标准，默认直接进入自定义录入；学龄后可手动切换。
+    private val _isCustomMode = MutableStateFlow(false)
+    val isCustomMode: StateFlow<Boolean> = _isCustomMode.asStateFlow()
+
+    /**
+     * 自定义项目（不在体测标准中，仅记录原值，不计算得分）。
+     * unit=单位、note=备注，均自由输入。
+     */
+    data class CustomProject(val name: String, val unit: String = "", val note: String = "")
+
+    /** 自定义项目集合 */
+    private val _customProjects = MutableStateFlow<Set<CustomProject>>(emptySet())
+    val customProjects: StateFlow<Set<CustomProject>> = _customProjects.asStateFlow()
 
     // 当前输入的成绩 {项目名: 输入文本}
     private val _scoreInputs = MutableStateFlow<Map<String, String>>(emptyMap())
@@ -84,7 +95,7 @@ class ScoringViewModel(
         val obj = JsonSafe.parseObject(scoresJson) ?: return
         val inputs = mutableMapOf<String, String>()
         val results = mutableMapOf<String, ScoreResult>()
-        val customs = mutableSetOf<String>()
+        val customs = mutableSetOf<CustomProject>()
         // 使用显式 while 循环避免 for-in 的 iterator() 歧义
         val keys = obj.keys()
         while (keys.hasNext()) {
@@ -96,9 +107,9 @@ class ScoringViewModel(
             val score = if (item.has("score") && !item.isNull("score")) item.optDouble("score", 0.0) else 0.0
             val grade = item.optString("grade", "")
             results[key] = ScoreResult(score, grade, null, true, "")
-            // 不在体测标准中的项目标记为自定义
+            // 不在体测标准中的项目标记为自定义（含单位/备注）
             if (Standards.findStd(_standards.value, key) == null) {
-                customs.add(key)
+                customs.add(CustomProject(key, item.optString("unit", ""), item.optString("note", "")))
             }
         }
         _scoreInputs.value = inputs
@@ -109,6 +120,8 @@ class ScoringViewModel(
     fun selectStudent(student: Student) {
         _selectedStudent.value = student
         _standards.value = Standards.getStandardsByGrade(student.grade)
+        // === v32：学龄前（grade=0/空）无体测标准，直接进入自定义录入模式 ===
+        _isCustomMode.value = student.grade == "0" || student.grade.isBlank()
         _customProjects.value = emptySet()
         // === v50：切换学员必须重置成绩输入，防止上一学员的成绩残留 ===
         // （编辑场景 loadLesson → selectStudent → loadExistingScores 顺序为
@@ -117,24 +130,29 @@ class ScoringViewModel(
         _scoreResults.value = emptyMap()
     }
 
+    /** v32：切换录入模式（自定义 / 标准） */
+    fun setCustomMode(on: Boolean) { _isCustomMode.value = on }
+
     /**
-     * 添加自定义项目：用户可录入不在体测标准中的项目（仅记录原值，不计算得分）。
+     * 添加自定义项目：可录入不在体测标准中的项目（仅记录原值，不计算得分）。
      * @param name 项目名（不能与已有标准项目重复）
+     * @param unit 单位（自由输入，可空）
+     * @param note 备注（自由输入，可空）
      */
-    fun addCustomProject(name: String): Boolean {
+    fun addCustomProject(name: String, unit: String = "", note: String = ""): Boolean {
         val trimmed = name.trim()
         if (trimmed.isBlank()) return false
         // 不能与体测标准项目重复
         if (Standards.findStd(_standards.value, trimmed) != null) return false
         // 不能与已有自定义项目重复
-        if (_customProjects.value.contains(trimmed)) return false
-        _customProjects.value = _customProjects.value + trimmed
+        if (_customProjects.value.any { it.name == trimmed }) return false
+        _customProjects.value = _customProjects.value + CustomProject(trimmed, unit.trim(), note.trim())
         return true
     }
 
     /** 移除自定义项目 */
     fun removeCustomProject(name: String) {
-        _customProjects.value = _customProjects.value - name
+        _customProjects.value = _customProjects.value.filterNot { it.name == name }.toSet()
         val newInputs = _scoreInputs.value.toMutableMap()
         newInputs.remove(name)
         _scoreInputs.value = newInputs
@@ -196,6 +214,12 @@ class ScoringViewModel(
                         // 自定义项目 score 为 null 时存 0.0，grade 标记为"自定义"
                         item.put("score", result.score ?: 0.0)
                         item.put("grade", result.grade)
+                        // v32：自定义项目额外记录单位/备注
+                        val custom = _customProjects.value.firstOrNull { it.name == name }
+                        if (custom != null) {
+                            item.put("unit", custom.unit)
+                            item.put("note", custom.note)
+                        }
                         scoresObj.put(name, item)
                     }
                 }

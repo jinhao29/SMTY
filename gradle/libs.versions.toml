@@ -39,6 +39,9 @@ paging = "3.3.5"                       # Paging (runtime-ktx / compose)
 # === 数据存储 ===
 datastorePreferences = "1.1.1"         # DataStore Preferences
 
+# === 协程 ===
+kotlinxCoroutines = "1.9.0"             # kotlinx-coroutines（core / android）
+
 # === Apache POI（Excel 导入导出）===
 poi = "5.3.0"                          # Apache POI + POI-OOXML
 
@@ -49,7 +52,7 @@ documentfile = "1.0.1"                 # AndroidX DocumentFile
 coilCompose = "2.7.0"                 # Coil Compose
 
 # === 安全加密存储（签到照片加密）===
-securityCrypto = "1.1.0-alpha06"       # AndroidX Security Crypto
+securityCrypto = "1.1.0"                 # AndroidX Security Crypto（稳定版）
 
 # === 自动更新检测依赖 ===
 okhttp = "4.12.0"                      # OkHttp（GitHub API 网络请求）
@@ -101,9 +104,14 @@ androidx-room-compiler = { group = "androidx.room", name = "room-compiler", vers
 # === Paging 3 ===
 androidx-paging-runtime-ktx = { group = "androidx.paging", name = "paging-runtime-ktx", version.ref = "paging" }
 androidx-paging-compose = { group = "androidx.paging", name = "paging-compose", version.ref = "paging" }
+androidx-paging-runtime = { group = "androidx.paging", name = "paging-runtime", version.ref = "paging" }
 
 # === 数据存储 ===
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastorePreferences" }
+
+# === 协程 ===
+kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
+kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "kotlinxCoroutines" }
 
 # === Apache POI ===
 apache-poi = { group = "org.apache.poi", name = "poi", version.ref = "poi" }

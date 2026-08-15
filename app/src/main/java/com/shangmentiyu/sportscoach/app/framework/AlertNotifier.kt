@@ -1,4 +1,4 @@
-package com.shangmentiyu.sportscoach.core
+package com.shangmentiyu.sportscoach.app.framework
 
 import com.shangmentiyu.sportscoach.data.db.AppDatabase
 import kotlinx.coroutines.flow.first

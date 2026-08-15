@@ -34,7 +34,7 @@ import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Sort
+import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -71,12 +71,10 @@ import com.shangmentiyu.sportscoach.ui.theme.StudentListSkeleton
 import com.shangmentiyu.sportscoach.ui.theme.StyledDropdown
 
 /**
- * 学员列表 Tab：展示所有学员，每项显示课时余额、下一节课信息、身高体重BMI。
+ * 学员列表 Tab：展示所有学员，每项仅显示姓名、年级、联系方式、剩余课时、到期日。
  *
- * 增强点：
- * - "下一节课"显示真正的下一节未上课（含今日及未来），数据来自 [HomeViewModel.nextLessons]
- * - 点击下一节课的"编辑"图标可修改该课时的日期与时间
  * - 点击学员跳转成长档案
+ * - 底部提供编辑 / 删除 / 签到操作
  */
 @Composable
 fun StudentListTab(
@@ -94,14 +92,12 @@ fun StudentListTab(
     // === v24 优化5：使用筛选+排序后的学员列表 ===
     val filteredStudents by vm.filteredStudents.collectAsStateWithLifecycle()
     val remainingMap by vm.remainingMap.collectAsStateWithLifecycle()
-    val nextLessons by vm.nextLessons.collectAsStateWithLifecycle()
+    val expireDateMap by vm.expireDateMap.collectAsStateWithLifecycle()
     val sortBy by vm.sortBy.collectAsStateWithLifecycle()
     val gradeFilter by vm.gradeFilter.collectAsStateWithLifecycle()
     val nameQuery by vm.nameQuery.collectAsStateWithLifecycle()
 
     var deleteTarget by remember { mutableStateOf<Student?>(null) }
-    // 当前正在编辑的"下一节课"，null 表示未打开修改对话框
-    var editLessonTarget by remember { mutableStateOf<Lesson?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -289,11 +285,11 @@ fun StudentListTab(
                     ) {
                         itemsIndexed(filteredStudents, key = { _, s -> s.name }) { _, student ->
                             val remaining = remainingMap[student.name] ?: -1
-                            val nextLesson = nextLessons[student.name]
+                            val expireDate = expireDateMap[student.name]
                             StudentListItem(
                                 student = student,
                                 remaining = remaining,
-                                nextLesson = nextLesson,
+                                expireDate = expireDate,
                                 onSign = {
                                     vm.sign(student.name, student.studentId) { result ->
                                         if (result.lessonId.isNotBlank()) {
@@ -304,7 +300,6 @@ fun StudentListTab(
                                 onGrowth = { onGrowth(student.name) },
                                 onEdit = { onEditStudent(student) },
                                 onDelete = { deleteTarget = student },
-                                onEditNextLesson = { editLessonTarget = nextLesson },
                                 onHeightPrediction = { onHeightPrediction(student.name) },
                                 onDietManage = { onDietManage(student.name) }
                             )
@@ -342,69 +337,6 @@ fun StudentListTab(
             }
         )
     }
-
-    // 修改"下一节课"时间对话框
-    editLessonTarget?.let { lesson ->
-        EditNextLessonDialog(
-            lesson = lesson,
-            onDismiss = { editLessonTarget = null },
-            onConfirm = { newDate, newTime ->
-                vm.updateNextLessonTime(lesson.id, newDate, newTime)
-                editLessonTarget = null
-            }
-        )
-    }
-}
-
-/**
- * 修改"下一节课"日期与时间的对话框。
- *
- * 复用 [OutlinedDatePickerField] / [OutlinedTimePickerField] 保持 UI 一致性。
- * 确认后通过 [onConfirm] 回调返回新的日期和时间字符串。
- */
-@Composable
-private fun EditNextLessonDialog(
-    lesson: Lesson,
-    onDismiss: () -> Unit,
-    onConfirm: (date: String, time: String) -> Unit
-) {
-    var dateInput by remember { mutableStateOf(lesson.date) }
-    var timeInput by remember { mutableStateOf(lesson.time) }
-
-    GlassAlertDialog(
-        onDismissRequest = onDismiss,
-        title = "修改下一节课时间",
-        content = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(Spacing.md)
-            ) {
-                Text(
-                    "学员：${lesson.studentName}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                )
-                OutlinedDatePickerField(
-                    value = dateInput,
-                    onValueChange = { dateInput = it },
-                    label = "上课日期"
-                )
-                OutlinedTimePickerField(
-                    value = timeInput,
-                    onValueChange = { timeInput = it },
-                    label = "上课时间"
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onConfirm(dateInput, timeInput) }
-            ) { Text("保存") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
-        }
-    )
 }
 
 // === 性能优化4：StudentListItem / CardActionButton / CardActionType 已提取到独立文件 StudentListItem.kt ===
@@ -482,7 +414,7 @@ internal fun StudentFilterBar(
                 selected = sortBy,
                 options = StudentSortBy.entries.toList(),
                 optionLabel = ::sortByLabel,
-                optionIcon = { Icons.Outlined.Sort },
+                optionIcon = { Icons.AutoMirrored.Outlined.Sort },
                 onSelected = { onSortByChanged(it) },
                 modifier = Modifier.weight(1f)
             )

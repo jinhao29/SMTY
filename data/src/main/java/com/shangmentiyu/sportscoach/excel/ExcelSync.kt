@@ -1,6 +1,6 @@
 package com.shangmentiyu.sportscoach.excel
 
-import com.shangmentiyu.sportscoach.core.JsonSafe
+import com.shangmentiyu.sportscoach.data.internal.JsonSafe
 import com.shangmentiyu.sportscoach.core.Standards
 import com.shangmentiyu.sportscoach.core.Scorer
 import com.shangmentiyu.sportscoach.data.model.Lesson

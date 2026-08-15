@@ -1,7 +1,7 @@
 package com.shangmentiyu.sportscoach.data.repo
 
 import androidx.room.withTransaction
-import com.shangmentiyu.sportscoach.core.AutoBackupScheduler
+import com.shangmentiyu.sportscoach.data.internal.AutoBackupScheduler
 import com.shangmentiyu.sportscoach.data.db.AppDatabase
 import com.shangmentiyu.sportscoach.data.db.StudentDao
 import com.shangmentiyu.sportscoach.data.db.StudentFtsDao
@@ -83,8 +83,9 @@ class StudentRepository(
                 // 显式置活跃：保证新学员能被 `WHERE isActive = 1` 查询命中
                 // （三层兜底：此处显式 true + 实体默认 true + DB 列 DEFAULT 1）
                 isActive = true,
-                // 新增学员时立即生成 studentId（UUID 前 8 位），用于后续软关联
-                studentId = java.util.UUID.randomUUID().toString().take(8)
+                // 新增学员时立即生成全库唯一的 studentId（48bit 熵 + 碰撞检查双保险），
+                // 用于后续软关联（v51 加固：不再使用 32bit 前缀，杜绝理论碰撞）
+                studentId = generateUniqueStudentId()
             )
         )
         // v26 优化1：记录操作日志
@@ -388,6 +389,19 @@ class StudentRepository(
                 // 归档课时表改名，防止历史数据断链
                 database.archivedLessonDao().renameStudent(oldName, newName)
 
+                // 4.2.1 === v51 加固：历史 NULL-studentId 行姓名兜底 ===
+                // 仅按 studentId 更新会漏掉 v51 修复前写入的旧数据（studentId 为 NULL 的行，
+                // 如旧版长期自动生成的课时 / 旧版课时包 / 旧版排课）。
+                // 学员姓名是主键（唯一），按姓名补一次级联改名不会误改其他学员；
+                // 已按 ID 改过的行 studentName 已变为新名，不再匹配 oldName，不会重复更新。
+                database.lessonDao().renameStudent(oldName, newName)
+                database.scheduleDao().renameStudent(oldName, newName)
+                database.lessonPackageDao().renameStudent(oldName, newName)
+                database.trainingCycleDao().renameStudent(oldName, newName)
+                database.bodyMetricHistoryDao().renameStudent(oldName, newName)
+                database.parentReportDao().renameStudent(oldName, newName)
+                database.dietDao().renameStudent(oldName, newName)
+
                 // 4.3 在事务内记录日志，保证数据与日志一致性
                 auditLog?.log(
                     action = "学员改名（ID 级联）",
@@ -489,20 +503,47 @@ class StudentRepository(
     suspend fun getByStudentId(studentId: String): Student? = dao.getByStudentId(studentId)
 
     /**
-     * 为旧数据回填 studentId（NULL → UUID）。
+     * === v51 加固：生成全库唯一的 studentId ===
+     *
+     * - 48bit 熵（UUID 前 12 位），百万级学员碰撞概率可忽略
+     * - 生成后与库内既有 studentId 集合比对，碰撞则重新生成（双保险）
+     * - 依赖 [StudentDao.getAllIncludeDeleted] 快照，调用方处于写事务外亦可安全使用
+     *
+     * @return 唯一 studentId（12 位十六进制字符串）
+     */
+    private suspend fun generateUniqueStudentId(): String {
+        val existing = dao.getAllIncludeDeleted().first()
+            .mapNotNull { it.studentId }
+            .toHashSet()
+        var id: String
+        do {
+            id = java.util.UUID.randomUUID().toString().take(12)
+        } while (id in existing)
+        return id
+    }
+
+    /**
+     * 为旧数据回填 studentId（NULL → 全库唯一 ID）。
      *
      * 触发时机：
      * - 应用启动后后台扫描一次，将 studentId 为 NULL 的活跃学员补齐唯一 ID；
      * - 子表的 studentId 字段由各业务模块在后续写入时通过 studentName 反查回填。
      *
-     * 注意：该方法只更新 studentId IS NULL 的行，不会覆盖已生成的 ID。
+     * 注意：该方法只更新 studentId IS NULL 的行，不会覆盖已生成的 ID；
+     * v51 加固：回填 ID 同样保证全库唯一（与 [generateUniqueStudentId] 同熵）。
      */
     suspend fun backfillStudentIds() {
         // 简化实现：遍历全量学员，对 studentId 为 NULL 的行生成新 ID
         // 通过 Flow first() 一次性获取快照，避免在 suspend 函数中持有 Flow
-        dao.getAllIncludeDeleted().first().forEach { student ->
+        val all = dao.getAllIncludeDeleted().first()
+        val existing = all.mapNotNull { it.studentId }.toHashSet()
+        for (student in all) {
             if (student.studentId.isNullOrBlank()) {
-                val newId = java.util.UUID.randomUUID().toString().take(8)
+                var newId: String
+                do {
+                    newId = java.util.UUID.randomUUID().toString().take(12)
+                } while (newId in existing)
+                existing += newId
                 dao.ensureStudentId(student.name, newId)
             }
         }
@@ -564,7 +605,7 @@ class StudentRepository(
                 when (strategy) {
                     ImportStrategy.APPEND -> {
                         if (existing == null) {
-                            dao.insert(s.copy(studentId = java.util.UUID.randomUUID().toString().take(8)))
+                            dao.insert(s.copy(studentId = generateUniqueStudentId()))
                             added++
                         } else {
                             skipped++
@@ -576,7 +617,7 @@ class StudentRepository(
                         if (database == null) {
                             // 兼容旧调用方（无 AppDatabase 注入）：仅物理删除主表
                             if (existing != null) dao.deleteByName(s.name)
-                            dao.insert(s.copy(studentId = java.util.UUID.randomUUID().toString().take(8)))
+                            dao.insert(s.copy(studentId = generateUniqueStudentId()))
                             if (existing != null) overwritten++ else added++
                         } else {
                             database.withTransaction {
@@ -591,7 +632,7 @@ class StudentRepository(
                                     database.parentReportDao().deleteByStudent(s.name)
                                     database.dietDao().deleteByStudentName(s.name)
                                 }
-                                dao.insert(s.copy(studentId = java.util.UUID.randomUUID().toString().take(8)))
+                                dao.insert(s.copy(studentId = generateUniqueStudentId()))
                             }
                             if (existing != null) overwritten++ else added++
                         }
@@ -599,7 +640,7 @@ class StudentRepository(
 
                     ImportStrategy.UPDATE_PART -> {
                         if (existing == null) {
-                            dao.insert(s.copy(studentId = java.util.UUID.randomUUID().toString().take(8)))
+                            dao.insert(s.copy(studentId = generateUniqueStudentId()))
                             added++
                         } else {
                             // 仅更新身体形态指标 + 基础资料，保留 createdAt / studentId / isActive / 子表数据
@@ -749,7 +790,7 @@ class StudentRepository(
      * 重建 FTS 索引（外部接口，用于数据恢复后修复损坏的索引）。
      *
      * 调用时机：
-     * - [com.shangmentiyu.sportscoach.core.BackupManager] 数据恢复后怀疑索引损坏；
+     * - [com.shangmentiyu.sportscoach.data.internal.BackupManager] 数据恢复后怀疑索引损坏；
      * - 手动 SQL 维护学员表后索引可能不一致；
      * - 应用启动诊断发现 FTS 与主表 row 数不一致。
      *

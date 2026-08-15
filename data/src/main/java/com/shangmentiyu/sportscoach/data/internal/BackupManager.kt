@@ -1,4 +1,4 @@
-package com.shangmentiyu.sportscoach.core
+package com.shangmentiyu.sportscoach.data.internal
 
 import android.content.Context
 import android.net.Uri
@@ -719,10 +719,11 @@ object BackupManager {
                 onProgress?.onProgress("verify", 0, 0, "正在校验数据库完整性…")
                 val report = verifyIntegrity(context)
                 return if (report.equals("ok", ignoreCase = true)) {
+                    rebuildFtsIndex(context)
                     onProgress?.onProgress("done", entryIdx, entryIdx, "恢复完成，数据库完整性校验通过")
                     RestoreResult(
                         success = true,
-                        message = "恢复成功，数据库完整性校验通过",
+                        message = "数据恢复完成，请手动重启 App",
                         needRestart = true,
                         integrityOk = true,
                         integrityReport = report
@@ -826,6 +827,23 @@ object BackupManager {
             return "无法打开数据库：${e.message ?: "未知错误"}"
         }
         return report.ifBlank { "empty result" }
+    }
+
+    private fun rebuildFtsIndex(context: Context) {
+        val dbFile = context.getDatabasePath(AppDatabase.DATABASE_NAME)
+        if (!dbFile.exists()) return
+        try {
+            val sqliteDb = android.database.sqlite.SQLiteDatabase.openDatabase(
+                dbFile.absolutePath,
+                null,
+                android.database.sqlite.SQLiteDatabase.OPEN_READWRITE
+            )
+            sqliteDb.use { db ->
+                db.execSQL("INSERT INTO `studentFts`(`studentFts`) VALUES('rebuild')")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "FTS 索引重建失败（旧版备份可能无 FTS 表，忽略）：${e.message}")
+        }
     }
 
     /**

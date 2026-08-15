@@ -1,4 +1,4 @@
-package com.shangmentiyu.sportscoach.core
+package com.shangmentiyu.sportscoach.app.framework
 
 import android.content.Context
 import android.net.Uri
@@ -48,17 +48,51 @@ class MomentUploader(
     companion object {
         private const val TAG = "MomentUploader"
 
-        /** 连接超时（毫秒）：局域网内 5 秒兜底 */
+        /** Connection timeout (ms): 5s for LAN */
         private const val CONNECT_TIMEOUT_MS = 5_000
 
-        /** 读取超时（毫秒）：单张照片通常 < 5MB，30 秒足够 */
+        /** Read timeout (ms): single photo < 5MB, 30s is enough */
         private const val READ_TIMEOUT_MS = 30_000
 
-        /** 单张照片上限：10MB（与桌面端 MAX_UPLOAD_SIZE 对齐） */
+        /** Max photo size: 10MB (aligned with desktop MAX_UPLOAD_SIZE) */
         private const val MAX_FILE_SIZE = 10L * 1024 * 1024
 
-        /** 流式上传缓冲区 */
+        /** Stream upload buffer */
         private const val BUFFER_SIZE = 8 * 1024
+
+        /**
+         * Validate that a host is a private/local network address.
+         *
+         * Security: network_security_config.xml globally permits cleartext HTTP
+         * (Android doesn't support IP-range rules). This guard ensures HTTP is
+         * only used for LAN IPs, preventing accidental cleartext to public servers.
+         *
+         * Allowed: localhost, 127.x, 10.x, 172.16-31.x, 192.168.x, ::1, fe80::
+         */
+        fun isLocalNetworkHost(host: String): Boolean {
+            val h = host.trim().lowercase()
+            if (h.isBlank()) return false
+            if (h == "localhost" || h == "::1") return true
+            // Strip IPv6 brackets
+            val ip = h.removePrefix("[").removeSuffix("]")
+            // IPv4 checks
+            val parts = ip.split(".")
+            if (parts.size == 4) {
+                return try {
+                    val a = parts[0].toInt()
+                    val b = parts[1].toInt()
+                    a == 127 ||                                           // loopback
+                    a == 10 ||                                            // 10.0.0.0/8
+                    (a == 172 && b in 16..31) ||                          // 172.16.0.0/12
+                    (a == 192 && b == 168)                                // 192.168.0.0/16
+                } catch (_: NumberFormatException) {
+                    false
+                }
+            }
+            // IPv6 link-local
+            if (ip.startsWith("fe80:") || ip.startsWith("fc") || ip.startsWith("fd")) return true
+            return false
+        }
     }
 
     /**
@@ -106,6 +140,9 @@ class MomentUploader(
 
         if (host.isBlank()) {
             return@withContext UploadResult(false, "未配置 PC 端 IP，请在设置中填写")
+        }
+        if (!isLocalNetworkHost(host)) {
+            return@withContext UploadResult(false, "PC 端 IP 不在局域网范围内，已阻止明文 HTTP 请求")
         }
         if (studentName.isBlank()) {
             return@withContext UploadResult(false, "学员姓名为空")
@@ -202,6 +239,7 @@ class MomentUploader(
     suspend fun pingDesktop(): Boolean = withContext(Dispatchers.IO) {
         val host = settings.syncHost.first().trim()
         if (host.isBlank()) return@withContext false
+        if (!isLocalNetworkHost(host)) return@withContext false
         val port = settings.syncPort.first().trim()
             .ifBlank { SettingsRepository.DEFAULT_SYNC_PORT }
 

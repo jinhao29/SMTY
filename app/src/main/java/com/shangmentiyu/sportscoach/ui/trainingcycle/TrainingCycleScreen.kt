@@ -19,20 +19,16 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.AlertDialog
 import com.shangmentiyu.sportscoach.ui.theme.AppTextField
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
+import com.shangmentiyu.sportscoach.ui.theme.StyledSuggestionField
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -111,36 +107,12 @@ fun TrainingCycleScreen(onBack: () -> Unit) {
                     Text("暂无学员", color = MaterialTheme.colorScheme.outline)
                 } else {
                     // 可编辑下拉框：既支持从已有学员中选择，也支持手动输入新姓名
-                    var studentExpanded by remember { mutableStateOf(false) }
-                    ExposedDropdownMenuBox(
-                        expanded = studentExpanded,
-                        onExpandedChange = { studentExpanded = !studentExpanded }
-                    ) {
-                        AppTextField(
-                            value = selectedStudent,
-                            onValueChange = { vm.selectStudent(it) },
-                            label = { Text("学员姓名（可选择或输入）") },
-                            singleLine = true,
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(studentExpanded) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true),
-)
-                        DropdownMenu(
-                            expanded = studentExpanded,
-                            onDismissRequest = { studentExpanded = false }
-                        ) {
-                            students.forEach { name ->
-                                DropdownMenuItem(
-                                    text = { Text(name) },
-                                    onClick = {
-                                        vm.selectStudent(name)
-                                        studentExpanded = false
-                                    }
-                                )
-                            }
-                        }
-                    }
+                    StyledSuggestionField(
+                        value = selectedStudent,
+                        onValueChange = { vm.selectStudent(it) },
+                        label = "学员姓名（可选择或输入）",
+                        presets = students
+                    )
                 }
             }
 

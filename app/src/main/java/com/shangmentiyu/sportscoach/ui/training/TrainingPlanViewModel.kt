@@ -2,8 +2,8 @@ package com.shangmentiyu.sportscoach.ui.training
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.shangmentiyu.sportscoach.core.AbilityAnalyzer
-import com.shangmentiyu.sportscoach.core.TrainingPlanGenerator
+import com.shangmentiyu.sportscoach.data.internal.AbilityAnalyzer
+import com.shangmentiyu.sportscoach.data.internal.TrainingPlanGenerator
 import com.shangmentiyu.sportscoach.data.model.ExerciseItem
 import com.shangmentiyu.sportscoach.data.model.Lesson
 import com.shangmentiyu.sportscoach.data.model.Student
@@ -30,7 +30,7 @@ class TrainingPlanViewModel(
     private val _toast = MutableStateFlow<String?>(null)
     val toast: StateFlow<String?> = _toast.asStateFlow()
     private val appExceptionHandler =
-        com.shangmentiyu.sportscoach.core.CoroutineExt.createAppExceptionHandler(_toast, "TrainingPlanViewModel")
+        com.shangmentiyu.sportscoach.app.framework.CoroutineExt.createAppExceptionHandler(_toast, "TrainingPlanViewModel")
 
     private val _student = MutableStateFlow<Student?>(null)
     val student: StateFlow<Student?> = _student.asStateFlow()

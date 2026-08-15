@@ -49,43 +49,43 @@ android {
     }
 }
 
+// Room schema 导出（P2 修复）：exportSchema=true 时生成 JSON 到 data/schemas/，纳入版本控制
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 dependencies {
     // 依赖 :core，复用纯逻辑层（Standards / Scorer / JsonSafe 等）
     implementation(project(":core"))
 
-    // AndroidX 核心
-    implementation("androidx.core:core-ktx:1.15.0")
+    // 依赖统一走 Version Catalog（gradle/libs.versions.toml），去除硬编码版本
+    implementation(libs.androidx.core.ktx)
+    // Paging：DAO 的 PagingSource 类型依赖（Android 专用 paging-runtime，传递依赖 paging-common）
+    implementation(libs.androidx.paging.runtime)
 
-    // Compose runtime：实体类 @Stable 注解依赖（与 app 模块 compose 1.7.6 一致）
-    implementation("androidx.compose.runtime:runtime:1.7.6")
-
-    // Paging：DAO 的 PagingSource 类型依赖（与 app 模块 paging 3.3.5 一致）
-    implementation("androidx.paging:paging-common:3.3.5")
-
-    // Room 数据库（与 app 模块保持版本一致，避免歧义）
-    implementation("androidx.room:room-runtime:2.7.1")
-    implementation("androidx.room:room-ktx:2.7.1")
-    // Room Paging：DAO 的 @Query PagingSource 返回类型需要（与 app 模块一致）
-    implementation("androidx.room:room-paging:2.7.1")
-    ksp("androidx.room:room-compiler:2.7.1")
+    // Room 数据库
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    implementation(libs.androidx.room.paging)
+    ksp(libs.androidx.room.compiler)
 
     // DataStore：设置项持久化
-    implementation("androidx.datastore:datastore-preferences:1.1.1")
+    implementation(libs.androidx.datastore.preferences)
 
     // 协程
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.kotlinx.coroutines.android)
 
-    // 安全加密（签到照片加密存储）
-    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    // 安全加密（签到照片加密存储，稳定版 1.1.0）
+    implementation(libs.androidx.security.crypto)
 
     // JSON 解析（Repository 解析 _meta 工作表 JSON）
-    implementation("com.google.code.gson:gson:2.11.0")
+    implementation(libs.gson)
 
-    // Apache POI（Excel 导入导出，ExcelSync 依赖；与 app 模块 poi 5.3.0 一致）
-    implementation("org.apache.poi:poi:5.3.0")
-    implementation("org.apache.poi:poi-ooxml:5.3.0")
+    // Apache POI（Excel 导入导出）
+    implementation(libs.apache.poi)
+    implementation(libs.apache.poi.ooxml)
 
-    testImplementation("junit:junit:4.13.2")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
 }

@@ -2,7 +2,7 @@ package com.shangmentiyu.sportscoach.ui.parent
 
 import android.content.Context
 import android.content.Intent
-import com.shangmentiyu.sportscoach.core.JsonSafe
+import com.shangmentiyu.sportscoach.data.internal.JsonSafe
 import com.shangmentiyu.sportscoach.data.model.ParentReport
 
 /**

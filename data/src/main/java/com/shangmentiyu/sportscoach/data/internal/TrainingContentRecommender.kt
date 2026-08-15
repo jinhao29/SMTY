@@ -1,4 +1,4 @@
-package com.shangmentiyu.sportscoach.core
+package com.shangmentiyu.sportscoach.data.internal
 
 import com.shangmentiyu.sportscoach.data.model.ExerciseItem
 

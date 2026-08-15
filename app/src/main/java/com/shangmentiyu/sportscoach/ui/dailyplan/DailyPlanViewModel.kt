@@ -31,7 +31,7 @@ class DailyPlanViewModel(
     private val _toast = MutableStateFlow<String?>(null)
     val toast: StateFlow<String?> = _toast.asStateFlow()
     private val appExceptionHandler =
-        com.shangmentiyu.sportscoach.core.CoroutineExt.createAppExceptionHandler(_toast, "DailyPlanViewModel")
+        com.shangmentiyu.sportscoach.app.framework.CoroutineExt.createAppExceptionHandler(_toast, "DailyPlanViewModel")
 
     private val _selectedDate = MutableStateFlow(today())
     val selectedDate: StateFlow<String> = _selectedDate.asStateFlow()
@@ -58,25 +58,36 @@ class DailyPlanViewModel(
         // 多个 collector 并发写入 _schedules/_lessons，后到者覆盖先到者 —— 切日期后旧 collector
         // 仍会把"旧日期的数据"写回 UI，导致课前准备清单显示错误/不刷新（重启应用后恢复正常）。
         // flatMapLatest 保证任意时刻只有最新日期的 collector 存活。
+        // === 数据流对齐：与日历红点共享同一过滤条件 isTrial=0，体验课不计入今日列表 ===
         viewModelScope.launch(appExceptionHandler) {
             _selectedDate
                 .flatMapLatest { date ->
-                    lessonRepo.getAllLessons().map { all -> all.filter { it.date == date } }
+                    lessonRepo.getAllLessons().map { all ->
+                        all.filter { it.date == date && !it.isTrial }
+                    }
                 }
-                .collect { _lessons.value = it }
+                .collect {
+                    _lessons.value = it
+                    android.util.Log.d("ScheduleData", "今日列表数量: ${it.size}")
+                }
         }
         viewModelScope.launch(appExceptionHandler) {
             _selectedDate
                 .flatMapLatest { date ->
                     opRepo.getActiveSchedules().map { all ->
                         val dow = parseDayOfWeek(date)
-                        val filtered = all.filter { it.dayOfWeek == dow }
+                        // 与日历红点同源（getActiveSchedules）+ 同一过滤条件 isTrial=0
+                        val filtered = all.filter { it.dayOfWeek == dow && !it.isTrial }
                         android.util.Log.d("ScheduleDataFlow",
                             "date=$date, dayOfWeek=$dow, total=${all.size}, filtered=${filtered.size}")
+                        android.util.Log.d("ScheduleData", "今日列表数量: ${filtered.size}")
                         filtered
                     }
                 }
                 .collect {
+                    val today = _selectedDate.value
+                    android.util.Log.d("ScheduleData", "查询今日($today)排课，结果数量: ${it.size}")
+                    if (it.isEmpty()) android.util.Log.d("ScheduleData", "未找到任何排课记录")
                     _schedules.value = it
                     _loaded.value = true
                 }

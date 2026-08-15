@@ -1,9 +1,9 @@
 package com.shangmentiyu.sportscoach.service
 
 import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import com.shangmentiyu.sportscoach.app.framework.NotificationUtils
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
@@ -78,7 +78,7 @@ class FloatingWindowService : Service() {
     override fun onCreate() {
         super.onCreate()
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-        createNotificationChannel()
+        NotificationUtils.createChannel(this, CHANNEL_ID, "悬浮窗保活", importance = NotificationManager.IMPORTANCE_LOW)
         lifecycleOwner = ServiceLifecycleOwner()
         lifecycleOwner.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
     }
@@ -97,19 +97,6 @@ class FloatingWindowService : Service() {
             Log.e(TAG, "addFloatingView failed", e)
         }
         return START_STICKY
-    }
-
-    private fun createNotificationChannel() {
-        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        if (nm.getNotificationChannel(CHANNEL_ID) == null) {
-            nm.createNotificationChannel(
-                NotificationChannel(
-                    CHANNEL_ID,
-                    "悬浮窗保活",
-                    NotificationManager.IMPORTANCE_LOW
-                )
-            )
-        }
     }
 
     private fun startForegroundCompat() {

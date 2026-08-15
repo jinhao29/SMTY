@@ -2,7 +2,7 @@ package com.shangmentiyu.sportscoach.ui.parent
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.shangmentiyu.sportscoach.core.ReportGenerator
+import com.shangmentiyu.sportscoach.data.internal.ReportGenerator
 import com.shangmentiyu.sportscoach.data.model.ParentReport
 import com.shangmentiyu.sportscoach.data.model.Student
 import com.shangmentiyu.sportscoach.data.repo.ParentReportRepository
@@ -42,7 +42,7 @@ class ParentReportViewModel(
     private val _toast = MutableStateFlow<String?>(null)
     val toast: StateFlow<String?> = _toast.asStateFlow()
     private val appExceptionHandler =
-        com.shangmentiyu.sportscoach.core.CoroutineExt.createAppExceptionHandler(_toast, "ParentReportViewModel")
+        com.shangmentiyu.sportscoach.app.framework.CoroutineExt.createAppExceptionHandler(_toast, "ParentReportViewModel")
 
     fun selectStudent(name: String?) {
         _selectedStudent.value = name

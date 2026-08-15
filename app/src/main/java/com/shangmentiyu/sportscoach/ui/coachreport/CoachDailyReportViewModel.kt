@@ -35,7 +35,7 @@ class CoachDailyReportViewModel(
     private val _toast = MutableStateFlow<String?>(null)
     val toast: StateFlow<String?> = _toast.asStateFlow()
     private val appExceptionHandler =
-        com.shangmentiyu.sportscoach.core.CoroutineExt.createAppExceptionHandler(_toast, "CoachDailyReportViewModel")
+        com.shangmentiyu.sportscoach.app.framework.CoroutineExt.createAppExceptionHandler(_toast, "CoachDailyReportViewModel")
 
     private val _selectedDate = MutableStateFlow(today())
     val selectedDate: StateFlow<String> = _selectedDate.asStateFlow()

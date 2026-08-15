@@ -1,9 +1,8 @@
 package com.shangmentiyu.sportscoach.data.model
 
-import androidx.compose.runtime.Stable
 import androidx.room.Entity
 import androidx.room.PrimaryKey
-import com.shangmentiyu.sportscoach.core.JsonSafe
+import com.shangmentiyu.sportscoach.data.internal.JsonSafe
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -19,7 +18,6 @@ import org.json.JSONObject
  * 性能：v26 优化2添加 [Stable] 注解，Compose 编译器按字段对比实例，
  * 减少 LazyColumn 滑动时的无效重组。
  */
-@Stable
 @Entity(tableName = "training_cycles")
 data class TrainingCycle(
     @PrimaryKey val id: String = java.util.UUID.randomUUID().toString().take(8),
@@ -80,7 +78,6 @@ data class TrainingCycle(
  *
  * 性能：v26 优化2添加 [Stable] 注解，作为 Compose State 使用时避免无效重组。
  */
-@Stable
 data class WeeklyPlan(
     val weekIndex: Int = 1,           // 第几周（1-based）
     val title: String = "",           // 周标题（如"基础适应周"）

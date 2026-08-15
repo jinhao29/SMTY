@@ -1,7 +1,7 @@
 package com.shangmentiyu.sportscoach.data.model
 
 import androidx.room.TypeConverter
-import com.shangmentiyu.sportscoach.core.JsonSafe
+import com.shangmentiyu.sportscoach.data.internal.JsonSafe
 import org.json.JSONArray
 import org.json.JSONObject
 

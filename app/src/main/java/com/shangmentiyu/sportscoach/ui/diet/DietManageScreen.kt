@@ -35,13 +35,10 @@ import androidx.compose.material.icons.outlined.Restaurant
 import androidx.compose.material.icons.outlined.Spa
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -78,6 +75,7 @@ import com.shangmentiyu.sportscoach.ui.theme.IOSCard
 import com.shangmentiyu.sportscoach.ui.theme.PrimaryButton
 import com.shangmentiyu.sportscoach.ui.theme.FloatingSnackbarHost
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
+import com.shangmentiyu.sportscoach.ui.theme.StyledDropdown
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
@@ -969,75 +967,23 @@ private fun TdeeInputField(
 }
 
 /**
- * 活动水平下拉选择框（DropdownMenu）。
+ * 活动水平下拉选择框（StyledDropdown）。
  *
  * 5 个选项对应 [ActivityLevel] 枚举，下拉显示中文标签 + 系数。
- *
- * 实现说明（v2 修复点击不响应问题）：
- * - 旧实现：OutlinedTextField.readOnly=true + 外部 clickable 修饰符
- *   → TextField 内部消费点击事件，clickable 不触发，下拉菜单弹不出来
- * - 新实现：Box 包裹整体并加 clickable，OutlinedTextField 设置 enabled=false
- *   完全禁用 TextField 的点击消费，让 Box 的 clickable 正常触发下拉菜单
- * - 保留 OutlinedTextField 仅用于视觉一致（圆角浅灰背景）
  */
 @Composable
 private fun ActivityLevelDropdown(
     selected: ActivityLevel,
     onSelect: (ActivityLevel) -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { expanded = true }
-    ) {
-        // 触发器：浅灰背景的只读输入框 + 箭头图标
-        // enabled=false 防止 TextField 内部消费点击事件，让外层 Box 的 clickable 生效
-        AppTextField(
-            value = "${selected.label}  (×${selected.factor})",
-            onValueChange = {},
-            readOnly = true,
-            enabled = false,
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-trailingIcon = {
-                Icon(
-                    Icons.Outlined.ArrowDropDown,
-                    contentDescription = null,
-                    tint = appOnSurfaceVariant()
-                )
-            }
-)
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
-        ) {
-            ActivityLevel.entries.forEach { level ->
-                DropdownMenuItem(
-                    text = {
-                        Column {
-                            Text(
-                                level.label,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = if (level == selected) FontWeight.SemiBold else FontWeight.Normal,
-                                color = if (level == selected) appPrimary() else appOnSurface()
-                            )
-                            Text(
-                                "系数 ×${level.factor}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = appOnSurfaceVariant()
-                            )
-                        }
-                    },
-                    onClick = {
-                        onSelect(level)
-                        expanded = false
-                    }
-                )
-            }
-        }
-    }
+    StyledDropdown(
+        selected = selected,
+        options = ActivityLevel.entries.toList(),
+        optionLabel = { "${it.label}  (×${it.factor})" },
+        optionIcon = { Icons.Outlined.LocalFireDepartment },
+        onSelected = onSelect,
+        modifier = Modifier.fillMaxWidth()
+    )
 }
 
 /**

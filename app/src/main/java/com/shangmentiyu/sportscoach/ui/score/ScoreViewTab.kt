@@ -28,9 +28,9 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.PersonOutline
-import androidx.compose.material.icons.outlined.TrendingDown
-import androidx.compose.material.icons.outlined.TrendingFlat
-import androidx.compose.material.icons.outlined.TrendingUp
+import androidx.compose.material.icons.automirrored.outlined.TrendingDown
+import androidx.compose.material.icons.automirrored.outlined.TrendingFlat
+import androidx.compose.material.icons.automirrored.outlined.TrendingUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -405,9 +405,9 @@ private fun ScoreCompareCard(records: List<AnalyticsViewModel.ScoreRecord>) {
     val last = records.first()   // 最近一次
     val delta = last.score - first.score
     val (trendIcon, trendColor, trendText) = when {
-        delta > 0.5 -> Triple(Icons.Outlined.TrendingUp, LightPrimary, "进步")
-        delta < -0.5 -> Triple(Icons.Outlined.TrendingDown, MaterialTheme.colorScheme.onSurfaceVariant, "退步")
-        else -> Triple(Icons.Outlined.TrendingFlat, MaterialTheme.colorScheme.outline, "持平")
+        delta > 0.5 -> Triple(Icons.AutoMirrored.Outlined.TrendingUp, LightPrimary, "进步")
+        delta < -0.5 -> Triple(Icons.AutoMirrored.Outlined.TrendingDown, MaterialTheme.colorScheme.onSurfaceVariant, "退步")
+        else -> Triple(Icons.AutoMirrored.Outlined.TrendingFlat, MaterialTheme.colorScheme.outline, "持平")
     }
 
     Row(
@@ -493,11 +493,11 @@ private fun ScoreRecordRow(
             if (prevRecord != null) {
                 val delta = record.score - prevRecord.score
                 val (trendIcon, trendColor, trendText) = when {
-                    delta > 0.5 -> Triple(Icons.Outlined.TrendingUp, LightPrimary,
+                    delta > 0.5 -> Triple(Icons.AutoMirrored.Outlined.TrendingUp, LightPrimary,
                         "↑ ${"%.1f".format(delta)} 较上次")
-                    delta < -0.5 -> Triple(Icons.Outlined.TrendingDown, MaterialTheme.colorScheme.onSurfaceVariant,
+                    delta < -0.5 -> Triple(Icons.AutoMirrored.Outlined.TrendingDown, MaterialTheme.colorScheme.onSurfaceVariant,
                         "↓ ${"%.1f".format(kotlin.math.abs(delta))} 较上次")
-                    else -> Triple(Icons.Outlined.TrendingFlat, MaterialTheme.colorScheme.outline,
+                    else -> Triple(Icons.AutoMirrored.Outlined.TrendingFlat, MaterialTheme.colorScheme.outline,
                         "→ 持平")
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {

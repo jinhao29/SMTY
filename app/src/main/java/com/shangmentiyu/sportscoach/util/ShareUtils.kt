@@ -8,7 +8,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
 import androidx.core.content.FileProvider
-import com.shangmentiyu.sportscoach.core.JsonSafe
+import com.shangmentiyu.sportscoach.data.internal.JsonSafe
 import com.shangmentiyu.sportscoach.core.Standards
 import com.shangmentiyu.sportscoach.data.model.ExerciseItem
 import com.shangmentiyu.sportscoach.data.model.Lesson

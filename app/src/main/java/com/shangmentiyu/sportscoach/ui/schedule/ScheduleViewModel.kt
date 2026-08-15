@@ -37,9 +37,15 @@ data class ScheduleForm(
     val isLongTerm: Boolean = false, // 是否长期排课（勾选后每周自动生成对应时间的课表）
     // === v49 体验课：未注册学员临时体验课，不选学员（studentId=null，studentName 填临时姓名），不消耗课时包 ===
     val isTrial: Boolean = false,
+    // === 首次排课自动体验课：注册学员首次排课时第一天自动标记为体验课（不消耗课时），仅新建模式生效 ===
+    val isFirstLessonAutoTrial: Boolean = false,
     val content: List<ExerciseItem> = emptyList(),
     val contentImages: List<String> = emptyList(),  // 训练内容图片路径（从电脑截图导入）
     val color: String = "blue",
     val note: String = "",
-    val equipment: List<String> = emptyList()
+    val equipment: List<String> = emptyList(),
+    // === 小班课：多选学员 + 统一签到签退 ===
+    val isGroupClass: Boolean = false,              // 是否小班课
+    val groupStudentIds: Set<String> = emptySet(),  // 小班课选中的学员 studentId 集合
+    val groupStudentNames: List<String> = emptyList() // 小班课选中的学员姓名列表（与 IDs 一一对应）
 )

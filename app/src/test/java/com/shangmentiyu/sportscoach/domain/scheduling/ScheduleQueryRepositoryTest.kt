@@ -100,8 +100,8 @@ class ScheduleQueryRepositoryTest {
     @Test
     fun `场景3_额度不足但有已签退占位时同样拦截`() = runTest {
         db.studentDao().insert(student())
-        // 总课时 5，已签退 5 → 剩余 0
-        db.lessonPackageDao().insert(pkg(total = 5, used = 0, purchaseDate = "2025-01-01"))
+        // 总课时 5，已签退 5（used=5）→ 剩余 0
+        db.lessonPackageDao().insert(pkg(total = 5, used = 5, purchaseDate = "2025-01-01"))
         repeat(5) {
             db.lessonDao().insert(
                 com.shangmentiyu.sportscoach.data.model.Lesson(
@@ -276,14 +276,17 @@ class ScheduleQueryRepositoryTest {
     @Test
     fun `体验课与正常排课共存_剩余额度计算排除体验课`() = runTest {
         db.studentDao().insert(student())
-        db.lessonPackageDao().insert(pkg(total = 5, used = 0, purchaseDate = "2025-01-01"))
+        // 已签退 1 节（used=1），剩余课时 = 5 - 1 = 4
+        db.lessonPackageDao().insert(pkg(total = 5, used = 1, purchaseDate = "2025-01-01"))
+        val today = java.time.LocalDate.now()
+        val fmt = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
-        // 常规排课占位 3 条（isTrial=false，计入待消耗）
+        // 常规排课占位 3 条（isTrial=false，计入待消耗；日期取明天/后天/大后天，确保是未来）
         repeat(3) {
             db.lessonDao().insert(
                 com.shangmentiyu.sportscoach.data.model.Lesson(
                     id = "normal_placeholder_$it",
-                    date = "2026-08-1$it",  // 08-10 / 08-11 / 08-12
+                    date = today.plusDays((it + 1).toLong()).format(fmt),
                     time = "10:00",
                     studentName = "张三",
                     studentId = "s1",
@@ -297,7 +300,7 @@ class ScheduleQueryRepositoryTest {
             db.lessonDao().insert(
                 com.shangmentiyu.sportscoach.data.model.Lesson(
                     id = "trial_placeholder_$it",
-                    date = "2026-08-2$it",  // 08-20 / 08-21
+                    date = today.plusDays((it + 10).toLong()).format(fmt),
                     time = "10:00",
                     studentName = "张三",
                     studentId = null,
@@ -306,11 +309,11 @@ class ScheduleQueryRepositoryTest {
                 )
             )
         }
-        // 常规已签退 1 条（计入已消耗）
+        // 常规已签退 1 条（计入已消耗；日期取过去，不影响待消耗统计）
         db.lessonDao().insert(
             com.shangmentiyu.sportscoach.data.model.Lesson(
                 id = "checked_out",
-                date = "2026-08-01",
+                date = today.minusDays(10).format(fmt),
                 time = "09:00",
                 studentName = "张三",
                 studentId = "s1",
@@ -321,8 +324,8 @@ class ScheduleQueryRepositoryTest {
             )
         )
 
-        // 剩余可排课时 = 总课时 5 - 已消耗(常规已签退 1) - 待消耗(常规占位 3，体验课占位不计) = 1
+        // 剩余可排课时 = 剩余课时 4 - 待消耗(常规占位 3，体验课占位不计) = 1
         val useCase = ValidateScheduleUseCase(repo)
-        assertThat(useCase.availableQuota("张三", "2026-08-10")).isEqualTo(1)
+        assertThat(useCase.availableQuota("张三", today.format(fmt))).isEqualTo(1)
     }
 }

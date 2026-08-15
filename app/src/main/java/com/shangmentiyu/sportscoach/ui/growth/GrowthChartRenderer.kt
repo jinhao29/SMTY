@@ -45,8 +45,8 @@ object GrowthChartRenderer {
     private const val COLOR_BLUE = 0xFF3B82F6.toInt()
     private const val COLOR_PURPLE = 0xFF8B5CF6.toInt()
     private const val COLOR_GRID = 0xFFE5E7EB.toInt()
-    private const val COLOR_TEXT = 0xFF374151.toInt()
-    private const val COLOR_TEXT_LIGHT = 0xFF9CA3AF.toInt()
+    private const val COLOR_TEXT = 0xFF1A1A1A.toInt()
+    private const val COLOR_TEXT_LIGHT = 0xFF6B6B6B.toInt()
 
     /**
      * 渲染学员身体形态变化折线图。

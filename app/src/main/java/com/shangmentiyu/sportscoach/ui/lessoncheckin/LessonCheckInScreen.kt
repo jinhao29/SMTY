@@ -129,18 +129,13 @@ class LessonCheckInViewModel(
     fun sign(studentName: String, studentId: String? = null, onCreated: (SignResult) -> Unit) {
         viewModelScope.launch {
             val result = try {
-                val lessonId = lessonRepo.createLesson(
-                    studentName = studentName,
-                    coach = "",
-                    packageId = "",
-                    studentId = studentId
-                )
+                val r = opRepo.signIn(studentName, studentId)
                 SignResult(
-                    lessonId = lessonId,
+                    lessonId = r.lessonId,
                     consumed = false,
                     packageName = "",
                     remainingAfter = 0,
-                    message = "签到成功（签退时再扣减课时）"
+                    message = r.message
                 )
             } catch (e: Exception) {
                 SignResult(
@@ -259,7 +254,7 @@ fun LessonCheckInScreen(
                             SignRow(
                                 student = student,
                                 remaining = remainingMap[student.name] ?: -1,
-                                alreadySignedToday = todayLessons.any { it.studentName == student.name },
+                                signStatus = todayLessons.firstOrNull { it.studentName == student.name }?.status ?: "待签到",
                                 showTopDivider = false,
                                 onSign = {
                                     vm.sign(student.name, student.studentId) { result ->
@@ -362,10 +357,11 @@ private fun TodaySignedCard(lesson: Lesson, onClick: () -> Unit) {
 private fun SignRow(
     student: Student,
     remaining: Int,
-    alreadySignedToday: Boolean,
+    signStatus: String,
     showTopDivider: Boolean,
     onSign: () -> Unit
 ) {
+    val canSign = signStatus == "待签到"
     Column {
         if (showTopDivider) {
             Box(
@@ -403,7 +399,7 @@ private fun SignRow(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(student.name, style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
-                    if (alreadySignedToday) {
+                    if (signStatus != "待签到") {
                         Spacer(Modifier.width(Spacing.sm))
                         Box(
                             modifier = Modifier
@@ -411,7 +407,7 @@ private fun SignRow(
                                     RoundedCornerShape(4.dp))
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                         ) {
-                            Text("已签到", style = MaterialTheme.typography.labelSmall,
+                            Text(signStatus, style = MaterialTheme.typography.labelSmall,
                                 fontSize = 14.sp,
                                 color = AttendanceOnTime, fontWeight = FontWeight.Normal)
                         }
@@ -424,15 +420,16 @@ private fun SignRow(
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
                 )
             }
-            // 签到按钮：蓝色圆形 + 白色加号
+            // 签到按钮：待签到=蓝色可点，已签到/已签退=灰色置灰
+            val btnBg = if (canSign) MaterialTheme.colorScheme.primary else Color(0xFFBDBDBD)
             Box(
                 modifier = Modifier
                     .size(36.dp)
-                    .clickable(onClick = onSign)
-                    .background(MaterialTheme.colorScheme.primary, CircleShape),
+                    .clickable(enabled = canSign, onClick = onSign)
+                    .background(btnBg, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Outlined.Add, contentDescription = "签到",
+                Icon(Icons.Outlined.Add, contentDescription = if (canSign) "签到" else signStatus,
                     tint = Color.White, modifier = Modifier.size(20.dp))
             }
         }

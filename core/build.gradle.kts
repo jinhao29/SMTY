@@ -44,7 +44,6 @@ dependencies {
 
 // 启用单元测试报告
 tasks.withType<Test> {
-    useJUnitPlatform()
     testLogging {
         events("passed", "skipped", "failed")
     }

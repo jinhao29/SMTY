@@ -15,22 +15,21 @@ import com.shangmentiyu.sportscoach.data.model.DietTemplateEntity
 import com.shangmentiyu.sportscoach.data.model.Lesson
 import com.shangmentiyu.sportscoach.data.model.LessonPackage
 import com.shangmentiyu.sportscoach.data.model.ParentReport
-// TODO: 待确认，可能是死代码。PlanImage 实体与 PlanImageDao 已无业务调用方
-// （PlanImageRepository 已删除，LanImageReceiver 已删除）。
-// 仅为避免 Room Schema 变更导致升级用户崩溃而保留。
-// 后续若编写 Migration 删除 plan_images 表，可同步移除此 import 与 entities 中的 PlanImage::class。
+// PlanImage 仍被 PreClassScheduleCard / PreClassTab 引用（电脑端训练计划截图展示），
+// 并非死代码，保留实体与 DAO。
 import com.shangmentiyu.sportscoach.data.model.PlanImage
 import com.shangmentiyu.sportscoach.data.model.Schedule
 import com.shangmentiyu.sportscoach.data.model.ScheduleMemory
+import com.shangmentiyu.sportscoach.data.model.SignInRecord
 import com.shangmentiyu.sportscoach.data.model.Student
 import com.shangmentiyu.sportscoach.data.model.StudentDietRecord
 import com.shangmentiyu.sportscoach.data.model.StudentFts
 import com.shangmentiyu.sportscoach.data.model.TrainingCycle
 
 @Database(
-    entities = [Student::class, Lesson::class, LessonPackage::class, Coach::class, Schedule::class, ParentReport::class, TrainingCycle::class, BodyMetricHistory::class, ScheduleMemory::class, DietTemplateEntity::class, StudentDietRecord::class, StudentFts::class, ArchivedLesson::class, AuditLogEntity::class, PlanImage::class],
-    version = 29,
-    exportSchema = false
+    entities = [Student::class, Lesson::class, LessonPackage::class, Coach::class, Schedule::class, ParentReport::class, TrainingCycle::class, BodyMetricHistory::class, ScheduleMemory::class, DietTemplateEntity::class, StudentDietRecord::class, StudentFts::class, ArchivedLesson::class, AuditLogEntity::class, PlanImage::class, SignInRecord::class],
+    version = 32,
+    exportSchema = true
 )
 @TypeConverters(com.shangmentiyu.sportscoach.data.model.Converters::class)
 abstract class AppDatabase : RoomDatabase() {
@@ -49,10 +48,10 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun archivedLessonDao(): ArchivedLessonDao
     /** v26 优化1 新增：操作日志 DAO（审计溯源） */
     abstract fun auditLogDao(): AuditLogDao
-    /** v25 新增：训练计划图片 DAO（电脑端截图推送） */
-    // TODO: 待确认，可能是死代码。PlanImageDao 的所有方法已无业务调用方。
-    // 仅为 Room Schema 兼容保留，后续若删除 plan_images 表可同步移除。
+    /** v25 新增：训练计划图片 DAO（电脑端截图推送，PreClassScheduleCard 展示） */
     abstract fun planImageDao(): PlanImageDao
+    /** v32 新增：签到记录 DAO（排课与签到分离 + 防重） */
+    abstract fun signInDao(): SignInDao
 
     companion object {
         @Volatile
@@ -827,6 +826,82 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
+         * === v51 数据流加固：students.studentId 唯一索引 ===
+         *
+         * studentId 是学员软关联唯一键，此前由 UUID 前缀生成但无数据库唯一约束，
+         * 理论上存在碰撞风险（迁移/回填/导入路径均可能产生重复 ID）。
+         *
+         * 迁移步骤：
+         * 1. 先为历史重复 studentId 重新生成 48bit 随机 ID（保留每组 rowid 最小的行，
+         *    即"归并去重"），避免 CREATE UNIQUE INDEX 因重复值抛出 SQLiteConstraintException；
+         *    hex(randomblob(6)) 生成 12 位十六进制，与历史 8 位 ID 长度不同，不可能碰撞。
+         * 2. 创建唯一索引（IF NOT EXISTS 幂等）。
+         *    SQLite 唯一索引允许多个 NULL，历史 studentId=NULL 行不受影响。
+         *
+         * ⚠️ 一致性要求：该索引已在 [com.shangmentiyu.sportscoach.data.model.Student]
+         * 实体的 @Entity(indices=...) 中同步声明（unique=true，同名）。
+         * 迁移创建 + 实体声明必须同时存在，否则 Room 迁移后的 schema 校验
+         * （TableInfo 索引集合精确比对）会因索引不匹配抛 IllegalStateException
+         * 导致 App 启动闪退。
+         */
+        private val MIGRATION_29_30 = object : Migration(29, 30) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    UPDATE students SET studentId = hex(randomblob(6))
+                    WHERE studentId IS NOT NULL
+                      AND rowid NOT IN (
+                          SELECT MIN(rowid) FROM students
+                          WHERE studentId IS NOT NULL
+                          GROUP BY studentId
+                      )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS idx_students_student_id ON students(studentId)")
+            }
+        }
+
+        /**
+         * v30 → v31：小班课支持。
+         * - schedules 表新增 groupScheduleId 字段（TEXT，可空，默认 NULL）
+         * - lessons 表新增 groupScheduleId 字段（TEXT，可空，默认 NULL）
+         */
+        private val MIGRATION_30_31 = object : Migration(30, 31) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE schedules ADD COLUMN groupScheduleId TEXT")
+                db.execSQL("ALTER TABLE lessons ADD COLUMN groupScheduleId TEXT")
+            }
+        }
+
+        /**
+         * v31 → v32：排课与签到分离。
+         * - 新增 sign_in_records 表（签到/签退操作留痕 + 防重唯一索引）
+         * - lesson_packages 表新增 paidAmount 字段（实收金额，-1 = 未记录视同已付清）
+         */
+        private val MIGRATION_31_32 = object : Migration(31, 32) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS sign_in_records (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        studentName TEXT NOT NULL,
+                        studentId TEXT,
+                        lessonId TEXT NOT NULL,
+                        type TEXT NOT NULL,
+                        operator TEXT NOT NULL DEFAULT '',
+                        createdAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_sign_in_records_student_lesson_type " +
+                        "ON sign_in_records(studentName, lessonId, type)"
+                )
+                db.execSQL("ALTER TABLE lesson_packages ADD COLUMN paidAmount REAL NOT NULL DEFAULT -1.0")
+            }
+        }
+
+        /**
          * 数据库首次创建时的回调：插入预置饮食模板数据。
          *
          * 仅在数据库文件首次创建时触发（新装用户），老用户升级走 [MIGRATION_17_18]。
@@ -846,9 +921,9 @@ abstract class AppDatabase : RoomDatabase() {
                 // 2. checkVersionAndEmergencyBackup：若 db 文件版本 > 代码版本（降级场景），
                 //    生成急救备份并抛 RuntimeException 让 App 闪退，避免 Room 清库
                 // 这两步确保即使后续 Room 打开失败，也有一份"启动前"的完整数据库可恢复
-                com.shangmentiyu.sportscoach.core.PreUpdateBackupManager
+                com.shangmentiyu.sportscoach.data.internal.PreUpdateBackupManager
                     .backupIfDbExists(context.applicationContext)
-                com.shangmentiyu.sportscoach.core.PreUpdateBackupManager
+                com.shangmentiyu.sportscoach.data.internal.PreUpdateBackupManager
                     .checkVersionAndEmergencyBackup(context.applicationContext, DATABASE_VERSION)
 
                 val instance = Room.databaseBuilder(
@@ -856,7 +931,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     DATABASE_NAME
                 )
-                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25, MIGRATION_25_26, MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29)
+                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25, MIGRATION_25_26, MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29, MIGRATION_29_30, MIGRATION_30_31, MIGRATION_31_32)
                     .addCallback(DB_CALLBACK)
                     // === 终极防丢机制：严禁任何破坏性清库 fallback ===
                     // 历史教训：fallbackToDestructiveMigrationOnDowngrade() 在数据库文件版本
@@ -913,13 +988,13 @@ abstract class AppDatabase : RoomDatabase() {
         /**
          * 当前代码声明的数据库版本（与 @Database version 保持一致）。
          *
-         * 用于在 [com.shangmentiyu.sportscoach.core.PreUpdateBackupManager.checkVersionAndEmergencyBackup]
+         * 用于在 [com.shangmentiyu.sportscoach.data.internal.PreUpdateBackupManager.checkVersionAndEmergencyBackup]
          * 中与数据库文件实际版本对比，检测降级场景；
-         * 也用于 [com.shangmentiyu.sportscoach.core.BackupManager] 恢复前
+         * 也用于 [com.shangmentiyu.sportscoach.data.internal.BackupManager] 恢复前
          * 对比备份库版本，拒绝来自更高版本 App 的备份，防止恢复后闪退。
          *
          * 修改 @Database version 时必须同步修改此常量，否则版本检查会失效。
          */
-        const val DATABASE_VERSION = 29
+        const val DATABASE_VERSION = 32
     }
 }

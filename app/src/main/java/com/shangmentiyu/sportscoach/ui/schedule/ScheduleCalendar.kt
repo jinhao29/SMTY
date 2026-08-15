@@ -48,13 +48,13 @@ import java.time.format.DateTimeFormatter
  * 5. clickable 使用无 ripple 的 interactionSource，减少绘制开销
  *
  * @param selectedDate 选中日期（yyyy-MM-dd）
- * @param scheduledDaysOfWeek 有排课的"周几"集合（1=周一 ... 7=周日）
+ * @param scheduledDates 有排课（活跃 + 非体验课 + 模板生效期内）的"具体日期"集合（yyyy-MM-dd）
  * @param onDateSelected 日期点击回调
  */
 @Composable
 fun ScheduleCalendar(
     selectedDate: String,
-    scheduledDaysOfWeek: Set<Int>,
+    scheduledDates: Set<String>,
     onDateSelected: (String) -> Unit
 ) {
     val formatter = remember { DateTimeFormatter.ofPattern("yyyy-MM-dd") }
@@ -67,9 +67,9 @@ fun ScheduleCalendar(
     // === 预计算所有日期数据 ===
     // 把 42 个日期的所有 UI 状态一次性算完，避免在 forEach 里重复 format/比较
     // 用 @Immutable 注解，Compose 检测到引用未变即跳过重组
-    val monthDays = remember(currentMonth, selected, today, scheduledDaysOfWeek) {
+    val monthDays = remember(currentMonth, selected, today, scheduledDates) {
         try {
-            buildCalendarDays(currentMonth, selected, today, scheduledDaysOfWeek, formatter)
+            buildCalendarDays(currentMonth, selected, today, scheduledDates, formatter)
         } catch (e: Exception) {
             android.util.Log.e("CalendarCrash", "构建日历数据失败", e)
             emptyList()
@@ -185,7 +185,7 @@ private fun buildCalendarDays(
     currentMonth: YearMonth,
     selected: LocalDate,
     today: LocalDate,
-    scheduledDaysOfWeek: Set<Int>,
+    scheduledDates: Set<String>,
     formatter: DateTimeFormatter
 ): List<CalendarDayData> {
     val firstDayOfMonth = currentMonth.atDay(1)
@@ -214,8 +214,9 @@ private fun buildCalendarDays(
             day = date.dayOfMonth,
             isCurrentMonth = date.month == currentMonth.month,
             isToday = date == today,
-            // 按该日期的"周几"判断是否有排课模板
-            isScheduled = scheduledDaysOfWeek.contains(date.dayOfWeek.value),
+            // 按"具体日期"判断是否有排课：与下方列表共享同一过滤条件
+            // （活跃 + 非体验课 + 模板生效期），杜绝"日历有红点但下方列表为空"
+            isScheduled = scheduledDates.contains(date.format(formatter)),
             isSelected = date == selected
         )
     }
@@ -276,8 +277,9 @@ private fun CalendarDayCell(
         )
         Spacer(Modifier.height(2.dp))
         // === 排课红点：主题令牌接管，深色模式清晰可见 ===
-        // 数据源为 ScheduleScreen 传入的 scheduledDaysOfWeek（订阅 OperationViewModel.schedules
-        // 响应式 Flow，新增/删除排课、体验课保存后红点立即刷新，无需手动切周）
+        // 数据源为 ScheduleScreen 传入的 scheduledDates（"具体日期"集合，与下方列表
+        // 共享同一过滤条件：活跃 + 非体验课 + 模板生效期；新增/删除排课、体验课保存后
+        // 红点立即刷新，无需手动切周）
         if (data.isScheduled && !data.isSelected) {
             Box(
                 modifier = Modifier
