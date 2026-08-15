@@ -126,6 +126,23 @@ interface LessonDao {
     suspend fun countByStudentDateTimeDual(studentId: String?, name: String, date: String, time: String): Int
 
     /**
+     * 批量去重查询：查询学员在指定日期范围内、指定时间点已存在的排课日期集合。
+     *
+     * 用于 [com.shangmentiyu.sportscoach.data.repo.OperationRepository.batchAutoSchedule]
+     * 在事务前预查已有排课，过滤重复日期，避免 UNIQUE(studentName, date, time) 约束冲突。
+     * 双通道：studentId 优先、studentName 回退。
+     *
+     * @param studentId 学员唯一 ID（可空，旧数据无 ID）
+     * @param name 学员姓名（studentId 为空时回退匹配）
+     * @param fromDate 日期范围起点（含，yyyy-MM-dd）
+     * @param toDate 日期范围终点（含，yyyy-MM-dd）
+     * @param time 上课时间 HH:mm
+     * @return 已存在排课的日期字符串列表（yyyy-MM-dd）
+     */
+    @Query("SELECT date FROM lessons WHERE (studentId = :studentId OR (studentId IS NULL AND studentName = :name)) AND date >= :fromDate AND date <= :toDate AND time = :time")
+    suspend fun getExistingDatesByStudentAndTime(studentId: String?, name: String, fromDate: String, toDate: String, time: String): List<String>
+
+    /**
      * === v49 彻底重构：三要素额度统计（已消耗 / 待消耗 / 按天查重） ===
      *
      * 剩余可排课时 = 总课时(活跃包剩余之和) - 已消耗(已签退) - 待消耗(占位)。
@@ -154,6 +171,21 @@ interface LessonDao {
     )
     suspend fun countPendingPlaceholderLessonsDual(studentId: String?, name: String, fromDate: String): Int
 
+    /**
+     * === 根治口径：待消耗占位课时数（已排但未签退，仅统计今天及未来） ===
+     *
+     * 凡 lessons 表中 signOutTime 为空（未签退即未消课扣减）且非体验课、日期 >= 今天的记录，
+     * 视为「待消耗」，占用剩余额度，杜绝排课超卖；过去的未签退课时是历史遗留，不占用额度。
+     */
+    @Query(
+        "SELECT COUNT(*) FROM lessons WHERE " +
+            "(studentId = :studentId OR (studentId IS NULL AND studentName = :name)) " +
+            "AND date >= :today " +
+            "AND (signOutTime IS NULL OR signOutTime = '') " +
+            "AND isTrial = 0"
+    )
+    suspend fun countUncheckedOutLessonsDual(studentId: String?, name: String, today: String): Int
+
     /** 按天查重：学员在某天是否已有课时记录（长期排课生成器按天检查「当天已排」） */
     @Query(
         "SELECT COUNT(*) FROM lessons WHERE " +
@@ -162,8 +194,33 @@ interface LessonDao {
     )
     suspend fun countLessonsByStudentDateDual(studentId: String?, name: String, date: String): Int
 
+    /**
+     * === v32：签到翻转入口查询 ===
+     *
+     * 查学员指定日期首条「未签退」课时（排课占位 / 已签到但未签退），
+     * 签到逻辑优先翻转该条而非新建，避免同一学员同日重复创建课时。
+     * 双通道：studentId 优先、studentName 回退。
+     */
+    @Query(
+        "SELECT * FROM lessons WHERE " +
+            "(studentId = :studentId OR (studentId IS NULL AND studentName = :name)) " +
+            "AND date = :date " +
+            "AND (signOutTime IS NULL OR signOutTime = '') " +
+            "ORDER BY time ASC LIMIT 1"
+    )
+    suspend fun findPendingByStudentDateDual(studentId: String?, name: String, date: String): Lesson?
+
     @Insert
     suspend fun insert(lesson: Lesson)
+
+    /**
+     * 批量插入课时记录（自动排课事务内一次性写入）。
+     *
+     * 用于 [com.shangmentiyu.sportscoach.data.repo.OperationRepository.batchAutoSchedule]
+     * 在单个 Room 事务中一次性写入所有课时记录，避免逐条插入。
+     */
+    @Insert
+    suspend fun insertAll(lessons: List<Lesson>)
 
     /**
      * === v27：返回受影响行数，便于签退消课事务校验 ===
@@ -182,6 +239,19 @@ interface LessonDao {
 
     @Query("DELETE FROM lessons WHERE id = :id")
     suspend fun deleteById(id: String)
+
+    /**
+     * 批量删除课时记录（课后反馈 Tab 多选模式批量删除使用）。
+     *
+     * 单条 SQL `DELETE ... WHERE id IN (...)` 由 SQLite 原子执行，满足原子性要求，
+     * 无需额外包裹事务。空列表时 IN 子句会被 Room 编译为 `IN ()` 导致语法错误，
+     * 调用方须在 Repository 层提前拦截。
+     *
+     * @param ids 待删除的课时 ID 列表
+     * @return 实际删除的记录数
+     */
+    @Query("DELETE FROM lessons WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<String>): Int
 
     @Query("DELETE FROM lessons WHERE studentName = :name")
     suspend fun deleteByStudent(name: String)
@@ -219,7 +289,7 @@ interface LessonDao {
     /**
      * 一次性查询指定日期的课时（非 Flow，用于后台任务）。
      *
-     * 用于 [com.shangmentiyu.sportscoach.core.ScheduleReminderWorker]
+     * 用于 [com.shangmentiyu.sportscoach.app.framework.ScheduleReminderWorker]
      * 查询明天的排课记录，触发本地通知。
      *
      * @param date 日期 YYYY-MM-DD
@@ -257,34 +327,66 @@ interface LessonDao {
     suspend fun updateStudentNameByStudentId(studentId: String, newName: String): Int
 
     /**
-     * === Bug 修复2：清理过去未完成的长期排课记录（历史废弃占位排课） ===
+     * === v32：清理过期未签到课表 ===
      *
-     * 业务背景：
-     * - 长期排课（schedule.isLongTerm=true）会自动按 dayOfWeek 生成 Lesson 记录
-     * - 历史 Bug 导致即使不勾选长期排课、或为已过去的日期也生成了大量 Lesson 占位记录
-     * - 这些记录 status != '已签退'、date < 今天、对应的 schedule 为 isLongTerm=true
-     * - 它们污染了历史周历视图，且无业务价值（学员未实际签到），需要物理删除
+     * 清理规则（修正版）：
+     * 1. date < :today —— 仅清理已过期课表，绝不影响今天及未来排课
+     * 2. status = '待签到' —— 仅清理「排课后从未签到」的占位课时
+     *    （签到会翻转为"已签到"，签退会置为"已签退"，均不受影响）
+     * 3. signOutTime 为空 —— 兜底排除已签退记录
      *
-     * 清理规则：
-     * 1. status != '已签退'（保留已签退的历史真实记录，作为学员上课凭证）
-     * 2. date < :today（只清理过去日期，不影响今天及未来）
-     * 3. lessonType LIKE '%(长期自动)%'（仅清理长期自动生成的占位排课）
-     *    → 通过 lessonType 字段标记识别，避免与 schedule 表 JOIN 带来的性能开销
-     *    → lessonType 字段在 [com.shangmentiyu.sportscoach.data.repo.OperationRepository.generateLongTermLesson]
-     *      生成时已附加 "(长期自动)" 后缀
-     *
-     * 已签退的真实课时记录（学员已实际消课）不会被清理，仍保留在历史周历中，
-     * 由 UI 层 [com.shangmentiyu.sportscoach.ui.schedule.ScheduleScreen.KeepScheduleCard]
-     * 通过置灰 + "已过去"角标区分展示。
+     * 已签到 / 已签退的真实课时记录是业务凭证，绝不清理。
      *
      * @param today 当前日期 YYYY-MM-DD（边界日期，date 严格小于此值的记录才会被清理）
-     * @return 被物理删除的记录数（供 UI 通过 toast 反馈清理结果）
+     * @return 被物理删除的记录数（供 UI 弹窗反馈清理数量）
      */
     @Query("""
         DELETE FROM lessons
-        WHERE status != '已签退'
-            AND date < :today
-            AND lessonType LIKE '%(长期自动)%'
+        WHERE date < :today
+            AND status = '待签到'
+            AND (signOutTime IS NULL OR signOutTime = '')
     """)
-    suspend fun deleteUnfinishedPastLongTermLessons(today: String): Int
+    suspend fun deleteExpiredUnsignedLessons(today: String): Int
+
+    /** 小班课：查询同 groupScheduleId 的所有课时记录 */
+    @Query("SELECT * FROM lessons WHERE groupScheduleId = :groupScheduleId")
+    suspend fun getByGroupScheduleId(groupScheduleId: String): List<com.shangmentiyu.sportscoach.data.model.Lesson>
+
+    /** 统计学员的正式课时记录数（isTrial=0），用于"首次自动体验课"判断 */
+    @Query(
+        "SELECT COUNT(*) FROM lessons WHERE " +
+            "(studentId = :studentId OR (studentId IS NULL AND studentName = :name)) " +
+            "AND isTrial = 0"
+    )
+    suspend fun countFormalLessonsDual(studentId: String?, name: String): Int
+
+    /**
+     * 修复脚本：查询已排课但未签退且已关联课时包的课时记录。
+     *
+     * 这些记录是旧版自动排课在排课阶段错误扣费（设置 packageId + 增加 usedLessons）的遗留数据。
+     * 修复时需将这些记录的 packageId 清空，并回退对应课时包的 usedLessons。
+     *
+     * @return 未签退且 packageId 非空的课时记录列表
+     */
+    @Query(
+        "SELECT * FROM lessons WHERE " +
+            "packageId != '' AND packageId IS NOT NULL " +
+            "AND status != '已签退'"
+    )
+    suspend fun getUnconsumedWithPackageId(): List<Lesson>
+
+    /**
+     * 修复脚本：批量清除未签退课时的 packageId（将排课占位恢复为待消课状态）。
+     *
+     * 清除后，签退时 [OperationRepository.consumeLessonForCheckOut] 会正常执行课时包扣减，
+     * 实现排课与消课完全分离。
+     *
+     * @return 受影响行数（被清除 packageId 的课时记录数）
+     */
+    @Query(
+        "UPDATE lessons SET packageId = '' WHERE " +
+            "packageId != '' AND packageId IS NOT NULL " +
+            "AND status != '已签退'"
+    )
+    suspend fun clearPackageIdForUnconsumed(): Int
 }

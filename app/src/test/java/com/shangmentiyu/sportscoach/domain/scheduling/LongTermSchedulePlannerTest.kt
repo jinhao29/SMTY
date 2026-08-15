@@ -236,4 +236,74 @@ class LongTermSchedulePlannerTest {
         )
         assertThat(plans).isEmpty()
     }
+
+    // === v50 终极逻辑阻断：首次购买日期 / 到期日期 / 历史待消耗三重拦截 ===
+
+    @Test
+    fun `拦截1_早于首次购买日期的天数跳过不生成`() {
+        val plans = LongTermSchedulePlanner.plan(
+            studentSchedules = week5Templates(),
+            weekStart = weekStart,          // 2026-08-03 周一
+            today = today,
+            availableQuota = 10,
+            alreadyBookedDates = emptySet(),
+            windowDays = 14,
+            firstPurchaseDate = "2026-08-10" // 首次购买：下周一
+        )
+        // 08-03 ~ 08-07 早于首次购买 → 全部跳过；最早生成日 = 08-10
+        assertThat(plans.map { it.date }.minOrNull()).isEqualTo("2026-08-10")
+        plans.forEach { plan -> assertThat(plan.date).isGreaterThan("2026-08-09") }
+    }
+
+    @Test
+    fun `拦截2_超过课时包最晚到期日彻底停止不再生成`() {
+        val plans = LongTermSchedulePlanner.plan(
+            studentSchedules = week5Templates(),
+            weekStart = weekStart,          // 2026-08-03 周一
+            today = today,
+            availableQuota = 10,
+            alreadyBookedDates = emptySet(),
+            windowDays = 14,
+            expireDate = "2026-08-07"       // 课时包最晚到期：本周五
+        )
+        // 只生成到 08-07（5 节），之后日期全部 > 到期日 → break，1 节都不多排
+        assertThat(plans.size).isEqualTo(5)
+        assertThat(plans.map { it.date }.maxOrNull()).isEqualTo("2026-08-07")
+    }
+
+    @Test
+    fun `拦截3与历史占位_已有待消耗先扣除_生成量加待消耗不超过总额度`() {
+        val plans = LongTermSchedulePlanner.plan(
+            studentSchedules = week5Templates(),
+            weekStart = weekStart,
+            today = today,
+            availableQuota = 15,            // 总剩余额度
+            alreadyBookedDates = emptySet(),
+            windowDays = 28,
+            pendingSlots = 5                // 已有待消耗占位 5 节 → 只剩 10 节可生成
+        )
+        // 15 - 5 = 10 节；生成量(10) + 待消耗(5) = 15 <= 总额度(15)
+        assertThat(plans.size).isEqualTo(10)
+    }
+
+    // === 回退测试：firstPurchaseDate 为 null 时规划器行为（校验层负责拦截，规划器信任入参） ===
+
+    @Test
+    fun `回退_firstPurchaseDate为null时_规划器不对齐购买日期_从weekStart开始生成`() {
+        // 模拟学员有多个课时包但 earliestPurchaseDateOf 返回 null 的场景：
+        // 规划器收到 firstPurchaseDate=null，不会对齐购买日期，从 weekStart 开始生成。
+        // 拦截责任由 ValidateScheduleUseCase.resolveEarliestPurchaseDate 回退逻辑承担。
+        val plans = LongTermSchedulePlanner.plan(
+            studentSchedules = week5Templates(),
+            weekStart = weekStart,
+            today = today,
+            availableQuota = 10,
+            alreadyBookedDates = emptySet(),
+            windowDays = 14,
+            firstPurchaseDate = null       // 模拟 earliestPurchaseDateOf 返回 null
+        )
+        // 无购买日期约束 → 从 weekStart(08-03 周一) 开始正常生成
+        assertThat(plans.map { it.date }.minOrNull()).isEqualTo("2026-08-03")
+        assertThat(plans.size).isEqualTo(10)
+    }
 }

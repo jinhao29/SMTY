@@ -17,13 +17,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -31,36 +29,23 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.Notes
-import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
-import androidx.compose.material.icons.outlined.CalendarToday
-import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Label
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.Schedule
-import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextFieldColors
 import androidx.compose.material3.TopAppBar
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -75,21 +60,18 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.shangmentiyu.sportscoach.data.model.ExerciseItem
+import com.shangmentiyu.sportscoach.data.model.Student
 import com.shangmentiyu.sportscoach.data.repo.CoachConflictException
 import com.shangmentiyu.sportscoach.ui.operation.OperationViewModel
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import com.shangmentiyu.sportscoach.ui.theme.IOSCard
 import com.shangmentiyu.sportscoach.ui.theme.IOSColorPillSelector
 import com.shangmentiyu.sportscoach.ui.theme.IOSSectionHeader
-import com.shangmentiyu.sportscoach.ui.theme.PrimaryButton
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
@@ -97,7 +79,6 @@ import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appOutline
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 import com.shangmentiyu.sportscoach.ui.theme.appSurface
-import com.shangmentiyu.sportscoach.ui.theme.appSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
 import com.shangmentiyu.sportscoach.ui.theme.StyledDropdown
 import com.shangmentiyu.sportscoach.ui.theme.AppTextField
@@ -133,8 +114,12 @@ import java.io.File
  * - 保存按钮调用 [OperationViewModel.saveSchedule]
  *
  * 适配说明：本组件统一接受 [OperationViewModel]，使运营管理成为唯一排课入口。
+ *
+ * 结构：本文件保留状态管理与组装逻辑，学员选择/周几/时间/长期排课/保存按钮
+ * 分别拆分为独立 @Composable（ScheduleStudentSelector / ScheduleDatePicker /
+ * ScheduleTimePicker / ScheduleRepeatSection / ScheduleSubmitButton）。
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScheduleEditDialog(
     vm: OperationViewModel,
@@ -147,8 +132,12 @@ fun ScheduleEditDialog(
     onSaved: () -> Unit
 ) {
     val students by vm.students.collectAsStateWithLifecycle()
+    // === v52 数据流加固：学员列表首帧加载标记 ===
+    // Room Flow 首帧到达前 students 持有 emptyList()，此时渲染下拉框会显示
+    // "请选择"且点开为空（用户感知为"学员下拉框消失"）。首帧到达前显示加载占位。
+    val studentsLoaded by vm.studentsLoaded.collectAsStateWithLifecycle()
     // === v46 数据流诊断：Logcat 过滤 DataFlow 查看学员列表是否加载成功 ===
-    Log.d("DataFlow", "下拉列表加载到的学员数量: ${students.size}")
+    Log.d("DataFlow", "下拉列表加载到的学员数量: ${students.size}, loaded=$studentsLoaded")
     val editing by vm.editingSchedule.collectAsStateWithLifecycle()
     // 排课记忆：时间/地点历史下拉
     val timeMemories by vm.timeMemories.collectAsStateWithLifecycle()
@@ -175,6 +164,12 @@ fun ScheduleEditDialog(
     val focusManager = LocalFocusManager.current
     // === v28 优化3：协程作用域，用于学员选中后异步加载训练内容推荐 ===
     val scope = rememberCoroutineScope()
+    // === 修复：弹窗打开时强制刷新学员课时包数据 ===
+    // 确保展示与校验读到最新数据库状态（而非上一次缓存的旧状态）
+    LaunchedEffect(Unit) {
+        vm.loadStudentPackages(if (isCreate) null else editing?.studentId)
+        vm.loadStudents()
+    }
     // === v28 优化3：是否已为当前学员填充过推荐训练内容（避免重复覆盖用户编辑） ===
     var recommendedFor by remember { mutableStateOf<String?>(null) }
 
@@ -201,6 +196,13 @@ fun ScheduleEditDialog(
     var isLongTerm by remember { mutableStateOf(false) }
     // === v49 体验课：未注册学员临时体验课开关 ===
     var isTrial by remember { mutableStateOf(false) }
+    // === 首次排课自动体验课：注册学员首次排课时第一天自动标记为体验课（不消耗课时）===
+    var isFirstLessonAutoTrial by remember { mutableStateOf(true) }
+    var isFirstLessonAutoTrialEnabled by remember { mutableStateOf(true) }
+    // === 小班课：多选学员开关 + 选中集合 ===
+    var isGroupClass by remember { mutableStateOf(false) }
+    var groupSelectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var groupSelectedNames by remember { mutableStateOf<List<String>>(emptyList()) }
     var color by remember { mutableStateOf("blue") }
     var note by remember { mutableStateOf("") }
     var content by remember { mutableStateOf<List<ExerciseItem>>(emptyList()) }
@@ -212,6 +214,13 @@ fun ScheduleEditDialog(
         if (!isCreate && editing != null) {
             val s = editing!!
             studentName = s.studentName
+            // === v52 数据流加固：编辑模式同步软关联 ID ===
+            // 此前 selectedStudentId 仅由"用户重新选择学员"时写入，编辑加载时保持 null。
+            // 若用户在编辑过程中开关一次体验课（isTrial 清空 selectedStudentId 后切回），
+            // 保存时 form.studentId=null，虽被 `form.studentId ?: editing.studentId` 兜底，
+            // 但"复制上次训练内容/训练推荐"等依赖学员 ID 的路径会拿到错误的空关联。
+            // 编辑加载时显式恢复，保证表单状态与数据库软关联一致。
+            selectedStudentId = s.studentId
             coachName = s.coachName.ifBlank { "李" }
             dayOfWeek = s.dayOfWeek
             startTime = s.startTime
@@ -220,8 +229,8 @@ fun ScheduleEditDialog(
             lessonType = s.lessonType
             isLongTerm = s.isLongTerm
             isTrial = s.isTrial
+            isGroupClass = s.groupScheduleId != null
             color = s.color
-            note = s.note
             content = vm.parseContent(s.content)
             contentImages = vm.parseImages(s.contentImages)
             equipment = vm.parseEquipment(s.equipment)
@@ -230,6 +239,25 @@ fun ScheduleEditDialog(
             dayOfWeek = prefillDayOfWeek
             selectedDays = setOf(prefillDayOfWeek)
             memoryApplied = true  // 已显式预填，无需再应用记忆
+        }
+    }
+
+    // === 首次自动体验课：选中学员后检测是否已有正式课记录，有则置灰取消勾选 ===
+    LaunchedEffect(selectedStudentId, studentName, isTrial, isGroupClass) {
+        if (!isCreate || isTrial || isGroupClass || studentName.isBlank()) {
+            isFirstLessonAutoTrialEnabled = true
+            isFirstLessonAutoTrial = true
+            return@LaunchedEffect
+        }
+        val hasFormal = withContext(Dispatchers.IO) {
+            vm.hasFormalLessons(selectedStudentId, studentName)
+        }
+        if (hasFormal) {
+            isFirstLessonAutoTrialEnabled = false
+            isFirstLessonAutoTrial = false
+        } else {
+            isFirstLessonAutoTrialEnabled = true
+            isFirstLessonAutoTrial = true
         }
     }
 
@@ -251,7 +279,7 @@ fun ScheduleEditDialog(
     // （用户在确认框期间未修改表单，state 变量保持不变，直接复用即可）
     val buildForm: () -> ScheduleForm = {
         ScheduleForm(
-            studentName = studentName,
+            studentName = if (isGroupClass) "" else studentName,
             // v49 体验课：studentId 强制 null（未注册学员无软关联）
             studentId = if (isTrial) null else selectedStudentId,
             coachName = coachName,
@@ -263,11 +291,15 @@ fun ScheduleEditDialog(
             lessonType = lessonType,
             isLongTerm = isLongTerm,
             isTrial = isTrial,
+            isFirstLessonAutoTrial = isFirstLessonAutoTrial,
             content = content,
             contentImages = contentImages,
             color = color,
             note = note,
-            equipment = equipment
+            equipment = equipment,
+            isGroupClass = isGroupClass,
+            groupStudentIds = groupSelectedIds,
+            groupStudentNames = groupSelectedNames
         )
     }
 
@@ -282,6 +314,86 @@ fun ScheduleEditDialog(
                 selectedDays = setOf(recentDay)
             }
             memoryApplied = true
+        }
+    }
+
+    // === 状态回调：由父级维护状态，子组件只负责渲染 ===
+    // 小班课多选 Chip 点击：维护选中 ID 集合与姓名列表
+    val onGroupToggle: (Student) -> Unit = { s ->
+        val sid = s.studentId
+        if (sid != null) {
+            if (sid in groupSelectedIds) {
+                groupSelectedIds = groupSelectedIds - sid
+                groupSelectedNames = groupSelectedNames.filter { it != s.name }
+            } else {
+                groupSelectedIds = groupSelectedIds + sid
+                groupSelectedNames = groupSelectedNames + s.name
+            }
+        }
+    }
+    // 普通模式选中学员：同步姓名/软关联 ID，清焦点，异步预填训练内容推荐
+    val onStudentSelected: (Student) -> Unit = { s ->
+        studentName = s.name
+        selectedStudentId = s.studentId
+        focusManager.clearFocus()
+        if (isCreate && content.isEmpty() && recommendedFor != s.name) {
+            recommendedFor = s.name
+            scope.launch {
+                val recommended = withContext(Dispatchers.IO) {
+                    vm.recommendTrainingContent(
+                        studentName = s.name,
+                        latestBmi = s.bmi
+                    )
+                }
+                if (recommended.isNotEmpty() && content.isEmpty()) {
+                    content = recommended
+                }
+            }
+        }
+    }
+    // 新建模式多选周几：多天排课必须搭配"长期排课"，自动勾选并提示
+    val onToggleDay: (Int) -> Unit = { day ->
+        val newSelectedDays = if (selectedDays.contains(day)) selectedDays - day else selectedDays + day
+        selectedDays = newSelectedDays
+        if (newSelectedDays.size > 1 && !isLongTerm) {
+            isLongTerm = true
+            vm.showToast("已自动勾选\u201C长期排课\u201D：多天排课需按周循环生成课程")
+        }
+        // 同步 dayOfWeek 为首个选中值（用于回退/展示）
+        dayOfWeek = newSelectedDays.minOrNull() ?: day
+    }
+    // 编辑模式单选周几：同步 dayOfWeek 并清除焦点关闭软键盘
+    val onDaySelected: (Int) -> Unit = { day ->
+        dayOfWeek = day
+        focusManager.clearFocus()
+    }
+    // 历史时间快捷选择：回填开始时间并清除焦点
+    val onTimeMemorySelected: (String) -> Unit = { value ->
+        startTime = value
+        focusManager.clearFocus()
+    }
+    // 保存：先做 UI 层校验，再走 ValidateScheduleUseCase + saveSchedule，异常暴露为 Toast
+    val onSave: () -> Unit = {
+        when {
+            isCreate && selectedDays.isEmpty() -> vm.showToast("请至少选择一个周几")
+            isGroupClass && groupSelectedNames.size < 2 -> vm.showToast("小班课至少需要选择 2 名学员")
+            else -> {
+                val form = buildForm()
+                scope.launch {
+                    try {
+                        val error = withContext(Dispatchers.IO) {
+                            vm.validateScheduleForSave(form)
+                        }
+                        if (error != null) {
+                            vm.showToast(error)
+                        } else {
+                            vm.saveSchedule(form)
+                        }
+                    } catch (e: Exception) {
+                        vm.showToast(e.message ?: "保存失败：${e.javaClass.simpleName}")
+                    }
+                }
+            }
         }
     }
 
@@ -368,58 +480,88 @@ fun ScheduleEditDialog(
                                     if (checked) {
                                         // 体验课不关联注册学员：清空软关联 ID
                                         selectedStudentId = null
+                                    } else {
+                                        // === v52 数据流加固：从体验课切回普通排课 ===
+                                        // 若当前姓名恰好命中已注册学员（编辑历史排课时切了开关再切回），
+                                        // 恢复其软关联 ID，避免保存时丢关联导致"数据关联错乱"。
+                                        students.firstOrNull { it.name == studentName }?.let { s ->
+                                            selectedStudentId = s.studentId
+                                        }
                                     }
                                 }
                             )
                         }
                         Spacer(Modifier.height(Spacing.md))
-                        // 学员选择：体验课开启时切换为可输入姓名的 TextField（隐藏学员下拉列表）
-                        if (isTrial) {
-                            AppTextField(
-                                value = studentName,
-                                onValueChange = { studentName = it },
-                                label = { Text("体验课学员姓名") },
-                                leadingIcon = { Icon(Icons.Outlined.Person, contentDescription = null) },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            StyledDropdown(
-                                selected = studentName,
-                                options = students.map { "${it.name} (${it.gender})" },
-                                optionLabel = { it },
-                                optionIcon = { Icons.Outlined.Person },
-                                onSelected = { label ->
-                                    students.firstOrNull { "${it.name} (${it.gender})" == label }?.let { s ->
-                                        studentName = s.name
-                                        // v46：同步记录选中学员的 studentId（软关联精确匹配）
-                                        selectedStudentId = s.studentId
-                                        // 选择学员后立即清除焦点，关闭软键盘
-                                        focusManager.clearFocus()
-                                        // === v28 优化3：新建模式下选中学员后异步预填训练内容推荐 ===
-                                        // 触发条件：
-                                        // 1. 仅新建模式（isVip=false）触发，编辑模式不动用户已有内容
-                                        // 2. 当前 content 为空（用户尚未添加动作）
-                                        // 3. 同一学员只触发一次（避免用户清空后又自动填充）
-                                        // 异步执行不阻塞 UI；推荐失败静默忽略，保持空白由教练填写
-                                        if (isCreate && content.isEmpty() && recommendedFor != s.name) {
-                                            recommendedFor = s.name
-                                            scope.launch {
-                                                val recommended = withContext(Dispatchers.IO) {
-                                                    vm.recommendTrainingContent(
-                                                        studentName = s.name,
-                                                        latestBmi = s.bmi
-                                                    )
-                                                }
-                                                if (recommended.isNotEmpty() && content.isEmpty()) {
-                                                    content = recommended
-                                                }
-                                            }
+                        // === 首次排课自动体验课复选框：仅新建 + 非体验课模式显示 ===
+                        if (!isTrial && isCreate) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = isFirstLessonAutoTrial,
+                                    onCheckedChange = { isFirstLessonAutoTrial = it },
+                                    enabled = isFirstLessonAutoTrialEnabled,
+                                    colors = androidx.compose.material3.CheckboxDefaults.colors(
+                                        checkedColor = appPrimary(),
+                                        uncheckedColor = appOnSurfaceVariant()
+                                    )
+                                )
+                                Spacer(Modifier.width(Spacing.sm))
+                                Text(
+                                    "首次排课自动设为体验课（不消耗课时）",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (isFirstLessonAutoTrialEnabled) appOnSurface() else appOutline()
+                                )
+                            }
+                            Spacer(Modifier.height(Spacing.md))
+                        }
+                        // === 小班课开关：开启后学员选择切换为多选 Chip ===
+                        if (!isTrial && isCreate) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        "小班课",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Medium,
+                                        color = appOnSurface()
+                                    )
+                                    Text(
+                                        "同教练同时段多名学员一起排课，统一签到签退",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = appOnSurfaceVariant()
+                                    )
+                                }
+                                androidx.compose.material3.Switch(
+                                    checked = isGroupClass,
+                                    onCheckedChange = { checked ->
+                                        isGroupClass = checked
+                                        if (!checked) {
+                                            groupSelectedIds = emptySet()
+                                            groupSelectedNames = emptyList()
                                         }
                                     }
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            )
+                                )
+                            }
+                            Spacer(Modifier.height(Spacing.md))
                         }
+                        // 学员选择：体验课/小班课/普通三种模式由子组件内部切换
+                        ScheduleStudentSelector(
+                            isTrial = isTrial,
+                            isGroupClass = isGroupClass,
+                            studentName = studentName,
+                            onStudentNameChange = { studentName = it },
+                            students = students,
+                            studentsLoaded = studentsLoaded,
+                            groupSelectedIds = groupSelectedIds,
+                            groupSelectedNames = groupSelectedNames,
+                            onGroupToggle = onGroupToggle,
+                            onStudentSelected = onStudentSelected
+                        )
                         Spacer(Modifier.height(Spacing.md))
                         // 教练
                         AppTextField(
@@ -437,128 +579,27 @@ fun ScheduleEditDialog(
                 item {
                     IOSSectionHeader("时间安排")
                     IOSCard {
-                        val dayLabels = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
-                        // 周几选择：新建模式多选 Chip（避免重复添加），编辑模式保留单选下拉
-                        if (isCreate) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Outlined.CalendarToday,
-                                    contentDescription = null,
-                                    tint = appOnSurfaceVariant(),
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(Modifier.width(Spacing.sm))
-                                Text(
-                                    "选择周几",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = appOnSurface()
-                                )
-                            }
-                            Spacer(Modifier.height(Spacing.sm))
-                            FlowRow(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
-                            ) {
-                                dayLabels.forEachIndexed { idx, label ->
-                                    val day = idx + 1
-                                    FilterChip(
-                                        selected = selectedDays.contains(day),
-                                        onClick = {
-                                            val newSelectedDays = if (selectedDays.contains(day)) {
-                                                selectedDays - day
-                                            } else {
-                                                selectedDays + day
-                                            }
-                                            selectedDays = newSelectedDays
-                                            // === Bug 2 UI 修复 ===
-                                            // 多天排课必须搭配"长期排课"：
-                                            // 单次排课只能对应一个 dayOfWeek，多选天时若不勾选长期排课，
-                                            // 后续 ensureLongTermLessonsForWeek 也不会为这些天生成课时记录，
-                                            // 会导致"排了课却没有课时"的混乱。
-                                            // 解决方案：自动勾选"长期排课"并 Toast 提示用户。
-                                            if (newSelectedDays.size > 1 && !isLongTerm) {
-                                                isLongTerm = true
-                                                vm.showToast("已自动勾选\u201C长期排课\u201D：多天排课需按周循环生成课程")
-                                            }
-                                            // 同步 dayOfWeek 为首个选中值（用于回退/展示）
-                                            dayOfWeek = newSelectedDays.minOrNull() ?: day
-                                        },
-                                        label = { Text(label) },
-                                        leadingIcon = if (selectedDays.contains(day)) {
-                                            { Icon(Icons.Outlined.Check, contentDescription = null) }
-                                        } else null
-                                    )
-                                }
-                            }
-                        } else {
-                            // 编辑模式：下拉单选（编辑单条记录）
-                            StyledDropdown(
-                                selected = dayLabels.getOrNull(dayOfWeek - 1) ?: "周一",
-                                options = dayLabels,
-                                optionLabel = { it },
-                                optionIcon = { Icons.Outlined.CalendarToday },
-                                onSelected = { label ->
-                                    dayOfWeek = dayLabels.indexOf(label) + 1
-                                    // 选择周几后立即清除焦点，关闭软键盘
-                                    focusManager.clearFocus()
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
+                        ScheduleDatePicker(
+                            isCreate = isCreate,
+                            dayOfWeek = dayOfWeek,
+                            selectedDays = selectedDays,
+                            onToggleDay = onToggleDay,
+                            onDaySelected = onDaySelected
+                        )
                         Spacer(Modifier.height(Spacing.md))
-                        // 开始时间（支持下拉选择历史时间记忆）+ 时长
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(Spacing.md)
-                        ) {
-                            // 开始时间：历史时间记忆下拉
-                            StyledDropdown(
-                                selected = startTime,
-                                options = timeMemories.map { it.value },
-                                optionLabel = { it },
-                                optionIcon = { Icons.Outlined.Schedule },
-                                onSelected = { value ->
-                                    startTime = value
-                                    // 选择历史时间后立即清除焦点，关闭软键盘
-                                    focusManager.clearFocus()
-                                },
-                                modifier = Modifier.weight(1f)
-                            )
-                            AppTextField(
-                                value = durationMinutes,
-                                onValueChange = { durationMinutes = it.filter { c -> c.isDigit() } },
-                                label = { Text("时长(分)") },
-                                leadingIcon = { Icon(Icons.Outlined.Timer, contentDescription = null) },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
+                        ScheduleTimePicker(
+                            startTime = startTime,
+                            onStartTimeChange = { startTime = it },
+                            durationMinutes = durationMinutes,
+                            onDurationChange = { durationMinutes = it.filter { c -> c.isDigit() } },
+                            timeMemories = timeMemories,
+                            onTimeMemorySelected = onTimeMemorySelected
+                        )
                         Spacer(Modifier.height(Spacing.md))
-                        // 长期排课勾选：勾选后每周自动生成对应时间的课表
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    "长期排课",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium
-                                )
-                                Text(
-                                    "勾选后每周自动生成对应时间的课记录",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = appOutline()
-                                )
-                            }
-                            androidx.compose.material3.Switch(
-                                checked = isLongTerm,
-                                onCheckedChange = { isLongTerm = it }
-                            )
-                        }
+                        ScheduleRepeatSection(
+                            isLongTerm = isLongTerm,
+                            onLongTermChange = { isLongTerm = it }
+                        )
                     }
                 }
                 // === 第三组：课程详情 ===
@@ -579,13 +620,13 @@ fun ScheduleEditDialog(
                             modifier = Modifier.fillMaxWidth()
                         )
                         Spacer(Modifier.height(Spacing.md))
-// 课时类型下拉（预设：训练课/体验课）
+                        // 课时类型下拉（预设：训练课/体验课）
                         val typePresets = listOf("训练课", "体验课")
                         StyledDropdown(
                             selected = lessonType,
                             options = typePresets,
                             optionLabel = { it },
-                            optionIcon = { Icons.Outlined.Label },
+                            optionIcon = { Icons.AutoMirrored.Outlined.Label },
                             onSelected = { value ->
                                 lessonType = value
                                 // 选择课时类型后立即清除焦点，关闭软键盘
@@ -607,154 +648,10 @@ fun ScheduleEditDialog(
                         )
                     }
                 }
-                // === 第四组：器材准备（多选 FilterChip） ===
-                item {
-                    IOSSectionHeader("器材准备")
-                    IOSCard {
-                        val equipmentPresets = listOf(
-                            "绳梯", "小栏架", "敏捷圈", "瑜伽垫", "泡沫轴",
-                            "平衡垫", "标志桶", "标志碟", "秒表", "口哨"
-                        )
-                        // 自适应换行的多选 Chip 网格
-                        androidx.compose.foundation.layout.FlowRow(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
-                        ) {
-                            equipmentPresets.forEach { name ->
-                                androidx.compose.material3.FilterChip(
-                                    selected = equipment.contains(name),
-                                    onClick = {
-                                        equipment = if (equipment.contains(name)) {
-                                            equipment - name
-                                        } else {
-                                            equipment + name
-                                        }
-                                    },
-                                    label = { Text(name) },
-                                    leadingIcon = if (equipment.contains(name)) {
-                                        {
-                                            Icon(
-                                                Icons.Outlined.Check,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                        }
-                                    } else null
-                                )
-                            }
-                        }
-                        if (equipment.isNotEmpty()) {
-                            Spacer(Modifier.height(Spacing.sm))
-                            Text(
-                                "已选 ${equipment.size} 项：${equipment.joinToString("、")}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = appOutline()
-                            )
-                        }
-                    }
-                }
                 // === 第五组：训练内容 ===
                 item {
                     IOSSectionHeader("训练内容")
                     IOSCard {
-                        Spacer(Modifier.height(Spacing.md))
-                        if (content.isEmpty()) {
-                            Text(
-                                "暂无训练内容，点击下方按钮添加",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = appOutline()
-                            )
-                        } else {
-                            content.forEachIndexed { idx, item ->
-                                ExerciseEditCard(
-                                    item = item,
-                                    onUpdate = { newItem ->
-                                        content = content.toMutableList().also { it[idx] = newItem }
-                                    },
-                                    onDelete = {
-                                        content = content.toMutableList().also { it.removeAt(idx) }
-                                    }
-                                )
-                                if (idx < content.size - 1) {
-                                    Spacer(Modifier.height(Spacing.sm))
-                                }
-                            }
-                        }
-                        Spacer(Modifier.height(Spacing.sm))
-                        // === v29 优化2：一键复制上次训练内容按钮 ===
-                        // 仅当选中有效学员时显示，点击后异步从该学员 lessons 表
-                        // 取最近一条非空 content 填充到当前表单
-                        if (studentName.isNotBlank()) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(appPrimary().copy(alpha = 0.05f))
-                                    .clickable {
-                                        // 异步加载上次训练内容，覆盖当前 content
-                                        scope.launch {
-                                            val lastContent = withContext(Dispatchers.IO) {
-                                                vm.fetchLastTrainingContent(studentName)
-                                            }
-                                            if (lastContent.isNotEmpty()) {
-                                                // 直接覆盖当前 content（用户主动点击，无需保留原内容）
-                                                content = lastContent
-                                                vm.showToast("已复制上次训练内容（${lastContent.size} 项）")
-                                            } else {
-                                                vm.showToast("该学员暂无可复用的训练内容")
-                                            }
-                                        }
-                                    }
-                                    .padding(Spacing.md),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    Icons.Outlined.ContentCopy,
-                                    contentDescription = "复制上次训练内容",
-                                    tint = appPrimary(),
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(Modifier.width(Spacing.xs))
-                                Text(
-                                    "复制上次训练内容",
-                                    color = appPrimary(),
-                                    fontWeight = FontWeight.Medium,
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
-                            Spacer(Modifier.height(Spacing.sm))
-                        }
-                        // 添加动作按钮（浅蓝填充胶囊）
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(appPrimary().copy(alpha = 0.08f))
-                                .clickable {
-                                    content = content + ExerciseItem(name = "新动作")
-                                }
-                                .padding(Spacing.md),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                Icons.Outlined.Add,
-                                contentDescription = "添加动作",
-                                tint = appPrimary(),
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(Modifier.width(Spacing.xs))
-                            Text(
-                                "添加动作",
-                                color = appPrimary(),
-                                fontWeight = FontWeight.Medium,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-
-                        // === 训练内容图片（从电脑截图导入） ===
                         Spacer(Modifier.height(Spacing.md))
                         ContentImagesSection(
                             images = contentImages,
@@ -764,21 +661,6 @@ fun ScheduleEditDialog(
                             onRemoveImage = { idx ->
                                 contentImages = contentImages.toMutableList().also { it.removeAt(idx) }
                             }
-                        )
-                    }
-                }
-
-                // === 第七组：备注 ===
-                item {
-                    IOSSectionHeader("备注")
-                    IOSCard {
-                        AppTextField(
-                            value = note,
-                            onValueChange = { note = it },
-                            label = { Text("备注信息") },
-                            leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Notes, contentDescription = null) },
-                            modifier = Modifier.fillMaxWidth(),
-                            minLines = 2
                         )
                     }
                 }
@@ -812,46 +694,7 @@ fun ScheduleEditDialog(
             }
 
             // 底部固定按钮栏：主珊瑚橙填充保存按钮（iOS 风格 Bottom Bar）
-            // 使用 PrimaryButton 统一全局按钮系统（v39 设计令牌）
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(horizontal = Spacing.screenH)
-                    .padding(top = Spacing.sm, bottom = 48.dp)
-            ) {
-                PrimaryButton(
-                    text = "保存课程",
-                    onClick = {
-                        // 新建模式校验：至少选择一个周几
-                        if (isCreate && selectedDays.isEmpty()) {
-                            vm.showToast("请至少选择一个周几")
-                            return@PrimaryButton
-                        }
-                        // 保存前强制走 ValidateScheduleUseCase 校验（购买日期 / 额度），
-                        // 校验失败直接弹窗拦截，绝不走数据库流程
-                        val form = buildForm()
-                        scope.launch {
-                            // 修复闪退：校验/保存期间 UseCase 抛出的任何运行时异常
-                            // （额度已满 IllegalStateException、日期早于购买 IllegalArgumentException 等）
-                            // 必须在此捕获并暴露给用户，否则未捕获异常会导致 App 闪退
-                            try {
-                                val error = withContext(Dispatchers.IO) {
-                                    vm.validateScheduleForSave(form)
-                                }
-                                if (error != null) {
-                                    vm.showToast(error)
-                                } else {
-                                    vm.saveSchedule(form)
-                                }
-                            } catch (e: Exception) {
-                                vm.showToast(e.message ?: "保存失败：${e.javaClass.simpleName}")
-                            }
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
+            ScheduleSubmitButton(onSave = onSave)
 
             // === v25 优化5：教练时间冲突确认框（用户可选择"强制替换"）===
             // 收到 CoachConflictException 时弹出，提示"该时间段已有其他学员排课，是否强制替换？"
@@ -898,86 +741,6 @@ fun ScheduleEditDialog(
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 96.dp)
         )
-        }
-    }
-}
-
-/**
- * 训练内容/课前任务编辑卡片（iOS 子卡片风格）。
- *
- * 视觉规格：
- * - 浅灰色背景圆角子卡片（10dp 圆角）
- * - 第一行：动作名 + 删除按钮
- * - 第二行：组数 / 次数 / 强度（三等分）
- *
- * 业务逻辑保持不变： onUpdate 回写修改，onDelete 移除该项。
- */
-@Composable
-private fun ExerciseEditCard(
-    item: ExerciseItem,
-    onUpdate: (ExerciseItem) -> Unit,
-    onDelete: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(appGroupedBackground())
-            .padding(Spacing.md)
-    ) {
-        // 第一行：动作名 + 删除
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-        ) {
-            AppTextField(
-                value = item.name,
-                onValueChange = { onUpdate(item.copy(name = it)) },
-                label = { Text("动作") },
-                singleLine = true,
-                modifier = Modifier.weight(1.5f)
-            )
-            IconButton(onClick = onDelete) {
-                Icon(
-                    Icons.Outlined.Delete,
-                    contentDescription = "删除",
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-        }
-        Spacer(Modifier.height(Spacing.sm))
-        // 第二行：组数 / 次数 / 强度
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-        ) {
-            AppTextField(
-                value = item.sets.toString(),
-                onValueChange = { v ->
-                    val n = v.filter { it.isDigit() }.toIntOrNull() ?: 0
-                    onUpdate(item.copy(sets = n))
-                },
-                label = { Text("组数") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f)
-            )
-            AppTextField(
-                value = item.reps,
-                onValueChange = { onUpdate(item.copy(reps = it)) },
-                label = { Text("次数") },
-                singleLine = true,
-                modifier = Modifier.weight(1f)
-            )
-            AppTextField(
-                value = item.intensity,
-                onValueChange = { onUpdate(item.copy(intensity = it)) },
-                label = { Text("强度") },
-                singleLine = true,
-                modifier = Modifier.weight(1f)
-            )
         }
     }
 }
@@ -1148,31 +911,4 @@ private fun loadImageBitmapFromFile(path: String): androidx.compose.ui.graphics.
     } catch (e: Exception) {
         androidx.compose.ui.graphics.ImageBitmap(1, 1)
     }
-}
-
-/**
- * 删除按钮样式：红底白字圆角按钮。
- *
- * 视觉规格：
- * - 浅灰 #F0F0F0 圆角底色（与全局 appTextFieldColors 一致，融入白色卡片，消除"白底块补丁感"）
- */
-@Composable
-private fun editDialogFieldColors(): TextFieldColors {
-    val container = appSurfaceVariant()
-    val labelDark = appOnSurface()
-    val accent = appPrimary()
-    return OutlinedTextFieldDefaults.colors(
-        focusedContainerColor = container,
-        unfocusedContainerColor = container,
-        disabledContainerColor = container.copy(alpha = 0.5f),
-        focusedBorderColor = Color.Transparent,
-        unfocusedBorderColor = Color.Transparent,
-        disabledBorderColor = Color.Transparent,
-        errorBorderColor = accent.copy(alpha = 0.9f),
-        focusedLabelColor = accent,
-        unfocusedLabelColor = labelDark,
-        disabledLabelColor = labelDark.copy(alpha = 0.5f),
-        errorLabelColor = accent,
-        cursorColor = accent,
-    )
 }

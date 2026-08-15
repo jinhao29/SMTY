@@ -121,6 +121,10 @@ class LessonRepository(private val dao: LessonDao) {
 
     suspend fun getById(id: String): Lesson? = dao.getById(id)
 
+    /** 小班课：查询同 groupScheduleId 的所有课时记录 */
+    suspend fun getByGroupScheduleId(groupScheduleId: String): List<Lesson> =
+        dao.getByGroupScheduleId(groupScheduleId)
+
     /** 一次性获取学员全部课时（非 Flow） */
     suspend fun getByStudentOnce(name: String): List<Lesson> = dao.getByStudent(name).first()
 
@@ -159,4 +163,18 @@ class LessonRepository(private val dao: LessonDao) {
     suspend fun updateLesson(lesson: Lesson) = dao.update(lesson)
     suspend fun deleteLesson(id: String) = dao.deleteById(id)
     suspend fun deleteByStudent(name: String) = dao.deleteByStudent(name)
+
+    /**
+     * 批量删除课时记录（课后反馈 Tab 多选模式批量删除使用）。
+     *
+     * 使用 [LessonDao.deleteByIds] 单条 SQL 原子删除，避免循环调用 [deleteLesson]
+     * 产生多次数据库往返。空列表保护：IN 子句空列表会触发语法错误，此处提前拦截。
+     *
+     * @param ids 待删除的课时 ID 列表
+     * @return 实际删除的记录数
+     */
+    suspend fun deleteLessons(ids: List<String>): Int {
+        if (ids.isEmpty()) return 0
+        return dao.deleteByIds(ids)
+    }
 }

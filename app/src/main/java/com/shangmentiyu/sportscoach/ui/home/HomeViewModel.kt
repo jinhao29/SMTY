@@ -49,7 +49,7 @@ class HomeViewModel(
      * 由 Koin 依赖注入（di/AppModule）提供。
      * null 时调用 [uploadMoment] 直接返回失败，不影响应用启动。
      */
-    private val momentUploader: com.shangmentiyu.sportscoach.core.MomentUploader? = null
+    private val momentUploader: com.shangmentiyu.sportscoach.app.framework.MomentUploader? = null
 ) : ViewModel() {
 
     // === 修复：将 _toast 与 appExceptionHandler 提前到 init 块之前 ===
@@ -66,11 +66,11 @@ class HomeViewModel(
      *
      * 应用级异常处理器：拦截签到 / 消课 / 学员增删 / 数据库事务等过程中
      * 可能出现的 SQLite 异常、IO 异常，避免 App 闪退。
-     * - 异常落盘：通过 [com.shangmentiyu.sportscoach.core.CrashHandler.writeLog]
+     * - 异常落盘：通过 [com.shangmentiyu.sportscoach.app.framework.CrashHandler.writeLog]
      * - UI 反馈：通过 [_toast] 推送轻量提示
      */
     private val appExceptionHandler =
-        com.shangmentiyu.sportscoach.core.CoroutineExt.createAppExceptionHandler(
+        com.shangmentiyu.sportscoach.app.framework.CoroutineExt.createAppExceptionHandler(
             toastSink = _toast,
             contextTag = "HomeViewModel"
         )
@@ -200,6 +200,15 @@ class HomeViewModel(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
+    /** 学员姓名 → 最近到期日（用于学员列表"到期日"显示，取未过期课时包中最早的到期日） */
+    val expireDateMap: StateFlow<Map<String, String>> = opRepo.getAllPackages()
+        .map { list ->
+            list.filter { !it.isExpired && it.status != "已退费" && it.expireDate.isNotBlank() }
+                .groupBy { it.studentName }
+                .mapValues { (_, pkgs) -> pkgs.minOf { it.expireDate } }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
     /** 今日已签到课时列表（供课后反馈 Tab 使用） */
     // 优化：直接用 SQL WHERE date = today 查询，命中 idx_lessons_date 索引，
     // 避免加载全部历史课时再内存过滤（15000 条时可节省 50-150ms 主线程耗时）。
@@ -262,11 +271,8 @@ class HomeViewModel(
     /**
      * 学员姓名 → 下一节课（含今日及未来，按日期/时间升序取首条）。
      *
-     * 数据来源：[LessonRepository.getUpcomingFrom] 查询 date >= today 且未签退的全部课时。
-     * 用途：学员列表"下一节课"显示与修改入口。
-     *
-     * 重要：过滤已签退课时（signOutTime 非空）——签退后的课时视为已完成，
-     * 不应再作为"下一节课"显示给教练。修复了"课后反馈签退后仍显示下一节课"的问题。
+     * 用途：学员列表"即将上课优先"排序的数据源（v32 起不再直接显示在卡片上）。
+     * 过滤已签退课时（signOutTime 非空），签退后的课时视为已完成。
      */
     val nextLessons: StateFlow<Map<String, Lesson>> = lessonRepo.getUpcomingFrom(todayStr())
         .map { lessons ->
@@ -460,30 +466,53 @@ class HomeViewModel(
      * - 这些数据下次签退时会自动迁移为"已签退"，不影响历史报表
      */
     /**
-     * 签到：仅创建 Lesson，不扣减课时包。
+     * 签到：仅翻转今日占位课时为"已签到"（或新建），不扣减课时包。
+     *
+     * 小班课支持：检测学员今日是否有小班课排课，若有则自动为同组所有学员签到。
      *
      * @param studentId 学员唯一 ID（v50：补传以支撑双通道查询，杜绝改名断链）
      */
     fun sign(studentName: String, studentId: String? = null, onCreated: (SignResult) -> Unit) {
         safeLaunch {
             try {
-                // 签到：仅创建 Lesson，不扣减课时包
-                val lid = lessonRepo.createLesson(
-                    studentName = studentName,
-                    coach = "",
-                    packageId = "",  // 签到时不扣减课时包，packageId 留空
-                    studentId = studentId
-                )
+                // === 小班课：检测今日排课是否有 groupScheduleId ===
+                val todaySchedules = opRepo.getTodayScheduleForStudent(studentName, todayStr())
+                val groupSchedule = todaySchedules.firstOrNull { it.groupScheduleId != null }
 
-                onCreated(
-                    SignResult(
-                        lessonId = lid,
-                        consumed = false,  // 签到不再消费课时
-                        packageName = "",
-                        remainingAfter = 0,
-                        message = "签到成功（签退时再扣减课时）"
+                if (groupSchedule != null) {
+                    // 小班课：为同组所有学员签到（各自翻转/新建 + 写签到记录）
+                    val groupSchedules = opRepo.getSchedulesByGroupScheduleId(groupSchedule.groupScheduleId!!)
+                    var firstLid = ""
+                    var successCount = 0
+                    for (s in groupSchedules) {
+                        val r = opRepo.signIn(s.studentName, s.studentId, coachName())
+                        if (r.success) {
+                            if (s.studentName == studentName) firstLid = r.lessonId
+                            successCount++
+                        }
+                    }
+                    onCreated(
+                        SignResult(
+                            lessonId = firstLid,
+                            consumed = false,
+                            packageName = "",
+                            remainingAfter = 0,
+                            message = "小班课签到成功（共 $successCount 名学员）"
+                        )
                     )
-                )
+                } else {
+                    // 普通签到：翻转占位/新建，写签到记录
+                    val r = opRepo.signIn(studentName, studentId, coachName())
+                    onCreated(
+                        SignResult(
+                            lessonId = r.lessonId,
+                            consumed = false,
+                            packageName = "",
+                            remainingAfter = 0,
+                            message = r.message
+                        )
+                    )
+                }
             } catch (e: Exception) {
                 onCreated(
                     SignResult(
@@ -497,6 +526,9 @@ class HomeViewModel(
             }
         }
     }
+
+    /** 当前教练名（签退记录的操作人，无配置时返回空串） */
+    private suspend fun coachName(): String = settingsRepo?.coach?.first() ?: ""
 
     fun addStudent(
         name: String, gender: String, grade: String, school: String, phone: String,
@@ -525,8 +557,12 @@ class HomeViewModel(
             try {
                 studentRepo.addStudent(name, gender, grade, school, phone, age, heightCm, weightKg, bmi)
                 if (packageTotal > 0) {
+                    // v51 断链修复：课时包携带 studentId 软关联键
+                    // （新增学员后通过姓名反查刚生成的唯一 ID，保证改名级联不丢包）
+                    val sid = studentRepo.getByName(name)?.studentId
                     val pkg = com.shangmentiyu.sportscoach.data.model.LessonPackage(
                         studentName = name,
+                        studentId = sid,
                         name = packageName.ifBlank { "${packageTotal}次卡" },
                         totalLessons = packageTotal,
                         price = price,
@@ -750,28 +786,68 @@ class HomeViewModel(
                     return@safeLaunch
                 }
 
-                // 1. 先更新反馈字段
-                val updatedFeedback = lesson.copy(
-                    coachComment = coachComment,
-                    performance = performance,
-                    attitude = attitude
-                )
-                lessonRepo.updateLesson(updatedFeedback)
+                // === 小班课：检测是否属于小班课，若是则批量签退同组所有学员 ===
+                val groupScheduleId = lesson.groupScheduleId
+                val targetLessons = if (groupScheduleId != null) {
+                    lessonRepo.getByGroupScheduleId(groupScheduleId)
+                } else {
+                    listOf(lesson)
+                }
 
-                // 2. 若未签退，执行事务化消课
-                if (lesson.status != "已签退") {
-                    val result = opRepo.consumeLessonForCheckOut(updatedFeedback)
-                    if (result.success) {
-                        toast("签退成功，已扣减课时（${result.packageName}），剩余 ${result.remainingAfter} 节")
+                var successCount = 0
+                var failCount = 0
+                var lastRemaining = 0
+                var lastPkgName = ""
+
+                for (l in targetLessons) {
+                    // 1. 更新反馈字段（所有学员共用同一份反馈）
+                    val updatedFeedback = l.copy(
+                        coachComment = coachComment,
+                        performance = performance,
+                        attitude = attitude
+                    )
+                    lessonRepo.updateLesson(updatedFeedback)
+
+                    // 2. 若未签退，执行事务化消课
+                    if (l.status != "已签退") {
+                        val result = opRepo.consumeLessonForCheckOut(updatedFeedback)
+                        if (result.success) {
+                            successCount++
+                            lastRemaining = result.remainingAfter
+                            lastPkgName = result.packageName
+                        } else {
+                            failCount++
+                            android.util.Log.w("HomeVM",
+                                "小班课签退失败：${l.studentName} ${result.message}")
+                        }
+                    } else {
+                        // 已签退，视为成功
+                        successCount++
+                    }
+                }
+
+                // 3. 汇总反馈（循环已统一处理签退，这里仅报告结果）
+                if (groupScheduleId != null && targetLessons.size > 1) {
+                    if (failCount == 0) {
+                        toast("小班课签退成功（共 $successCount 名学员），剩余 ${lastRemaining} 节")
                         onDone(true)
                     } else {
-                        toast("反馈已保存，但签退失败：${result.message}")
-                        onDone(false)
+                        toast("小班课签退部分成功：$successCount 成功，$failCount 失败")
+                        onDone(failCount < targetLessons.size)
                     }
                 } else {
-                    // 已签退，仅更新反馈
-                    toast("反馈已保存（课时已签退，不重复扣减）")
-                    onDone(true)
+                    // 单学员签退：循环已处理，按结果报告
+                    if (failCount == 0) {
+                        if (lesson.status != "已签退") {
+                            toast("签退成功，已扣减课时（$lastPkgName），剩余 $lastRemaining 节")
+                        } else {
+                            toast("反馈已保存（课时已签退，不重复扣减）")
+                        }
+                        onDone(true)
+                    } else {
+                        toast("反馈已保存，但签退失败")
+                        onDone(false)
+                    }
                 }
             } catch (e: Exception) {
                 toast("保存反馈失败：${e.message ?: "未知异常"}")
@@ -859,7 +935,7 @@ class HomeViewModel(
     /** 解析 Lesson.contentImages JSON 为图片路径列表 */
     fun parseLessonImages(json: String): List<String> {
         if (json.isBlank()) return emptyList()
-        val arr = com.shangmentiyu.sportscoach.core.JsonSafe.parseArray(json) ?: return emptyList()
+        val arr = com.shangmentiyu.sportscoach.data.internal.JsonSafe.parseArray(json) ?: return emptyList()
         val result = mutableListOf<String>()
         for (i in 0 until arr.length()) {
             val path = arr.optString(i)
@@ -891,40 +967,24 @@ class HomeViewModel(
     }
 
     /**
-     * 修改"下一节课"的日期与时间（学员列表入口）。
+     * 批量删除课时记录（课后反馈 Tab 多选模式批量删除使用）。
      *
-     * 仅更新 Lesson 表的 date / time 字段，不触发消课逻辑；
-     * 数据库变更会通过 [nextLessons] Flow 自动回流到 UI。
+     * 与 [deleteLesson] 语义一致：仅删除 Lesson 表记录，不退还已扣减课时包次数。
+     * 使用单条 SQL 原子删除，避免循环调用 [deleteLesson] 的多次数据库往返。
      *
-     * @param lessonId 课时 ID
-     * @param date 新日期 YYYY-MM-DD
-     * @param time 新时间 HH:mm
-     * @param onDone 完成回调（主线程），参数为是否成功
+     * @param ids 课时 ID 列表
+     * @param onDone 删除完成回调（主线程），参数为实际删除数量（-1 表示失败）
      */
-    fun updateNextLessonTime(
-        lessonId: String,
-        date: String,
-        time: String,
-        onDone: (Boolean) -> Unit = {}
-    ) {
-        if (date.isBlank() || time.isBlank()) {
-            onDone(false)
-            return
-        }
+    fun deleteLessons(ids: List<String>, onDone: (Int) -> Unit = {}) {
+        if (ids.isEmpty()) return
         safeLaunch {
             try {
-                val lesson = lessonRepo.getById(lessonId)
-                if (lesson == null) {
-                    toast("课时不存在，可能已被删除")
-                    onDone(false)
-                    return@safeLaunch
-                }
-                lessonRepo.updateLesson(lesson.copy(date = date, time = time))
-                toast("已调整下一节课时间为 $date $time")
-                onDone(true)
+                val count = lessonRepo.deleteLessons(ids)
+                toast("已删除 $count 条课时记录")
+                onDone(count)
             } catch (e: Exception) {
-                toast("修改失败：${e.message ?: "未知错误"}")
-                onDone(false)
+                toast("删除失败：${e.message ?: "未知错误"}")
+                onDone(-1)
             }
         }
     }
@@ -964,8 +1024,11 @@ class HomeViewModel(
         price: Double, purchaseDate: String, expireDate: String
     ) {
         safeLaunch {
+            // v51 断链修复：课时包携带 studentId 软关联键（按 ID 改名级联不丢包）
+            val sid = studentRepo.getByName(studentName)?.studentId
             val pkg = com.shangmentiyu.sportscoach.data.model.LessonPackage(
                 studentName = studentName,
+                studentId = sid,
                 name = packageName.ifBlank { "${totalLessons}次卡" },
                 totalLessons = totalLessons,
                 price = price,

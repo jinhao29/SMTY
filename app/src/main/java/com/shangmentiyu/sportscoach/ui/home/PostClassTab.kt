@@ -33,23 +33,22 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.Logout
+import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -69,13 +68,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
-import com.shangmentiyu.sportscoach.core.PhotoCrypto
+import com.shangmentiyu.sportscoach.app.framework.PhotoCrypto
 import com.shangmentiyu.sportscoach.data.model.Lesson
 import com.shangmentiyu.sportscoach.ui.theme.AppTextField
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import com.shangmentiyu.sportscoach.ui.theme.SafeAsyncImage
 import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
+import com.shangmentiyu.sportscoach.ui.theme.StyledSuggestionField
 import com.shangmentiyu.sportscoach.ui.theme.appGroupedBackground
 import com.shangmentiyu.sportscoach.ui.theme.appOutline
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
@@ -112,8 +112,7 @@ import java.io.File
 @Composable
 fun PostClassTab(
     vm: HomeViewModel,
-    onSign: (String) -> Unit,
-    onOperation: () -> Unit
+    onSign: (String) -> Unit
 ) {
     val context = LocalContext.current
     val allLessons by vm.allLessons.collectAsStateWithLifecycle()
@@ -125,12 +124,20 @@ fun PostClassTab(
     // 删除确认对话框
     var deletingLessonId by remember { mutableStateOf<String?>(null) }
     var deletingLessonName by remember { mutableStateOf("") }
+    // === 多选删除状态 ===
+    var multiSelectMode by remember { mutableStateOf(false) }
+    var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var showBatchDeleteConfirm by remember { mutableStateOf(false) }
 
     // 筛选后的课时列表（按学员筛选，保留全部历史日期）
     val filteredLessons = remember(allLessons, selectedStudent) {
         if (selectedStudent == null) allLessons
         else allLessons.filter { it.studentName == selectedStudent }
     }
+
+    // 全选目标 = 当前筛选后的全部课时 ID（支持筛选后一键全选）
+    val allFilteredIds = remember(filteredLessons) { filteredLessons.map { it.id }.toSet() }
+    val allSelected = allFilteredIds.isNotEmpty() && allFilteredIds.all { it in selectedIds }
 
     // 按日期分组：日期降序（最近在前），同一日期内课时已按 time DESC 排序
     // 每条记录对应"学员+日期"，通过日期 SectionHeader 体现"对应日期"
@@ -164,123 +171,196 @@ fun PostClassTab(
     // 原 Column + verticalScroll + forEach 一次性把所有 PostClassLessonCard 组合进树，
     // 每张卡片展开后含 10+ OutlinedTextField、多个 ExposedDropdownMenuBox、Slider，
     // 课时数多时组合开销极大。LazyColumn 仅组合屏幕可见卡片，未可见的自动回收。
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = Spacing.screenH, vertical = Spacing.screenV),
-        // 悬浮底栏避让
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 160.dp),
-        verticalArrangement = Arrangement.spacedBy(Spacing.md)
-    ) {
-        // 全部记录概览
-        item(key = "overview") {
-            IosCard {
-                Column(modifier = Modifier.padding(Spacing.md)) {
-                    Text("课后反馈记录", style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(Spacing.sm))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly
-                    ) {
-                        StatItem(label = "总记录", value = "$totalRecords")
-                        StatItem(label = "已签退", value = "$signedOutCount")
-                        StatItem(label = "已写寄语", value = "$withNoteCount")
-                        StatItem(label = "有训练图", value = "$withContentCount")
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = Spacing.screenH, vertical = Spacing.screenV),
+            // 悬浮底栏避让：多选模式下额外留出底部操作栏高度
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = if (multiSelectMode) 220.dp else 160.dp),
+            verticalArrangement = Arrangement.spacedBy(Spacing.md)
+        ) {
+            // 全部记录概览
+            item(key = "overview") {
+                IosCard {
+                    Column(modifier = Modifier.padding(Spacing.md)) {
+                        Text("课后反馈记录", style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(Spacing.sm))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            StatItem(label = "总记录", value = "$totalRecords")
+                            StatItem(label = "已签退", value = "$signedOutCount")
+                            StatItem(label = "已写寄语", value = "$withNoteCount")
+                            StatItem(label = "有训练图", value = "$withContentCount")
+                        }
                     }
                 }
             }
-        }
 
-        // 学员筛选 Chip 行
-        if (allStudents.isNotEmpty()) {
-            item(key = "filter_chips") {
-                Column {
-                    IosSectionHeader("学员筛选")
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                        verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+            // === 多选删除开关 ===
+            item(key = "multi_select_toggle") {
+                IosCard {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        FilterChip(
-                            selected = selectedStudent == null,
-                            onClick = { selectedStudent = null },
-                            label = { Text("全部") }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("多选删除", style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.SemiBold)
+                            Text(
+                                if (multiSelectMode) "勾选要删除的课时记录，可全选后一键删除"
+                                else "开启后每条课时记录前显示复选框，支持批量删除",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
+                        Switch(
+                            checked = multiSelectMode,
+                            onCheckedChange = { checked ->
+                                multiSelectMode = checked
+                                if (!checked) selectedIds = emptySet()
+                            }
                         )
-                        allStudents.forEach { name ->
+                    }
+                }
+            }
+
+            // 学员筛选 Chip 行
+            if (allStudents.isNotEmpty()) {
+                item(key = "filter_chips") {
+                    Column {
+                        IosSectionHeader("学员筛选")
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+                        ) {
                             FilterChip(
-                                selected = selectedStudent == name,
-                                onClick = { selectedStudent = name },
-                                label = { Text(name) }
+                                selected = selectedStudent == null,
+                                onClick = { selectedStudent = null },
+                                label = { Text("全部") }
+                            )
+                            allStudents.forEach { name ->
+                                FilterChip(
+                                    selected = selectedStudent == name,
+                                    onClick = { selectedStudent = name },
+                                    label = { Text(name) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            item(key = "header_lessons") {
+                IosSectionHeader("课时记录（按日期分组）")
+            }
+
+            if (groupedByDate.isEmpty()) {
+                item(key = "empty") {
+                    IosCard {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().height(120.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                if (allLessons.isEmpty()) "暂无签到签退记录"
+                                else "该学员暂无课时记录",
+                                color = MaterialTheme.colorScheme.outline
                             )
                         }
                     }
                 }
-            }
-        }
-
-        item(key = "header_lessons") {
-            IosSectionHeader("课时记录（按日期分组）")
-        }
-
-        if (groupedByDate.isEmpty()) {
-            item(key = "empty") {
-                IosCard {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().height(120.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            if (allLessons.isEmpty()) "暂无签到签退记录"
-                            else "该学员暂无课时记录",
-                            color = MaterialTheme.colorScheme.outline
+            } else {
+                // 按日期分组渲染：每个日期一个 SectionHeader + 当日全部学员的课时卡片
+                groupedByDate.forEach { (date, lessonsOnDate) ->
+                    item(key = "date_header_${date}") {
+                        DateSectionHeader(date = date, dateFmt = dateFmt, weekDayNames = weekDayNames,
+                            lessonCount = lessonsOnDate.size)
+                    }
+                    items(
+                        items = lessonsOnDate,
+                        key = { lesson -> lesson.id }
+                    ) { lesson ->
+                        // L3 优化：解析图片 JSON 用 remember 缓存，避免每次重组都重新解析
+                        val imageList = remember(lesson.contentImages) {
+                            vm.parseLessonImages(lesson.contentImages)
+                        }
+                        PostClassLessonCard(
+                            lesson = lesson,
+                            imageList = imageList,
+                            expanded = !multiSelectMode && expandedLessonId == lesson.id,
+                            selectionMode = multiSelectMode,
+                            selected = lesson.id in selectedIds,
+                            onToggleSelect = {
+                                selectedIds = if (lesson.id in selectedIds) selectedIds - lesson.id else selectedIds + lesson.id
+                            },
+                            onToggleExpand = {
+                                if (!multiSelectMode) {
+                                    expandedLessonId = if (expandedLessonId == lesson.id) null else lesson.id
+                                }
+                            },
+                            onOpenLesson = { onSign(lesson.id) },
+                            onShare = { shareLessonToWechatWithImage(context, lesson) },
+                            onUpdateFeedback = { comment, perf, attitude ->
+                                // v27：保存反馈时触发签退消课（事务内扣减课时包 + 更新 status）
+                                vm.saveFeedbackAndCheckOut(lesson.id, comment, perf, attitude)
+                            },
+                            onUpdateDetail = { lessonType, coach, duration, location, attendance ->
+                                vm.updateLessonDetail(lesson.id, lessonType, coach, duration, location, attendance)
+                            },
+                            onUpdateImages = { paths ->
+                                vm.updateLessonImages(lesson.id, paths)
+                            },
+                            onDelete = {
+                                deletingLessonId = lesson.id
+                                deletingLessonName = lesson.studentName
+                            },
+                            // v27：传入自动填充查询回调
+                            onQueryScheduleForAutoFill = {
+                                vm.findScheduleForStudentToday(lesson.studentName)
+                            }
                         )
                     }
                 }
             }
-        } else {
-            // 按日期分组渲染：每个日期一个 SectionHeader + 当日全部学员的课时卡片
-            groupedByDate.forEach { (date, lessonsOnDate) ->
-                item(key = "date_header_${date}") {
-                    DateSectionHeader(date = date, dateFmt = dateFmt, weekDayNames = weekDayNames,
-                        lessonCount = lessonsOnDate.size)
-                }
-                items(
-                    items = lessonsOnDate,
-                    key = { lesson -> lesson.id }
-                ) { lesson ->
-                    // L3 优化：解析图片 JSON 用 remember 缓存，避免每次重组都重新解析
-                    val imageList = remember(lesson.contentImages) {
-                        vm.parseLessonImages(lesson.contentImages)
-                    }
-                    PostClassLessonCard(
-                        lesson = lesson,
-                        imageList = imageList,
-                        expanded = expandedLessonId == lesson.id,
-                        onToggleExpand = {
-                            expandedLessonId = if (expandedLessonId == lesson.id) null else lesson.id
-                        },
-                        onOpenLesson = { onSign(lesson.id) },
-                        onShare = { shareLessonToWechatWithImage(context, lesson) },
-                        onUpdateFeedback = { comment, perf, attitude ->
-                            // v27：保存反馈时触发签退消课（事务内扣减课时包 + 更新 status）
-                            vm.saveFeedbackAndCheckOut(lesson.id, comment, perf, attitude)
-                        },
-                        onUpdateDetail = { lessonType, coach, duration, location, attendance ->
-                            vm.updateLessonDetail(lesson.id, lessonType, coach, duration, location, attendance)
-                        },
-                        onUpdateImages = { paths ->
-                            vm.updateLessonImages(lesson.id, paths)
-                        },
-                        onDelete = {
-                            deletingLessonId = lesson.id
-                            deletingLessonName = lesson.studentName
-                        },
-                        // v27：传入自动填充查询回调
-                        onQueryScheduleForAutoFill = {
-                            vm.findScheduleForStudentToday(lesson.studentName)
-                        }
+        }
+
+        // === 底部多选操作栏 ===
+        if (multiSelectMode) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .background(appSurface())
+                    .padding(horizontal = Spacing.screenH)
+                    .padding(top = Spacing.sm, bottom = 100.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                ) {
+                    Text(
+                        "已选 ${selectedIds.size} 节",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f)
                     )
+                    TextButton(onClick = {
+                        selectedIds = if (allSelected) emptySet() else allFilteredIds
+                    }) { Text(if (allSelected) "取消全选" else "全选") }
+                    Button(
+                        onClick = { showBatchDeleteConfirm = true },
+                        enabled = selectedIds.isNotEmpty(),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) { Text("删除选中") }
                 }
             }
         }
@@ -315,6 +395,45 @@ fun PostClassTab(
         ) {
             Text(
                 "确定要删除 ${deletingLessonName} 的课时记录吗？\n\n" +
+                    "注意：此操作仅删除课时记录，不会退还已扣减的课时包次数。" +
+                    "如需退还课时，请在课包管理中手动调整。",
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+    }
+
+    // 批量删除确认对话框
+    if (showBatchDeleteConfirm) {
+        GlassAlertDialog(
+            onDismissRequest = { showBatchDeleteConfirm = false },
+            title = "批量删除课时记录",
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        val ids = selectedIds.toList()
+                        showBatchDeleteConfirm = false
+                        vm.deleteLessons(ids) { count ->
+                            if (count >= 0) {
+                                selectedIds = emptySet()
+                                multiSelectMode = false
+                            }
+                        }
+                    }
+                ) {
+                    Text("删除", color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = { showBatchDeleteConfirm = false }
+                ) {
+                    Text("取消")
+                }
+            }
+        ) {
+            Text(
+                "确定要删除选中的 ${selectedIds.size} 条课时记录吗？\n\n" +
                     "注意：此操作仅删除课时记录，不会退还已扣减的课时包次数。" +
                     "如需退还课时，请在课包管理中手动调整。",
                 style = MaterialTheme.typography.bodyMedium
@@ -399,6 +518,12 @@ private fun PostClassLessonCard(
     onUpdateDetail: (lessonType: String, coach: String, duration: Int, location: String, attendance: String) -> Unit,
     onUpdateImages: (List<String>) -> Unit,
     onDelete: () -> Unit,
+    /** 是否处于多选模式（显示复选框替代删除按钮） */
+    selectionMode: Boolean = false,
+    /** 多选模式下是否被选中 */
+    selected: Boolean = false,
+    /** 多选模式下切换选中状态回调 */
+    onToggleSelect: () -> Unit = {},
     /**
      * === v27：自动填充查询回调 ===
      *
@@ -497,7 +622,7 @@ private fun PostClassLessonCard(
                 // 签退状态徽标
                 if (lesson.signOutTime.isNotBlank()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.Logout, contentDescription = null,
+                        Icon(Icons.AutoMirrored.Outlined.Logout, contentDescription = null,
                             tint = ScoreExcellent, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(2.dp))
                         Text("签退 ${lesson.signOutTime}",
@@ -509,14 +634,21 @@ private fun PostClassLessonCard(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary)
                 }
-                // 删除按钮：触发二次确认对话框
-                IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
-                    Icon(
-                        Icons.Outlined.Delete,
-                        contentDescription = "删除课时",
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(16.dp)
+                // 多选模式显示复选框，否则显示删除按钮
+                if (selectionMode) {
+                    Checkbox(
+                        checked = selected,
+                        onCheckedChange = { onToggleSelect() }
                     )
+                } else {
+                    IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
+                        Icon(
+                            Icons.Outlined.Delete,
+                            contentDescription = "删除课时",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
             }
             Spacer(Modifier.height(4.dp))
@@ -647,37 +779,12 @@ private fun PostClassLessonCard(
                 Spacer(Modifier.height(8.dp))
 
                 // 课时类型（下拉建议 + 自定义）
-                var typeExpanded by remember { mutableStateOf(false) }
-                val typePresets = listOf("训练课", "体测课", "技术课", "恢复课")
-                ExposedDropdownMenuBox(
-                    expanded = typeExpanded,
-                    onExpandedChange = { typeExpanded = !typeExpanded }
-                ) {
-                    AppTextField(
-                        value = editLessonType,
-                        onValueChange = { editLessonType = it },
-                        readOnly = false,
-                        label = { Text("课时类型") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(typeExpanded) },
-                        modifier = Modifier.fillMaxWidth()
-                            .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true),
-                        singleLine = true,
-)
-                    ExposedDropdownMenu(
-                        expanded = typeExpanded,
-                        onDismissRequest = { typeExpanded = false }
-                    ) {
-                        typePresets.forEach { t ->
-                            DropdownMenuItem(
-                                text = { Text(t) },
-                                onClick = {
-                                    editLessonType = t
-                                    typeExpanded = false
-                                }
-                            )
-                        }
-                    }
-                }
+                StyledSuggestionField(
+                    value = editLessonType,
+                    onValueChange = { editLessonType = it },
+                    label = "课时类型",
+                    presets = listOf("训练课", "体测课", "技术课", "恢复课")
+                )
                 Spacer(Modifier.height(8.dp))
 
                 // 教练 + 时长
@@ -716,37 +823,12 @@ private fun PostClassLessonCard(
                 Spacer(Modifier.height(8.dp))
 
                 // 出勤状态（下拉建议 + 自定义）
-                var attExpanded by remember { mutableStateOf(false) }
-                val attPresets = listOf("准时", "迟到", "请假", "旷课")
-                ExposedDropdownMenuBox(
-                    expanded = attExpanded,
-                    onExpandedChange = { attExpanded = !attExpanded }
-                ) {
-                    AppTextField(
-                        value = editAttendance,
-                        onValueChange = { editAttendance = it },
-                        readOnly = false,
-                        label = { Text("出勤状态") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(attExpanded) },
-                        modifier = Modifier.fillMaxWidth()
-                            .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true),
-                        singleLine = true,
-)
-                    ExposedDropdownMenu(
-                        expanded = attExpanded,
-                        onDismissRequest = { attExpanded = false }
-                    ) {
-                        attPresets.forEach { a ->
-                            DropdownMenuItem(
-                                text = { Text(a) },
-                                onClick = {
-                                    editAttendance = a
-                                    attExpanded = false
-                                }
-                            )
-                        }
-                    }
-                }
+                StyledSuggestionField(
+                    value = editAttendance,
+                    onValueChange = { editAttendance = it },
+                    label = "出勤状态",
+                    presets = listOf("准时", "迟到", "请假", "旷课")
+                )
                 Spacer(Modifier.height(8.dp))
 
                 // 保存课时详情按钮
@@ -1215,7 +1297,7 @@ private suspend fun shareLessonToWechatWithImage(
 /** 解析 Lesson.contentImages JSON 为图片路径列表（分享时使用） */
 private fun parseLessonImagePaths(json: String): List<String> {
     if (json.isBlank()) return emptyList()
-    val arr = com.shangmentiyu.sportscoach.core.JsonSafe.parseArray(json) ?: return emptyList()
+    val arr = com.shangmentiyu.sportscoach.data.internal.JsonSafe.parseArray(json) ?: return emptyList()
     val result = mutableListOf<String>()
     for (i in 0 until arr.length()) {
         val path = arr.optString(i)
