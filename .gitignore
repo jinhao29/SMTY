@@ -19,6 +19,8 @@ local.properties
 SMTY
 SMTY.*
 keystore.properties
+# 签名密钥密码（明文，严禁提交）
+.keystore_pass.txt
 
 # 日志与临时文件
 *.log
