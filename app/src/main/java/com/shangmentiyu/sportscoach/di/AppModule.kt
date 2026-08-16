@@ -8,7 +8,10 @@ import com.shangmentiyu.sportscoach.data.repo.AuditLogRepository
 import com.shangmentiyu.sportscoach.data.repo.BackupRepository
 import com.shangmentiyu.sportscoach.data.repo.BodyMetricRepository
 import com.shangmentiyu.sportscoach.data.repo.CoachRepository
+import com.shangmentiyu.sportscoach.data.repo.BatchScheduleRepository
 import com.shangmentiyu.sportscoach.data.repo.DietRepository
+import com.shangmentiyu.sportscoach.data.repo.LessonArchiveRepository
+import com.shangmentiyu.sportscoach.data.repo.LessonConsumptionRepository
 import com.shangmentiyu.sportscoach.data.repo.LessonPackageRepository
 import com.shangmentiyu.sportscoach.data.repo.LessonRepository
 import com.shangmentiyu.sportscoach.data.repo.OperationRepository
@@ -79,13 +82,18 @@ val appModule = module {
     single { StudentRepository(get(), get(), get(), get()) }
     single { LessonRepository(get()) }
     single { SettingsRepository(androidContext()) }
+    single { LessonConsumptionRepository(get(), get(), get(), get()) }
+    single { BatchScheduleRepository(get(), get(), get()) }
+    single { LessonArchiveRepository(get(), get<ArchivedLessonDao>(), get<AppDatabase>()) }
     single {
         OperationRepository(
             get(), get(), get(), get(),
             get<ArchivedLessonDao>(), get<AppDatabase>(),
             get<ScheduleRepository>(), get<ScheduleQueryRepository>(),
             get<TrainingCycleRepository>(), get<StageSummaryRepository>(),
-            get<com.shangmentiyu.sportscoach.data.db.SignInDao>()
+            get<com.shangmentiyu.sportscoach.data.db.SignInDao>(),
+            get<LessonConsumptionRepository>(), get<BatchScheduleRepository>(),
+            get<LessonArchiveRepository>()
         )
     }
     single { LessonPackageRepository(get(), get(), get()) }

@@ -49,6 +49,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.room.Room
 import com.shangmentiyu.sportscoach.data.db.AppDatabase
+import com.shangmentiyu.sportscoach.data.repo.BatchScheduleRepository
+import com.shangmentiyu.sportscoach.data.repo.LessonArchiveRepository
+import com.shangmentiyu.sportscoach.data.repo.LessonConsumptionRepository
 import com.shangmentiyu.sportscoach.data.repo.LessonRepository
 import com.shangmentiyu.sportscoach.data.repo.OperationRepository
 import com.shangmentiyu.sportscoach.data.repo.ScheduleQueryRepository
@@ -851,7 +854,14 @@ private fun AddStudentScreenPreview() {
                     ),
                     trainingCycleRepo = TrainingCycleRepository(db.trainingCycleDao()),
                     stageSummaryRepo = StageSummaryRepository(),
-                    signInDao = db.signInDao()
+                    signInDao = db.signInDao(),
+                    consumptionRepo = LessonConsumptionRepository(
+                        db.lessonDao(), db.lessonPackageDao(), db.signInDao(), db
+                    ),
+                    batchScheduleRepo = BatchScheduleRepository(
+                        db.lessonDao(), db.lessonPackageDao(), db
+                    ),
+                    archiveRepo = LessonArchiveRepository(db.lessonDao(), null, db)
                 )
             )
         }

@@ -57,7 +57,14 @@ class OperationRepositoryCoreTest {
             ),
             trainingCycleRepo = TrainingCycleRepository(db.trainingCycleDao()),
             stageSummaryRepo = StageSummaryRepository(),
-            signInDao = db.signInDao()
+            signInDao = db.signInDao(),
+            consumptionRepo = LessonConsumptionRepository(
+                db.lessonDao(), db.lessonPackageDao(), db.signInDao(), db
+            ),
+            batchScheduleRepo = BatchScheduleRepository(
+                db.lessonDao(), db.lessonPackageDao(), db
+            ),
+            archiveRepo = LessonArchiveRepository(db.lessonDao(), null, db)
         )
     }
 
