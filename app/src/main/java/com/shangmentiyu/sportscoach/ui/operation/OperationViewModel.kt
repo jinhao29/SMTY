@@ -2,21 +2,19 @@ package com.shangmentiyu.sportscoach.ui.operation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.shangmentiyu.sportscoach.data.model.Coach
+import com.shangmentiyu.sportscoach.core.LessonDateCalculator
 import com.shangmentiyu.sportscoach.data.model.ExerciseItem
 import com.shangmentiyu.sportscoach.data.model.LessonPackage
 import com.shangmentiyu.sportscoach.data.model.Schedule
 import com.shangmentiyu.sportscoach.data.model.ScheduleMemory
 import com.shangmentiyu.sportscoach.data.model.Student
-import com.shangmentiyu.sportscoach.data.repo.CoachConflictException
+import com.shangmentiyu.sportscoach.data.model.Coach
 import com.shangmentiyu.sportscoach.data.repo.CoachRepository
 import com.shangmentiyu.sportscoach.data.repo.LessonPackageRepository
 import com.shangmentiyu.sportscoach.data.repo.OperationRepository
 import com.shangmentiyu.sportscoach.data.repo.ScheduleMemoryRepository
 import com.shangmentiyu.sportscoach.data.repo.ScheduleRepository
 import com.shangmentiyu.sportscoach.data.repo.StudentRepository
-import com.shangmentiyu.sportscoach.core.LessonDateCalculator
-import com.shangmentiyu.sportscoach.domain.scheduling.ScheduleQuotaExceededException
 import com.shangmentiyu.sportscoach.domain.scheduling.ValidateScheduleUseCase
 import com.shangmentiyu.sportscoach.ui.schedule.ScheduleForm
 import kotlinx.coroutines.Dispatchers
@@ -49,14 +47,11 @@ import java.util.Locale
  * - 教练（Coach）：通过 [coachRepo] 提供增删改查
  * - 训练周期 & 阶段总结：通过 [opRepo] 提供跨模块聚合计算
  *
- * 重构说明（v21）：
- * - 课时包相关方法改用 [pkgRepo]，教练相关方法改用 [coachRepo]
- * - [opRepo] 保留 TrainingCycle CRUD / StageSummary / 长期排课辅助方法
- *   （这些跨模块业务逻辑仍归属 OperationRepository）
- * - 老调用方（HomeViewModel / StageSummaryViewModel 等）保持对 [OperationRepository] 的引用
- *
- * 排课功能合并自原 ScheduleViewModel，通过 [scheduleRepo] 提供
- * 训练内容 JSON 解析与完整 CRUD，使运营管理成为唯一的排课入口。
+ * v53 拆分说明：本类只保留 UI 状态（StateFlow / 事件流）与轻量委托，
+ * 重业务流程下沉到同包协调器（对外 API 不变，调用方零改动）：
+ * - 排课保存（新建/编辑/小班/强制替换）→ [ScheduleSaveCoordinator]
+ * - 自动排课（按课时包 / 小班课）→ [AutoScheduleCoordinator]
+ * - 课程包与教练操作 → [PackageOpsCoordinator]
  */
 class OperationViewModel(
     private val opRepo: OperationRepository,
@@ -68,6 +63,15 @@ class OperationViewModel(
     // 排课校验唯一入口：isDateValid（购买日期）+ hasRemainingCapacity（额度）
     private val validateSchedule: ValidateScheduleUseCase
 ) : ViewModel() {
+
+    // === v53 拆分：业务流程协调器（无状态，复用本 VM 注入的 Repository） ===
+    private val saveCoordinator = ScheduleSaveCoordinator(
+        opRepo, scheduleRepo, memoryRepo, validateSchedule
+    )
+    private val autoScheduleCoordinator = AutoScheduleCoordinator(
+        opRepo, scheduleRepo, memoryRepo, pkgRepo, validateSchedule
+    )
+    private val packageOps = PackageOpsCoordinator(pkgRepo, studentRepo, coachRepo)
 
     /**
      * 日期格式化工具：[DateTimeFormatter] 不可变且线程安全，可作为成员变量共享。
@@ -200,17 +204,17 @@ class OperationViewModel(
      * - extraBufferCapacity = 1 防止在 UI 未订阅时丢失事件
      * - replay = 0：新订阅者不接收历史事件，仅接收订阅后产生的新事件
      *
-     * 触发时机：[saveSchedule] 在非强制模式下捕获 [CoachConflictException] 时 emit
+     * 触发时机：[saveSchedule] 在非强制模式下捕获 CoachConflictException 时 emit
      * 消费方：[com.shangmentiyu.sportscoach.ui.schedule.ScheduleEditDialog]
      *         收到后弹出 GlassAlertDialog 询问是否强制替换
      */
     private val _coachConflictEvent =
-        MutableSharedFlow<CoachConflictException>(
+        MutableSharedFlow<com.shangmentiyu.sportscoach.data.repo.CoachConflictException>(
             replay = 0,
             extraBufferCapacity = 1,
             onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST
         )
-    val coachConflictEvent: SharedFlow<CoachConflictException> =
+    val coachConflictEvent: SharedFlow<com.shangmentiyu.sportscoach.data.repo.CoachConflictException> =
         _coachConflictEvent.asSharedFlow()
 
     /**
@@ -386,43 +390,22 @@ class OperationViewModel(
 
     /**
      * 保存前统一校验（dialog 与 saveSchedule 共用同一入口）：
-     * 日期不得早于今天 / 早于购买日期 / 剩余可排课时为 0，任一不满足返回用户可读错误文案。
+     * 日期不得早于购买日期 / 剩余可排课时为 0，任一不满足返回用户可读错误文案。
      *
      * === v49 彻底重构：额度校验统一走 ValidateScheduleUseCase 三要素公式 ===
      * 剩余可排课时 = 总课时(活跃包剩余之和) - 已消耗(已签退) - 待消耗(占位)，
      * 编辑/新建场景使用完全一致的校验口径。
      *
      * === v49 体验课：isTrial=true 跳过购买日期校验与余额校验，仅保留"生效日期不早于今天" ===
+     *
+     * v53：实现下沉到 [ScheduleSaveCoordinator.validate]，本方法仅传递状态快照。
      */
+    suspend fun validateScheduleForSave(form: ScheduleForm): String? =
+        saveCoordinator.validate(form, _weekStart.value, dateFormatter)
+
     /** 学员是否有正式课时记录（isTrial=0），用于"首次自动体验课"判断 */
     suspend fun hasFormalLessons(studentId: String?, name: String): Boolean =
         opRepo.hasFormalLessonsDual(studentId, name)
-
-    suspend fun validateScheduleForSave(form: ScheduleForm): String? {
-        if (form.studentName.isBlank()) return null
-        val zone = java.time.ZoneId.systemDefault()
-        val weekStartLocal = _weekStart.value.toInstant().atZone(zone).toLocalDate()
-        val days = if (form.daysOfWeek.isNotEmpty()) form.daysOfWeek.sorted() else listOf(form.dayOfWeek)
-        for ((index, dow) in days.withIndex()) {
-            val dateStr = weekStartLocal.plusDays((dow - 1).toLong()).format(dateFormatter)
-            // 允许排课日期早于今天（支持补录/恢复历史排课），不再拦截过去日期
-            // 首次自动体验课：第一天跳过校验（不消耗课时包），其余天正常校验
-            val isDayTrial = if (form.isFirstLessonAutoTrial) index == 0 else form.isTrial
-            if (isDayTrial) continue
-            // 核心校验 1：排课日期不得早于首次购买日期（按生成当天的实际日期校验）
-            if (!validateSchedule.isDateValid(form.studentName, dateStr)) {
-                return "无法排课：所选日期早于购买日期"
-            }
-            // 核心校验 2：剩余可排课时（剩余课时 - 待消耗）> 0 才允许排课；额度用尽时附带明细
-            val breakdown = validateSchedule.quotaBreakdown(form.studentName, dateStr)
-            if (breakdown.available <= 0) {
-                return "无法排课：该学员课时额度已用完（剩余可排课时为 0）。\n" +
-                    "剩余课时=${breakdown.totalRemaining} 待消耗=${breakdown.pending}\n" +
-                    "请先核对该学员的课时包使用情况，或检查是否有尚未签退的占位课程。"
-            }
-        }
-        return null
-    }
 
     /**
      * 保存排课（新建或更新），支持训练内容/颜色/上课器材完整字段。
@@ -438,11 +421,13 @@ class OperationViewModel(
      *
      * === v25 优化5：forceReplace 强制替换 ===
      *
-     * - forceReplace=false（默认）：捕获 [CoachConflictException] 时通过 [_coachConflictEvent]
+     * - forceReplace=false（默认）：捕获 CoachConflictException 时通过 [_coachConflictEvent]
      *   向 UI 推送冲突事件，由 UI 弹出"强制替换"确认框；用户取消则放弃保存，确认则用
      *   forceReplace=true 重新调用本方法走强制分支
      * - forceReplace=true：直接调用 [ScheduleRepository.addScheduleForce] /
      *   [ScheduleRepository.updateScheduleForce]，先删除冲突排课再写入，不再触发冲突检测
+     *
+     * v53：实现下沉到 [ScheduleSaveCoordinator.save]，本方法仅组装状态快照与事件转发。
      *
      * @param form 表单数据
      * @param forceReplace 是否强制替换已有冲突排课（用户在确认框中选择"确认替换"时传 true）
@@ -456,257 +441,22 @@ class OperationViewModel(
         }
         if (form.startTime.isBlank()) { _toast.value = "请填写上课时间"; return }
         safeLaunch {
-            try {
-                val editing = _editingSchedule.value
-                val coachKey = form.coachName.ifBlank { "默认教练" }
-
-                // 统一校验：ValidateScheduleUseCase（购买日期前置 / 额度封顶），失败直接拦截不入库
-                val validationError = validateScheduleForSave(form)
-                if (validationError != null) {
-                    _toast.value = validationError
-                    return@safeLaunch
-                }
-
-                // 保存时间/地点记忆（重复则更新 updatedAt）
-                memoryRepo.saveMemory(coachKey, "time", form.startTime.trim())
-                if (form.location.isNotBlank()) {
-                    memoryRepo.saveMemory(coachKey, "location", form.location.trim())
-                }
-                // v24 优化6：保存最近操作的上课周几到记忆，下次新建排课时默认选中
-                val targetDaysForMemory = if (form.daysOfWeek.isNotEmpty()) {
-                    form.daysOfWeek.sorted()
-                } else {
-                    listOf(form.dayOfWeek)
-                }
-                targetDaysForMemory.forEach { dow ->
-                    memoryRepo.saveMemory(coachKey, "dayOfWeek", dow.toString())
-                }
-
-                if (editing == null) {
-                    // === 小班课：批量创建同 groupScheduleId 的排课记录 ===
-                    if (form.isGroupClass) {
-                        val groupScheduleId = java.util.UUID.randomUUID().toString().take(8)
-                        val targetDays = if (form.daysOfWeek.isNotEmpty()) {
-                            form.daysOfWeek.sorted()
-                        } else {
-                            listOf(form.dayOfWeek)
-                        }
-                        for (dayOfWeek in targetDays) {
-                            for ((index, name) in form.groupStudentNames.withIndex()) {
-                                val sid = form.groupStudentIds.toList().getOrNull(index)
-                                val schedule = Schedule(
-                                    studentName = name,
-                                    studentId = sid,
-                                    coachName = form.coachName,
-                                    dayOfWeek = dayOfWeek,
-                                    startTime = form.startTime,
-                                    durationMinutes = form.durationMinutes,
-                                    location = form.location,
-                                    lessonType = form.lessonType,
-                                    startDate = todayStr(),
-                                    endDate = "",
-                                    isLongTerm = form.isLongTerm,
-                                    isTrial = false,
-                                    content = scheduleRepo.contentToJson(form.content),
-                                    contentImages = scheduleRepo.imagesToJson(form.contentImages),
-                                    color = form.color,
-                                    note = form.note,
-                                    equipment = scheduleRepo.equipmentToJson(form.equipment),
-                                    groupScheduleId = groupScheduleId
-                                )
-                                val ok = opRepo.saveSchedule(schedule)
-                                if (!ok) {
-                                    _toast.value = "保存失败：学员 $name 数据库写入异常"
-                                    return@safeLaunch
-                                }
-                            }
-                        }
-                        val countText = if (targetDays.size > 1) "（${targetDays.size}天）" else ""
-                        _toast.value = "小班课已添加（${form.groupStudentNames.size}名学员）$countText"
-                        if (form.isLongTerm) ensureLongTermLessonsForWeek()
-                    } else {
-                    // 新建模式：多选周几时循环创建多条 Schedule，避免重复添加
-                    val targetDays = if (form.daysOfWeek.isNotEmpty()) {
-                        form.daysOfWeek.sorted()
-                    } else {
-                        listOf(form.dayOfWeek)
-                    }
-                    // 首次自动体验课：检查学员是否确无正式课记录，有则降级为普通排课
-                    val autoTrialActive = form.isFirstLessonAutoTrial &&
-                        !opRepo.hasFormalLessonsDual(form.studentId, form.studentName)
-                    for ((dayIndex, dayOfWeek) in targetDays.withIndex()) {
-                        // 首次自动体验课：第一天 isTrial=true（保留 studentId），其余天 isTrial=false
-                        val dayIsTrial = if (autoTrialActive) dayIndex == 0 else form.isTrial
-                        // 常规体验课（form.isTrial）studentId 置 null；自动体验课保留学员关联
-                        val dayStudentId = if (form.isTrial) null else form.studentId
-                        if (forceReplace) {
-                            // v25 优化5：强制替换分支——先删除冲突排课再写入（日期已由 validateScheduleForSave 校验）。
-                            // v49 体验课：studentId 强制 null（未注册学员）
-                            scheduleRepo.addScheduleForce(
-                                studentName = form.studentName,
-                                studentId = dayStudentId,
-                                coachName = form.coachName,
-                                dayOfWeek = dayOfWeek,
-                                startTime = form.startTime,
-                                durationMinutes = form.durationMinutes,
-                                location = form.location,
-                                lessonType = form.lessonType,
-                                isLongTerm = form.isLongTerm,
-                                isTrial = dayIsTrial,
-                                content = form.content,
-                                contentImages = form.contentImages,
-                                color = form.color,
-                                note = form.note,
-                                equipment = form.equipment
-                            )
-                        } else {
-                            // === v49 彻底重构：新建排课统一走 saveSchedule（Repository 层强制校验） ===
-                            // 与编辑分支共用同一入口：日期不得早于首次购买（IllegalArgumentException）、
-                            // 剩余可排课时（三要素公式）> 0（ScheduleQuotaExceededException），
-                            // 业务异常直接上抛由 UI 显示明确文案，杜绝"额度用完仍排课"。
-                            // 体验课（form.isTrial）：studentId 强制 null（未注册学员），跳过校验
-                            val schedule = Schedule(
-                                studentName = form.studentName,
-                                studentId = dayStudentId,
-                                coachName = form.coachName,
-                                dayOfWeek = dayOfWeek,
-                                startTime = form.startTime,
-                                durationMinutes = form.durationMinutes,
-                                location = form.location,
-                                lessonType = form.lessonType,
-                                // 手动排课生效日默认今天（与 ScheduleRepository.addSchedule 原行为一致）
-                                startDate = todayStr(),
-                                endDate = "",
-                                isLongTerm = form.isLongTerm,
-                                isTrial = dayIsTrial,
-                                content = scheduleRepo.contentToJson(form.content),
-                                contentImages = scheduleRepo.imagesToJson(form.contentImages),
-                                color = form.color,
-                                note = form.note,
-                                equipment = scheduleRepo.equipmentToJson(form.equipment)
-                            )
-                            val ok = opRepo.saveSchedule(schedule)
-                            if (!ok) {
-                                _toast.value = "保存失败：数据库写入异常，请查看 Logcat (tag=DataFlow)"
-                                return@safeLaunch
-                            }
-                        }
-                    }
-                    val countText = if (targetDays.size > 1) "（${targetDays.size}天）" else ""
-                    _toast.value = if (forceReplace) {
-                        "已强制替换冲突排课并添加$countText"
-                    } else if (form.isLongTerm) {
-                        "长期课程已添加$countText（每周自动生成课记录）"
-                    } else {
-                        "课程已添加$countText"
-                    }
-                    // === v49：保存长期排课后立即触发占位生成 ===
-                    // 确保长期排课生成器能正确反映刚占用的课时（额度同步扣减，避免超额）
-                    if (form.isLongTerm) ensureLongTermLessonsForWeek()
-                    }
-                } else {
-                    // === v33 数据流加固：优先使用 form.id 作为更新主键 ===
-                    // 双重保险：editing.id 来自 startEdit 异步加载，理论上不丢失；
-                    // 但 form.id 来自 ScheduleEditDialog 的 buildForm，是 UI 层显式传入的，
-                    // 即使 editing 因协程时序问题为 null 也可走更新路径（外层 else 分支保证 editing 非 null，
-                    // 这里 form.id 主要用于"显式优于隐式"的可观测性，便于 Logcat 追踪）
-                    val effectiveId = form.id.ifBlank { editing.id }
-                    val updated = editing.copy(
-                        id = effectiveId,
-                        studentName = form.studentName,
-                        // v46：编辑模式未重选学员时保留原 studentId，避免被 null 覆盖清空
-                        // v49 体验课：studentId 强制 null（未注册学员无软关联）
-                        studentId = if (form.isTrial) null else (form.studentId ?: editing.studentId),
-                        coachName = form.coachName,
-                        dayOfWeek = form.dayOfWeek,
-                        startTime = form.startTime,
-                        durationMinutes = form.durationMinutes,
-                        location = form.location,
-                        lessonType = form.lessonType,
-                        isLongTerm = form.isLongTerm,
-                        isTrial = form.isTrial,
-                        content = scheduleRepo.contentToJson(form.content),
-                        contentImages = scheduleRepo.imagesToJson(form.contentImages),
-                        color = form.color,
-                        note = form.note,
-                        equipment = scheduleRepo.equipmentToJson(form.equipment)
-                    )
-                    if (forceReplace) {
-                        // v25 优化5：强制更新分支——先删除冲突排课再写入
-                        scheduleRepo.updateScheduleForce(updated)
-                        _toast.value = "已强制替换冲突排课并更新"
-                    } else {
-                        // === v33 数据流加固：调用 OperationRepository.saveSchedule 走智能判断 ===
-                        // 原直接调用 scheduleRepo.updateSchedule，若 updated.id 在数据库中不存在
-                        // 会返回 0（affected rows = 0），但用户无感知
-                        // 改用 opRepo.saveSchedule 内部判断：存在则 update，不存在则 insert
-                        // 并通过 Log.e("DataFlow") 输出异常堆栈，避免静默失败
-                        try {
-                            val ok = opRepo.saveSchedule(updated)
-                            if (!ok) {
-                                _toast.value = "保存失败：数据库写入异常，请查看 Logcat (tag=DataFlow)"
-                                android.util.Log.e("DataFlow",
-                                    "saveSchedule 返回 false：id=${updated.id}, " +
-                                        "student=${updated.studentName}, " +
-                                        "contentLen=${updated.content.length}")
-                                return@safeLaunch
-                            }
-                        } catch (e: IllegalArgumentException) {
-                            // === Bug 1 修复：排课日期早于购买日期的业务校验异常 ===
-                            // opRepo.saveSchedule 在事务前抛出，异常消息即用户可读文案，
-                            // 直接展示，避免被"保存失败："前缀污染
-                            android.util.Log.w("DataFlow",
-                                "saveSchedule 业务校验拦截：id=${updated.id}, " +
-                                    "student=${updated.studentName}, ${e.message}")
-                            _toast.value = e.message ?: "无法排课：日期校验失败"
-                            return@safeLaunch
-                        } catch (e: Exception) {
-                            // 二次防护：opRepo.saveSchedule 内部已 try-catch 返回 false，
-                            // 但仍兜底捕获以防 NPE / IllegalState 等 RuntimeException 逃逸
-                            android.util.Log.e("DataFlow",
-                                "saveSchedule 抛出异常：id=${updated.id}, " +
-                                    "student=${updated.studentName}", e)
-                            _toast.value = "保存失败：${e.message ?: e.javaClass.simpleName}"
-                            return@safeLaunch
-                        }
-                        _toast.value = "课程已更新"
-                    }
-                }
-                _editingSchedule.value = null
-                // v25 优化5：保存成功后向 UI 推送事件，由 UI 调用 onSaved() 关闭弹窗
-                _saveSuccessEvent.tryEmit(Unit)
-            } catch (e: CoachConflictException) {
-                // 教练时间冲突：根据 forceReplace 决定走"提示用户"还是"已被强制度过"分支
-                // 理论上 forceReplace=true 不会再抛此异常，但兜底处理以防万一
-                if (forceReplace) {
-                    _toast.value = "强制替换失败：${e.userMessage}"
-                } else {
-                    // v25 优化5：向 UI 推送冲突事件，由 UI 弹出"强制替换"确认框
-                    // 不关闭编辑弹窗，保留用户已填表单
-                    _coachConflictEvent.tryEmit(e)
-                }
-            } catch (e: ScheduleQuotaExceededException) {
-                // === v49：额度已满业务异常（三要素公式）===
-                // Repository 层 saveSchedule 上抛，直接显示明确文案，不走"保存失败"笼统提示
-                android.util.Log.w("OperationVM",
-                    "saveSchedule 额度校验拦截：${e.message}")
-                _toast.value = e.message ?: "无法排课：该学员课时额度已满"
-            } catch (e: IllegalArgumentException) {
-                // === 排课日期早于购买日期的业务校验异常 ===
-                // opRepo.saveSchedule 在事务前抛出，异常消息即用户可读文案，直接展示
-                android.util.Log.w("OperationVM",
-                    "saveSchedule 日期校验拦截：${e.message}")
-                _toast.value = e.message ?: "无法排课：日期校验失败"
-            } catch (e: Exception) {
-                // === Bug 修复：不再黑盒吞掉异常，向用户显示具体失败原因 ===
-                // 原代码只 catch CoachConflictException，其他异常（主键冲突 / 约束违反 /
-                // JSON 序列化异常 / SQLite 异常等）会逃逸到 appExceptionHandler，
-                // 用户只看到"操作异常已记录到日志（XXX）"，完全不知失败原因。
-                // 现在此处显式 catch 并通过 toast 显示 e.message，便于用户排查。
-                android.util.Log.e("OperationVM",
-                    "saveSchedule 失败：${e.message}", e)
-                _toast.value = "保存失败：${e.message ?: e.javaClass.simpleName}"
-            }
+            saveCoordinator.save(
+                form, forceReplace,
+                ScheduleSaveCoordinator.SaveContext(
+                    weekStart = _weekStart.value,
+                    editing = _editingSchedule.value,
+                    today = todayStr(),
+                    dateFormatter = dateFormatter,
+                    onToast = { _toast.value = it },
+                    onConflict = { _coachConflictEvent.tryEmit(it) },
+                    onSaved = {
+                        _editingSchedule.value = null
+                        _saveSuccessEvent.tryEmit(Unit)
+                    },
+                    onLongTermEnsure = { ensureLongTermLessonsForWeek() }
+                )
+            )
         }
     }
 
@@ -932,6 +682,8 @@ class OperationViewModel(
      * - 排课与消课完全分离：余额扣减仅在实际消课（签退）时发生
      * - 仍创建 Schedule 记录（isLongTerm=true）供课表周历模板显示
      *
+     * v53：实现下沉到 [AutoScheduleCoordinator.autoScheduleFromPackage]。
+     *
      * @param packageId 课时包 ID
      * @param coachName 教练姓名
      * @param daysOfWeek 选中的周几集合（1=周一 ... 7=周日），不可为空
@@ -967,128 +719,11 @@ class OperationViewModel(
         }
         safeLaunch {
             try {
-                val pkg = withContext(Dispatchers.IO) { pkgRepo.getPkgById(packageId) }
-                if (pkg == null) {
-                    _toast.value = "课时包不存在"
-                    return@safeLaunch
-                }
-                if (pkg.status != "活跃") {
-                    _toast.value = "课时包状态为「${pkg.status}」，无法排课"
-                    return@safeLaunch
-                }
-                // === 排课节数不得超出该课时包剩余课时（排课只占位不扣费，但占位总数受余额封顶）===
-                if (totalLessons > pkg.remainingLessons) {
-                    _toast.value = "本次排课节数($totalLessons)超过课时包剩余课时(${pkg.remainingLessons})，无法排课"
-                    return@safeLaunch
-                }
-
-                val today = LocalDate.now()
-                val purchaseDate = try {
-                    LocalDate.parse(pkg.purchaseDate, dateFormatter)
-                } catch (_: Exception) {
-                    today
-                }
-
-                // 开始日期：优先使用用户输入，为空则回退到课包购买日
-                val startDate = if (startDateStr.isNotBlank()) {
-                    try { LocalDate.parse(startDateStr, dateFormatter) } catch (_: Exception) { purchaseDate }
-                } else purchaseDate
-
-                // 课包过期日（可空）
-                val expireDate = if (pkg.expireDate.isNotBlank()) {
-                    try { LocalDate.parse(pkg.expireDate, dateFormatter) } catch (_: Exception) { null }
-                } else null
-                if (expireDate != null && startDate.isAfter(expireDate)) {
-                    _toast.value = "课时包已过期，无法排课"
-                    return@safeLaunch
-                }
-
-                // === 步骤1：纯内存计算所有排课日期（无数据库访问） ===
-                val lessonDates = LessonDateCalculator.calculateLessonDates(
-                    startDate = startDate,
-                    totalLessons = totalLessons,
-                    selectedDays = daysOfWeek
-                )
-                val calculatedEndDate = lessonDates.last()
-
-                // === 步骤2：前置校验 - 预计结束日期不超过课时包有效期 ===
-                if (expireDate != null && calculatedEndDate.isAfter(expireDate)) {
-                    _toast.value = "排课失败：预计结束日期 ${calculatedEndDate.format(dateFormatter)}" +
-                        " 超过课时包有效期 ${pkg.expireDate}"
-                    return@safeLaunch
-                }
-
-                // === 步骤3：事务内批量插入课时记录（仅占位，不扣余额；签退时统一扣费） ===
-                val result = withContext(Dispatchers.IO) {
-                    opRepo.batchAutoSchedule(
-                        lessonDates = lessonDates,
-                        studentName = pkg.studentName,
-                        studentId = pkg.studentId,
-                        coachName = coachName,
-                        startTime = startTime,
-                        durationMinutes = durationMinutes,
-                        location = location,
-                        lessonType = lessonType
-                    )
-                }
-
-                if (!result.success) {
-                    _toast.value = result.message
-                    return@safeLaunch
-                }
-
-                // === 步骤4：创建 Schedule 记录（供课表周历模板显示） ===
-                // endDate 按周几分组取最后一天，确保模板显示正确的排课结束日期
-                val endDatesByDow = lessonDates.groupBy { it.dayOfWeek.value }
-                    .mapValues { it.value.last() }
-
-                val coachKey = coachName.ifBlank { "默认教练" }
-                memoryRepo.saveMemory(coachKey, "time", startTime.trim())
-                if (location.isNotBlank()) {
-                    memoryRepo.saveMemory(coachKey, "location", location.trim())
-                }
-                daysOfWeek.sorted().forEach { dow ->
-                    memoryRepo.saveMemory(coachKey, "dayOfWeek", dow.toString())
-                }
-
-                var scheduleCreated = 0
-                for (dow in daysOfWeek.sorted()) {
-                    val endD = endDatesByDow[dow] ?: continue
-                    try {
-                        scheduleRepo.addSchedule(
-                            studentName = pkg.studentName,
-                            studentId = pkg.studentId,
-                            coachName = coachName,
-                            dayOfWeek = dow,
-                            startTime = startTime,
-                            durationMinutes = durationMinutes,
-                            location = location,
-                            lessonType = lessonType,
-                            // 课时已由 batchAutoSchedule 按具体日期直接生成，模板仅用于周历展示，
-                            // 不再标记长期排课，避免触发 ensureLongTermLessonsForWeek 冗余生成与「余额不足」误报。
-                            isLongTerm = false,
-                            endDate = endD.format(dateFormatter),
-                            startDate = startDate.format(dateFormatter),
-                            // 按课时包排课允许同一时间段排多个学员（如 9-10 点 A 学员、9-10 点 B 学员）
-                            skipConflictCheck = true
-                        )
-                        scheduleCreated++
-                    } catch (e: CoachConflictException) {
-                        _toast.value = "周${dow} ${startTime} 教练时段冲突，已跳过模板创建"
-                    }
-                }
-
-                val endDateDisplay = calculatedEndDate.format(
-                    DateTimeFormatter.ofPattern("M月d日", Locale.getDefault())
-                )
-                _toast.value = if (result.skippedCount > 0) {
-                    "已为 ${pkg.studentName} 成功排课 ${result.createdCount} 节" +
-                        "（跳过 ${result.skippedCount} 节重复）" +
-                        "，预计结束日期 $endDateDisplay"
-                } else {
-                    "已为 ${pkg.studentName} 成功排课 ${result.createdCount} 节" +
-                        "，预计结束日期 $endDateDisplay"
-                }
+                autoScheduleCoordinator.autoScheduleFromPackage(
+                    packageId, coachName, daysOfWeek, startTime, totalLessons,
+                    startDateStr, durationMinutes, location, lessonType,
+                    dateFormatter, todayStr()
+                ) { _toast.value = it }
             } catch (e: Exception) {
                 _toast.value = "排课失败：${e.message ?: e.javaClass.simpleName}"
             }
@@ -1103,6 +738,8 @@ class OperationViewModel(
      * - 事务内：为每名学员 × 每个日期批量插入课时占位（不扣余额，签退时统一扣费）
      * - 每个上课日的课时共享同一 sessionId，签退时识别当天同组统一消课（不跨天）
      * - 仍创建 Schedule 模板（isLongTerm=false）供课表周历模板显示
+     *
+     * v53：实现下沉到 [AutoScheduleCoordinator.autoScheduleGroup]。
      *
      * @param groupStudentIds 小班课学员 studentId 集合（与 groupStudentNames 顺序一致）
      * @param groupStudentNames 小班课学员姓名列表
@@ -1142,111 +779,12 @@ class OperationViewModel(
         }
         safeLaunch {
             try {
-                val today = LocalDate.now()
-                val startDate = if (startDateStr.isNotBlank()) {
-                    try { LocalDate.parse(startDateStr, dateFormatter) } catch (_: Exception) { today }
-                } else today
-
-                // === 步骤0：计算每名学员剩余可排课时，按各自额度截断 ===
-                // 额度少的学员排完即退出，剩余节数由额度充足的学员单独继续排。
-                val quotaByName = mutableMapOf<String, Int>()
-                for (name in groupStudentNames) {
-                    val q = validateSchedule.availableQuota(name, todayStr())
-                    quotaByName[name] = q
-                    android.util.Log.d("GroupSchedule", "小班课学员「$name」剩余可排课时=$q")
-                }
-                val maxQuota = quotaByName.values.maxOrNull() ?: 0
-                android.util.Log.d("GroupSchedule", "小班课最大学员额度=$maxQuota，请求节数=$totalLessons")
-                if (maxQuota <= 0) {
-                    _toast.value = "无法排课：所有学员剩余可排课时均为 0，请先核对课时包"
-                    return@safeLaunch
-                }
-                // 小班课总节数受「剩余课时最多的学员」封顶（不超过任何学员可上的最高节数）
-                val effectiveTotal = minOf(totalLessons, maxQuota)
-                // 每名学员本次实际排课节数：额度内截断，且不超过总节数
-                val memberQuotas = groupStudentNames.map { name ->
-                    minOf(quotaByName[name] ?: 0, effectiveTotal)
-                }
-                val reducedNames = groupStudentNames.filterIndexed { i, _ ->
-                    (memberQuotas.getOrNull(i) ?: 0) < effectiveTotal
-                }
-
-                // === 步骤1：纯内存计算所有排课日期 ===
-                val lessonDates = LessonDateCalculator.calculateLessonDates(
-                    startDate = startDate,
-                    totalLessons = effectiveTotal,
-                    selectedDays = daysOfWeek
-                )
-                val calculatedEndDate = lessonDates.last()
-                val groupScheduleId = java.util.UUID.randomUUID().toString().take(8)
-
-                // === 步骤2：事务内批量插入课时占位（不扣余额） ===
-                val result = withContext(Dispatchers.IO) {
-                    opRepo.batchAutoScheduleGroup(
-                        lessonDates = lessonDates,
-                        groupStudentIds = groupStudentIds,
-                        groupStudentNames = groupStudentNames,
-                        memberQuotas = memberQuotas,
-                        coachName = coachName,
-                        startTime = startTime,
-                        durationMinutes = durationMinutes,
-                        location = location,
-                        lessonType = lessonType
-                    )
-                }
-                if (!result.success) {
-                    _toast.value = result.message
-                    return@safeLaunch
-                }
-
-                // === 步骤3：保存记忆 ===
-                val coachKey = coachName.ifBlank { "默认教练" }
-                memoryRepo.saveMemory(coachKey, "time", startTime.trim())
-                if (location.isNotBlank()) {
-                    memoryRepo.saveMemory(coachKey, "location", location.trim())
-                }
-                daysOfWeek.sorted().forEach { dow ->
-                    memoryRepo.saveMemory(coachKey, "dayOfWeek", dow.toString())
-                }
-
-                // === 步骤4：创建 Schedule 模板（每名学员按其额度截断 endDate） ===
-                val studentIds = groupStudentIds.toList()
-                val templates = mutableListOf<Schedule>()
-                groupStudentNames.forEachIndexed { index, name ->
-                    val maxLessons = memberQuotas.getOrNull(index) ?: 0
-                    if (maxLessons <= 0) return@forEachIndexed
-                    val memberDates = lessonDates.take(maxLessons)
-                    val memberEndByDow = memberDates.groupBy { it.dayOfWeek.value }
-                        .mapValues { it.value.last() }
-                    for (dow in daysOfWeek.sorted()) {
-                        val endD = memberEndByDow[dow] ?: continue
-                        templates += Schedule(
-                            studentName = name,
-                            studentId = studentIds.getOrNull(index),
-                            coachName = coachName,
-                            dayOfWeek = dow,
-                            startTime = startTime,
-                            durationMinutes = durationMinutes,
-                            location = location,
-                            lessonType = lessonType,
-                            startDate = startDate.format(dateFormatter),
-                            endDate = endD.format(dateFormatter),
-                            isLongTerm = false,
-                            isTrial = false,
-                            groupScheduleId = groupScheduleId
-                        )
-                    }
-                }
-                scheduleRepo.insertGroupScheduleTemplates(templates)
-
-                val endDateDisplay = calculatedEndDate.format(
-                    DateTimeFormatter.ofPattern("M月d日", Locale.getDefault())
-                )
-                val quotaHint = if (reducedNames.isNotEmpty()) {
-                    "（${reducedNames.joinToString("、")} 课时不足，已按各自额度排课）"
-                } else ""
-                _toast.value = "已为 ${groupStudentNames.size} 名学员小班排课 $effectiveTotal 节" +
-                    "$quotaHint，预计结束日期 $endDateDisplay"
+                autoScheduleCoordinator.autoScheduleGroup(
+                    groupStudentIds, groupStudentNames, coachName, daysOfWeek,
+                    startTime, totalLessons, startDateStr, durationMinutes,
+                    location, lessonType,
+                    dateFormatter, todayStr()
+                ) { _toast.value = it }
             } catch (e: Exception) {
                 _toast.value = "排课失败：${e.message ?: e.javaClass.simpleName}"
             }
@@ -1297,7 +835,7 @@ class OperationViewModel(
         }
     }
 
-    // === 课程包操作 ===
+    // === 课程包操作（v53：实现下沉到 [PackageOpsCoordinator]，本组方法仅保留 toast 转发） ===
     fun addPackage(
         studentName: String,
         name: String,
@@ -1307,28 +845,14 @@ class OperationViewModel(
         expireDate: String
     ) {
         safeLaunch {
-            pkgRepo.addPackage(
-                LessonPackage(
-                    studentName = studentName,
-                    // v51 断链修复：课时包必须携带 studentId 软关联键，
-                    // 否则按 ID 级联改名时该课时包不会更新 studentName，学员课时包列表断链
-                    studentId = studentRepo.getByName(studentName)?.studentId,
-                    name = name,
-                    totalLessons = totalLessons,
-                    price = price,
-                    purchaseDate = purchaseDate,
-                    expireDate = expireDate
-                )
+            _toast.value = packageOps.addPackage(
+                studentName, name, totalLessons, price, purchaseDate, expireDate
             )
-            _toast.value = "课程包已添加"
         }
     }
 
     fun deletePackage(id: String) {
-        safeLaunch {
-            pkgRepo.deletePackage(id)
-            _toast.value = "已删除课时包，关联排课已同步清除"
-        }
+        safeLaunch { _toast.value = packageOps.deletePackage(id) }
     }
 
     /**
@@ -1338,17 +862,8 @@ class OperationViewModel(
     fun adjustPackage(packageId: String, delta: Int) {
         if (delta == 0) return
         safeLaunch {
-            val pkg = packages.value.firstOrNull { it.id == packageId } ?: return@safeLaunch
-            // remainingLessons 是计算属性 = totalLessons - usedLessons
-            // 增添：totalLessons += delta，usedLessons 不变
-            // 减少：totalLessons -= delta，但不低于 usedLessons
-            val newTotal = if (delta > 0) {
-                pkg.totalLessons + delta
-            } else {
-                (pkg.totalLessons + delta).coerceAtLeast(pkg.usedLessons)
-            }
-            pkgRepo.updatePackage(pkg.copy(totalLessons = newTotal))
-            _toast.value = if (delta > 0) "已增添 $delta 课时" else "已减少 ${-delta} 课时"
+            val msg = packageOps.adjustPackage(packageId, delta)
+            if (msg.isNotEmpty()) _toast.value = msg
         }
     }
 
@@ -1359,21 +874,7 @@ class OperationViewModel(
     fun giftLessons(studentName: String, count: Int) {
         if (count <= 0) return
         safeLaunch {
-            pkgRepo.addPackage(
-                LessonPackage(
-                    studentName = studentName,
-                    // v51 断链修复：赠送包同样携带 studentId（软关联唯一键）
-                    studentId = studentRepo.getByName(studentName)?.studentId,
-                    name = "赠送${count}课时",
-                    totalLessons = count,
-                    usedLessons = 0,
-                    price = 0.0,
-                    purchaseDate = todayStr(),
-                    expireDate = "",
-                    note = "额外赠送"
-                )
-            )
-            _toast.value = "已为 $studentName 赠送 $count 课时"
+            _toast.value = packageOps.giftLessons(studentName, count, todayStr())
         }
     }
 
@@ -1382,36 +883,16 @@ class OperationViewModel(
      * 用于课时余额页面的编辑功能。
      */
     fun updatePackage(pkg: LessonPackage) {
-        safeLaunch {
-            pkgRepo.updatePackage(pkg)
-            _toast.value = "课时包已更新"
-        }
+        safeLaunch { _toast.value = packageOps.updatePackage(pkg) }
     }
 
-    // === 教练操作 ===
+    // === 教练操作（v53：实现下沉到 [PackageOpsCoordinator]） ===
     fun addCoach(name: String, phone: String, specialty: String) {
-        safeLaunch {
-            if (coachRepo.getByName(name) != null) {
-                _toast.value = "教练已存在"
-                return@safeLaunch
-            }
-            coachRepo.upsert(
-                Coach(
-                    name = name,
-                    phone = phone,
-                    specialty = specialty,
-                    hireDate = todayStr()
-                )
-            )
-            _toast.value = "教练已添加"
-        }
+        safeLaunch { _toast.value = packageOps.addCoach(name, phone, specialty, todayStr()) }
     }
 
     fun deleteCoach(name: String) {
-        safeLaunch {
-            coachRepo.delete(name)
-            _toast.value = "教练已删除"
-        }
+        safeLaunch { _toast.value = packageOps.deleteCoach(name) }
     }
 
     // === 辅助方法 ===
