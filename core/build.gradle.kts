@@ -30,7 +30,8 @@ dependencies {
     // 如需 JSON 解析，使用 Kotlin 原生或显式引入 kotlinx-serialization（避免引入 org.json 的 Android 依赖）
     // 如需引入 org.json，需将本模块改为 com.android.library 并配置 SDK
     implementation(kotlin("stdlib"))
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
+    // 依赖统一走 Version Catalog（gradle/libs.versions.toml），去除硬编码版本
+    implementation(libs.kotlinx.coroutines.core)
 
     // JSON 兜底解析：原 core 包使用 org.json.JSONObject，迁移时需替换为：
     // 方案 A：保留 org.json（需把本模块改为 Android Library）
@@ -38,8 +39,8 @@ dependencies {
     // 方案 C：改用 Gson（已有依赖）
     // 当前模板采用方案 A 占位，迁移时按实际情况选择
 
-    testImplementation("junit:junit:4.13.2")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
 }
 
 // 启用单元测试报告

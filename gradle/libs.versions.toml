@@ -28,7 +28,7 @@ activityCompose = "1.9.3"              # Activity Compose 集成
 navigationCompose = "2.8.5"            # Navigation Compose
 
 # === Compose ===
-composeBom = "2024.12.01"              # Compose BOM（统一管理 Compose 各库版本）
+composeBom = "2025.08.01"              # Compose BOM（统一管理 Compose 各库版本；1.9.x 需要 compileSdk 36，暂停在 1.8.x 稳定线）
 
 # === Room 数据库 ===
 room = "2.7.1"                         # Room（原生支持 KSP2，解决 Kotlin 2.2.10 兼容性）
