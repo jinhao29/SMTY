@@ -47,6 +47,14 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    // 单元测试配置：与 app 模块一致，供 Robolectric 等 JVM 测试框架使用
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            isReturnDefaultValues = true
+        }
+    }
 }
 
 // Room schema 导出（P2 修复）：exportSchema=true 时生成 JSON 到 data/schemas/，纳入版本控制
@@ -88,4 +96,8 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    // Robolectric：JVM 上运行需要 Android Context 的测试（Room 内存库 / 备份恢复）
+    testImplementation(libs.robolectric)
+    // Truth：流式断言库（与既有测试风格保持一致）
+    testImplementation(libs.truth)
 }

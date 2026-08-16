@@ -25,7 +25,7 @@ import org.robolectric.annotation.Config
  * 2. 场景4：[fixHistoricalScheduleErrors] 正确清除超限排课并保留有效排课，清理后重排
  * 3. 日期早于购买日的排课被拒绝（[IllegalArgumentException] 且不落库）
  *
- * 运行方式：./gradlew :app:testDebugUnitTest --tests "com.shangmentiyu.sportscoach.domain.scheduling.ScheduleQueryRepositoryTest"
+ * 运行方式：./gradlew :data:testDebugUnitTest --tests "com.shangmentiyu.sportscoach.domain.scheduling.ScheduleQueryRepositoryTest"
  */
 @RunWith(RobolectricTestRunner::class)
 // 显式指定 SDK 34：Robolectric 4.13 最高支持 API 34，避免按 targetSdk(35) 自动选择失败

@@ -27,7 +27,7 @@ import org.robolectric.annotation.Config
  * 5. 旧数据（packageId 非空 ⟺ 已扣课时）：仅标记签退，不重复扣费，归属记录保留
  * 6. 多课时包：按最早购买（FIFO）精准扣减，不发生错乱
  *
- * 运行方式：./gradlew :app:testDebugUnitTest --tests "com.shangmentiyu.sportscoach.data.repo.OperationRepositoryCheckOutTest"
+ * 运行方式：./gradlew :data:testDebugUnitTest --tests "com.shangmentiyu.sportscoach.data.repo.OperationRepositoryCheckOutTest"
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])

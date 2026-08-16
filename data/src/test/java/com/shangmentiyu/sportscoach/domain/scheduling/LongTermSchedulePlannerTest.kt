@@ -16,7 +16,7 @@ import java.time.format.DateTimeFormatter
  * 4. 当天已存在排课（bookedDates）跳过
  * 5. 模板 startDate / endDate 边界
  *
- * 运行方式：./gradlew :app:testDebugUnitTest --tests "com.shangmentiyu.sportscoach.domain.scheduling.LongTermSchedulePlannerTest"
+ * 运行方式：./gradlew :data:testDebugUnitTest --tests "com.shangmentiyu.sportscoach.domain.scheduling.LongTermSchedulePlannerTest"
  */
 class LongTermSchedulePlannerTest {
 

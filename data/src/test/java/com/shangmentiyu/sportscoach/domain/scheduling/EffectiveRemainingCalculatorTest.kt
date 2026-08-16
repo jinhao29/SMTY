@@ -14,7 +14,7 @@ import org.junit.Test
  * 4. 已用课时扣减（remainingLessons = total - used）
  * 5. 空列表返回 0
  *
- * 运行方式：./gradlew :app:testDebugUnitTest --tests "com.shangmentiyu.sportscoach.domain.scheduling.EffectiveRemainingCalculatorTest"
+ * 运行方式：./gradlew :data:testDebugUnitTest --tests "com.shangmentiyu.sportscoach.domain.scheduling.EffectiveRemainingCalculatorTest"
  */
 class EffectiveRemainingCalculatorTest {
 

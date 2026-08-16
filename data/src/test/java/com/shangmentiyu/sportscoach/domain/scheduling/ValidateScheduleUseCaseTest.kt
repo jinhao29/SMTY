@@ -14,7 +14,7 @@ import org.junit.Test
  * 3. 三要素公式：剩余可排课时 = 总课时(活跃包剩余之和) - 已消耗(已签退) - 待消耗(占位)
  * 4. 无课时包时的兼容行为
  *
- * 运行方式：./gradlew :app:testDebugUnitTest --tests "com.shangmentiyu.sportscoach.domain.scheduling.ValidateScheduleUseCaseTest"
+ * 运行方式：./gradlew :data:testDebugUnitTest --tests "com.shangmentiyu.sportscoach.domain.scheduling.ValidateScheduleUseCaseTest"
  */
 class ValidateScheduleUseCaseTest {
 

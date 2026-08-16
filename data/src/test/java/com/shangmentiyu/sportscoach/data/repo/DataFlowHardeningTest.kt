@@ -31,7 +31,7 @@ import org.robolectric.annotation.Config
  * 2. 改名不误改其他学员的子表（studentId 精准定位）
  * 3. 课时包 usedLessons >= totalLessons 时 updatePackage 自动置 status="已用完"
  *
- * 运行方式：./gradlew :app:testDebugUnitTest --tests "com.shangmentiyu.sportscoach.data.repo.DataFlowHardeningTest"
+ * 运行方式：./gradlew :data:testDebugUnitTest --tests "com.shangmentiyu.sportscoach.data.repo.DataFlowHardeningTest"
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
