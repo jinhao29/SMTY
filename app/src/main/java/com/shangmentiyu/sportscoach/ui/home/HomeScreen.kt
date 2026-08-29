@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -49,6 +50,7 @@ import androidx.compose.ui.unit.sp
 import com.shangmentiyu.sportscoach.R
 import com.shangmentiyu.sportscoach.data.model.LessonPackage
 import com.shangmentiyu.sportscoach.data.model.Student
+import com.shangmentiyu.sportscoach.domain.usecase.UnsignedOutReminderState
 import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
@@ -74,7 +76,8 @@ fun HomeScreen(
     onLessonCheckIn: () -> Unit = {},
     onSchedule: () -> Unit = {},
     onHeightPrediction: (String) -> Unit = {},
-    onDietManage: (String) -> Unit = {}
+    onDietManage: (String) -> Unit = {},
+    onOpenUnsignedOutLessons: () -> Unit = {}
 ) {
         val vm: HomeViewModel = koinViewModel()
 
@@ -89,6 +92,7 @@ fun HomeScreen(
     // 避免向 ExpiryBanner 传整个 vm 导致其因 vm 引用变化而重组范围扩大
     val expiringBannerText by vm.expiringBannerText.collectAsStateWithLifecycle()
     val expiringPackages by vm.expiringPackages.collectAsStateWithLifecycle()
+    val unsignedOutReminder by vm.unsignedOutReminder.collectAsStateWithLifecycle()
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -143,6 +147,13 @@ fun HomeScreen(
                 message = expiringBannerText,
                 expiringPackages = expiringPackages,
                 onAction = { studentName -> onGrowth(studentName) }
+            )
+            // === 忘记签退提醒卡片（小班课集体签到签退功能） ===
+            // === 性能优化：只传 state 数据与两个回调，不传 vm，隔离重组范围 ===
+            UnsignedOutReminderCard(
+                state = unsignedOutReminder,
+                onView = onOpenUnsignedOutLessons,
+                onDismiss = { vm.dismissUnsignedOutReminder() }
             )
             // Crossfade 平滑切换 Tab
             // === 性能优化：显式 label 便于 Layout Inspector 定位重组 ===
@@ -289,6 +300,82 @@ private fun ExpiryBanner(
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.weight(1f, fill = false)
             )
+        }
+    }
+}
+
+/**
+ * === 忘记签退提醒卡片（小班课集体签到签退功能） ===
+ *
+ * 仅当 [UnsignedOutReminderState.shouldShow] 为 true 时通过 [AnimatedVisibility]
+ * 平滑展开：存在过去日期已签到未签退的课时，且未被用户以相同记录集签名关闭。
+ *
+ * 交互：
+ * - 点击卡片主体 → [onView] 跳转签到页并自动筛选未签退列表
+ * - 点击右侧关闭图标 → [onDismiss] 记录当前记录集签名，本次记录集不再提醒；
+ *   出现新的未签退记录（签名变化）时卡片自动再次显示
+ *
+ * @param state 提醒状态（学员汇总 + 记录集签名 + 是否显示）
+ * @param onView 点击跳转回调（查看未签退详情）
+ * @param onDismiss 关闭提醒回调
+ */
+@Composable
+private fun UnsignedOutReminderCard(
+    state: UnsignedOutReminderState,
+    onView: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AnimatedVisibility(
+        visible = state.shouldShow,
+        enter = expandVertically() + fadeIn(),
+        exit = shrinkVertically() + fadeOut()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.screenH, vertical = Spacing.sm)
+                .clip(RoundedCornerShape(10.dp))
+                .background(appPrimary().copy(alpha = 0.08f))
+                .clickable(onClick = onView)
+                .padding(start = Spacing.md, top = Spacing.sm, bottom = Spacing.sm, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+        ) {
+            Icon(
+                Icons.Outlined.NotificationsActive,
+                contentDescription = null,
+                tint = appPrimary(),
+                modifier = Modifier.size(18.dp)
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "您有 ${state.students.size} 个学员未签退（共 ${state.totalLessonCount} 节课），请及时处理",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = appOnSurface(),
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 2
+                )
+                Text(
+                    text = "点击查看过去日期已签到未签退的课时",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = appOnSurfaceVariant()
+                )
+            }
+            // 关闭提醒：小尺寸非侵入式按钮（仅记录当前记录集签名）
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .clickable(onClick = onDismiss)
+                    .padding(Spacing.xs),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Outlined.Close,
+                    contentDescription = "关闭提醒",
+                    tint = appOnSurfaceVariant(),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
         }
     }
 }

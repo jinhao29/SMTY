@@ -16,6 +16,7 @@ import com.shangmentiyu.sportscoach.data.model.LessonPackage
 import com.shangmentiyu.sportscoach.data.model.Schedule
 import com.shangmentiyu.sportscoach.data.model.SignInRecord
 import com.shangmentiyu.sportscoach.data.model.TrainingCycle
+import com.shangmentiyu.sportscoach.domain.model.BatchSignResult
 import com.shangmentiyu.sportscoach.domain.scheduling.EffectiveRemainingCalculator
 import com.shangmentiyu.sportscoach.domain.scheduling.LongTermSchedulePlanner
 import com.shangmentiyu.sportscoach.domain.scheduling.ScheduleValidationSource
@@ -161,6 +162,18 @@ class OperationRepository(
     /** 签退时消耗课时（事务内扣减课时包 + 更新 Lesson 为已签退），委托 [LessonConsumptionRepository.consumeLessonForCheckOut] */
     suspend fun consumeLessonForCheckOut(lesson: Lesson): LessonConsumptionRepository.ConsumeResult =
         consumptionRepo.consumeLessonForCheckOut(lesson)
+
+    /** 小班课：定向签到（翻转指定课时为已签到，写 SignInRecord 防重），委托 [LessonConsumptionRepository.signInLesson] */
+    suspend fun signInLesson(lesson: Lesson, operator: String = ""): LessonConsumptionRepository.SignInResult =
+        consumptionRepo.signInLesson(lesson, operator)
+
+    /** 小班课：批量签到（待签到→已签到，已签到/已签退自动跳过），委托 [LessonConsumptionRepository.batchSignIn] */
+    suspend fun batchSignIn(lessonIds: List<String>): BatchSignResult =
+        consumptionRepo.batchSignIn(lessonIds)
+
+    /** 小班课：批量签退（已签到→签退消课，未签到/已签退自动跳过），委托 [LessonConsumptionRepository.batchSignOut] */
+    suspend fun batchSignOut(lessonIds: List<String>): BatchSignResult =
+        consumptionRepo.batchSignOut(lessonIds)
 
     /**
      * 获取学员剩余课时汇总（按所有活跃包累加）。

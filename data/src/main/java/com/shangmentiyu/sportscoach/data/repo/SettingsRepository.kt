@@ -59,6 +59,7 @@ class SettingsRepository(private val context: Context) {
         private const val DARK_THEME_SYSTEM = "system"
         private const val DARK_THEME_DARK = "dark"
         private const val DARK_THEME_LIGHT = "light"
+
     }
 
     val coach: Flow<String> = context.dataStore.data.map { it[KEY_COACH] ?: "" }
@@ -216,5 +217,6 @@ class SettingsRepository(private val context: Context) {
         }
         context.dataStore.edit { it[KEY_DARK_THEME] = stored }
     }
+
 }
 

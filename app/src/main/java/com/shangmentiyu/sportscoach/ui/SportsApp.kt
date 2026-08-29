@@ -472,7 +472,13 @@ fun SportsApp() {
                     onLessonCheckIn = { navController.navigate(Routes.LESSON_CHECKIN) },
                     onSchedule = { navController.navigate(Routes.SCHEDULE) },
                     onHeightPrediction = { studentName -> navController.navigate(Routes.heightPrediction(studentName)) },
-                    onDietManage = { studentName -> navController.navigate(Routes.dietManage(studentName)) }
+                    onDietManage = { studentName -> navController.navigate(Routes.dietManage(studentName)) },
+                    // 忘记签退提醒卡片 → 签到页未签退筛选模式
+                    onOpenUnsignedOutLessons = {
+                        navController.navigate(Routes.lessonCheckIn(filterUnsignedOut = true)) {
+                            launchSingleTop = true
+                        }
+                    }
                 )
             }
             composable(Routes.SCORE) {
@@ -596,8 +602,18 @@ fun SportsApp() {
             }
 
             // === 排课/签到 ===
-            composable(Routes.LESSON_CHECKIN) {
+            composable(
+                route = Routes.LESSON_CHECKIN_PATTERN,
+                arguments = listOf(navArgument("filter") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                })
+            ) { backStackEntry ->
+                // filter=unsigned_out：首页忘记签退提醒跳转，签到页进入未签退筛选模式
+                val filterUnsignedOut =
+                    backStackEntry.arguments?.getString("filter") == "unsigned_out"
                 com.shangmentiyu.sportscoach.ui.lessoncheckin.LessonCheckInScreen(
+                    filterUnsignedOut = filterUnsignedOut,
                     onBack = { navController.popBackStack() },
                     onOpenLesson = { lessonId -> navController.navigate(Routes.lesson(lessonId)) }
                 )

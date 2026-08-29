@@ -56,9 +56,11 @@ import com.shangmentiyu.sportscoach.data.repo.LessonRepository
 import com.shangmentiyu.sportscoach.data.repo.OperationRepository
 import com.shangmentiyu.sportscoach.data.repo.ScheduleQueryRepository
 import com.shangmentiyu.sportscoach.data.repo.ScheduleRepository
+import com.shangmentiyu.sportscoach.data.repo.SettingsRepository
 import com.shangmentiyu.sportscoach.data.repo.StageSummaryRepository
 import com.shangmentiyu.sportscoach.data.repo.StudentRepository
 import com.shangmentiyu.sportscoach.data.repo.TrainingCycleRepository
+import com.shangmentiyu.sportscoach.domain.usecase.GetUnsignedOutReminderUseCase
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -862,7 +864,8 @@ private fun AddStudentScreenPreview() {
                         db.lessonDao(), db.lessonPackageDao(), db
                     ),
                     archiveRepo = LessonArchiveRepository(db.lessonDao(), null, db)
-                )
+                ),
+                getUnsignedOutReminder = GetUnsignedOutReminderUseCase(db.lessonDao())
             )
         }
     )

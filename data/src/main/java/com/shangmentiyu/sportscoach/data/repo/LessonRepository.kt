@@ -119,6 +119,17 @@ class LessonRepository(private val dao: LessonDao) {
      */
     fun getUpcomingFrom(fromDate: String): Flow<List<Lesson>> = dao.getUpcomingFrom(fromDate)
 
+    /**
+     * 忘记签退提醒：查询过去日期已签到但未签退的课时（按日期降序、时间降序）。
+     *
+     * 数据库层已叠加 signOutTime 为空的兜底条件（排除 v24 迁移的 status 残留"已签到"旧数据），
+     * 详见 [LessonDao.getUnsignedOutLessonsBefore]。
+     *
+     * @param today 当前日期 YYYY-MM-DD（边界，date 严格小于此值才计入）
+     */
+    fun getUnsignedOutLessonsBefore(today: String): Flow<List<Lesson>> =
+        dao.getUnsignedOutLessonsBefore(today)
+
     suspend fun getById(id: String): Lesson? = dao.getById(id)
 
     /** 小班课：查询同 groupScheduleId 的所有课时记录 */

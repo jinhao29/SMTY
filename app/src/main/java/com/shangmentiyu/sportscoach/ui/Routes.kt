@@ -43,6 +43,19 @@ object Routes {
 
     // === 排课/签到 ===
     const val LESSON_CHECKIN = "lesson_checkin"
+
+    /** 签到页路由模式：带可选 filter 查询参数（"unsigned_out" = 未签退筛选模式） */
+    const val LESSON_CHECKIN_PATTERN = "lesson_checkin?filter={filter}"
+
+    /**
+     * 签到页跳转路由。
+     *
+     * @param filterUnsignedOut true 时附加 filter=unsigned_out，
+     *        签到页进入"未签退筛选"模式（首页忘记签退提醒卡片跳转入口）
+     */
+    fun lessonCheckIn(filterUnsignedOut: Boolean = false) =
+        if (filterUnsignedOut) "lesson_checkin?filter=unsigned_out" else LESSON_CHECKIN
+
     const val SCHEDULE = "schedule"
 
     // === 成绩录入（带 lessonId 关联） ===

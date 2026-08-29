@@ -8,6 +8,8 @@ import com.shangmentiyu.sportscoach.data.repo.LessonRepository
 import com.shangmentiyu.sportscoach.data.repo.OperationRepository
 import com.shangmentiyu.sportscoach.data.repo.SettingsRepository
 import com.shangmentiyu.sportscoach.data.repo.StudentRepository
+import com.shangmentiyu.sportscoach.domain.usecase.GetUnsignedOutReminderUseCase
+import com.shangmentiyu.sportscoach.domain.usecase.UnsignedOutReminderState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -49,7 +51,9 @@ class HomeViewModel(
      * 由 Koin 依赖注入（di/AppModule）提供。
      * null 时调用 [uploadMoment] 直接返回失败，不影响应用启动。
      */
-    private val momentUploader: com.shangmentiyu.sportscoach.app.framework.MomentUploader? = null
+    private val momentUploader: com.shangmentiyu.sportscoach.app.framework.MomentUploader? = null,
+    /** 忘记签退提醒（小班课集体签到签退功能）：检测过去日期已签到未签退的课时 */
+    private val getUnsignedOutReminder: GetUnsignedOutReminderUseCase
 ) : ViewModel() {
 
     // === 修复：将 _toast 与 appExceptionHandler 提前到 init 块之前 ===
@@ -190,6 +194,35 @@ class HomeViewModel(
             "【提醒】${pkg.studentName}的「${pkg.name}」$daysText，剩余 ${pkg.remainingLessons} 节课，建议尽快安排！"
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /**
+     * === 忘记签退提醒状态（小班课集体签到签退功能） ===
+     *
+     * 会话级 dismiss：每次 App 启动 ViewModel 重建时 _reminderDismissed 为 false，
+     * 有未签退记录即显示提醒；用户关闭后置 true，本次会话不再提示；
+     * 下次启动 ViewModel 重建 → _reminderDismissed 重置为 false → 提醒再次显示。
+     */
+    private val _reminderDismissed = MutableStateFlow(false)
+
+    val unsignedOutReminder: StateFlow<UnsignedOutReminderState> =
+        kotlinx.coroutines.flow.combine(
+            getUnsignedOutReminder(todayStr()),
+            _reminderDismissed
+        ) { state, dismissed ->
+            state.copy(shouldShow = state.shouldShow && !dismissed)
+        }.stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            UnsignedOutReminderState(emptyList(), 0, false)
+        )
+
+    /**
+     * 关闭忘记签退提醒：置会话级 dismiss 标记为 true。
+     * 本次会话不再提示，下次启动 App 时自动恢复。
+     */
+    fun dismissUnsignedOutReminder() {
+        _reminderDismissed.value = true
+    }
 
     /** 学员姓名 → 剩余课时总数（用于列表徽章显示） */
     val remainingMap: StateFlow<Map<String, Int>> = opRepo.getAllPackages()

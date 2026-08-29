@@ -352,6 +352,32 @@ interface LessonDao {
     @Query("SELECT * FROM lessons WHERE groupScheduleId = :groupScheduleId")
     suspend fun getByGroupScheduleId(groupScheduleId: String): List<com.shangmentiyu.sportscoach.data.model.Lesson>
 
+    /**
+     * 小班课：查询同日期+时间段+地点的全部课时记录（按学员名排序）。
+     *
+     * 同一小班课由多条 Lesson 构成（studentName 不同，date/time/location 相同），
+     * 本方法用于按"上课组合"定位同组课时，供集体签到/签退使用。
+     * 与 [getByGroupScheduleId] 区别：不依赖 groupScheduleId 字段，兼容旧数据与散排课时。
+     */
+    @Query("SELECT * FROM lessons WHERE date = :date AND time = :time AND location = :location ORDER BY studentName ASC")
+    suspend fun getLessonsByDateTimeLocation(date: String, time: String, location: String): List<Lesson>
+
+    /**
+     * 忘记签退提醒：查询过去日期已签到但未签退的课时（按日期降序、时间降序）。
+     *
+     * 条件：date < today 且 status = '已签到' 且 signOutTime 为空。
+     * signOutTime 兜底：v24 迁移为旧数据填充的 status 默认值是"已签到"，
+     * 已签退的旧记录 status 仍停留在"已签到"，仅凭 status 判断会误报，
+     * 故必须叠加 signOutTime 为空的条件。
+     */
+    @Query(
+        "SELECT * FROM lessons WHERE date < :today " +
+            "AND status = '已签到' " +
+            "AND (signOutTime IS NULL OR signOutTime = '') " +
+            "ORDER BY date DESC, time DESC"
+    )
+    fun getUnsignedOutLessonsBefore(today: String): Flow<List<Lesson>>
+
     /** 统计学员的正式课时记录数（isTrial=0），用于"首次自动体验课"判断 */
     @Query(
         "SELECT COUNT(*) FROM lessons WHERE " +

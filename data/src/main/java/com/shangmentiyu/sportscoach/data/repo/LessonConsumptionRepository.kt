@@ -8,6 +8,7 @@ import com.shangmentiyu.sportscoach.data.db.SignInDao
 import com.shangmentiyu.sportscoach.data.internal.AutoBackupScheduler
 import com.shangmentiyu.sportscoach.data.model.Lesson
 import com.shangmentiyu.sportscoach.data.model.SignInRecord
+import com.shangmentiyu.sportscoach.domain.model.BatchSignResult
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -170,6 +171,151 @@ class LessonConsumptionRepository(
                 }
             )
         }
+    }
+
+    /**
+     * === 小班课：定向签到（翻转指定课时，而非"今日首条待签课时"） ===
+     *
+     * 与 [signIn] 的区别：[signIn] 按学员+今日日期查找首条未签退课时（按时间升序），
+     * 当学员当日有多条排课时会翻转错误的课时；本方法直接翻转调用方指定的课时记录，
+     * 保证小班课批量签到精确命中同组的每条课时。
+     *
+     * 防重与 [signIn] 一致（双防线）：
+     * - 应用层：status 已是"已签到"/"已签退"直接拒绝；
+     * - 数据库层：sign_in_records 唯一索引(studentName, lessonId, type) 冲突回滚。
+     *
+     * @param lesson 待签到的占位课时（status = "待签到"）
+     * @param operator 操作人（教练名，可空）
+     */
+    suspend fun signInLesson(lesson: Lesson, operator: String = ""): SignInResult {
+        val database = db ?: return SignInResult(
+            success = false,
+            message = "签到失败：数据库未初始化"
+        )
+        return try {
+            database.withTransaction {
+                // 应用层防重：已是终态直接拒绝
+                if (lesson.status == "已签到") {
+                    return@withTransaction SignInResult(
+                        success = false,
+                        lessonId = lesson.id,
+                        alreadySigned = true,
+                        message = "已签到，请勿重复操作"
+                    )
+                }
+                if (lesson.status == "已签退" || lesson.signOutTime.isNotBlank()) {
+                    return@withTransaction SignInResult(
+                        success = false,
+                        lessonId = lesson.id,
+                        alreadySigned = true,
+                        message = "已签退，无需签到"
+                    )
+                }
+
+                val updated = lesson.copy(status = "已签到")
+                val affected = lessonDao.update(updated)
+                if (affected != 1) {
+                    throw RuntimeException("Lesson 更新未生效（affected=$affected）")
+                }
+
+                // 数据库层防重：写签到记录，唯一索引冲突则拒绝
+                val rowId = signInDao.insert(
+                    SignInRecord(
+                        studentName = lesson.studentName,
+                        studentId = lesson.studentId,
+                        lessonId = lesson.id,
+                        type = "签到",
+                        operator = operator
+                    )
+                )
+                if (rowId == -1L) {
+                    throw RuntimeException("签到记录已存在（唯一索引冲突）")
+                }
+
+                AutoBackupScheduler.notifyDataChange()
+                SignInResult(
+                    success = true,
+                    lessonId = lesson.id,
+                    message = "签到成功（签退时再扣减课时）"
+                )
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("SignInFlow", "定向签到失败：${lesson.studentName} ${e.message}", e)
+            SignInResult(
+                success = false,
+                alreadySigned = e.message?.contains("唯一索引") == true,
+                message = if (e.message?.contains("唯一索引") == true) {
+                    "已签到，请勿重复操作"
+                } else {
+                    "签到失败：${e.message ?: "未知异常"}"
+                }
+            )
+        }
+    }
+
+    /**
+     * === 小班课：批量签到 ===
+     *
+     * 对同组（同日期+时间段+地点）的所有学员执行签到：
+     * - 待签到 → 翻转为已签到（[signInLesson]，不扣课时包，签退时统一扣减）
+     * - 已签到 / 已签退 → 自动跳过，不报错
+     * - 记录不存在或事务失败 → 计入失败
+     *
+     * 逐条独立事务：单个学员失败不影响其他学员（与逐个手动签到行为一致）。
+     *
+     * @param lessonIds 同组课时 ID 列表
+     * @return [BatchSignResult] 成功/跳过/已签退/失败计数
+     */
+    suspend fun batchSignIn(lessonIds: List<String>): BatchSignResult {
+        var successCount = 0
+        var skippedCount = 0
+        var checkedOutCount = 0
+        var failedCount = 0
+        for (id in lessonIds) {
+            val lesson = lessonDao.getById(id)
+            when {
+                lesson == null -> failedCount++
+                lesson.status == "已签到" -> skippedCount++
+                lesson.status == "已签退" || lesson.signOutTime.isNotBlank() -> checkedOutCount++
+                else -> {
+                    val r = signInLesson(lesson)
+                    if (r.success) successCount++ else failedCount++
+                }
+            }
+        }
+        return BatchSignResult(successCount, skippedCount, checkedOutCount, failedCount)
+    }
+
+    /**
+     * === 小班课：批量签退 ===
+     *
+     * 对同组所有"已签到"的学员执行签退（复用 [consumeLessonForCheckOut]：
+     * 事务内扣减课时包 + 更新 Lesson 为已签退）：
+     * - 已签到 → 执行签退消课（体验课不扣包，无包则该学员失败且不影响他人）
+     * - 待签到（未签到）/ 已签退 → 自动跳过，不报错
+     * - 记录不存在 → 计入失败
+     *
+     * @param lessonIds 同组课时 ID 列表
+     * @return [BatchSignResult] 成功/跳过/已签退/失败计数
+     */
+    suspend fun batchSignOut(lessonIds: List<String>): BatchSignResult {
+        var successCount = 0
+        var skippedCount = 0
+        var checkedOutCount = 0
+        var failedCount = 0
+        for (id in lessonIds) {
+            val lesson = lessonDao.getById(id)
+            when {
+                lesson == null -> failedCount++
+                lesson.status == "已签退" || lesson.signOutTime.isNotBlank() -> checkedOutCount++
+                lesson.status != "已签到" -> skippedCount++   // 待签到等未签到状态
+                else -> {
+                    val r = consumeLessonForCheckOut(lesson)
+                    if (r.success) successCount++ else failedCount++
+                }
+            }
+        }
+        return BatchSignResult(successCount, skippedCount, checkedOutCount, failedCount)
     }
 
     /**

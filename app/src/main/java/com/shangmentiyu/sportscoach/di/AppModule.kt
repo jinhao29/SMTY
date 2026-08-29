@@ -26,6 +26,7 @@ import com.shangmentiyu.sportscoach.data.repo.StageSummaryRepository
 import com.shangmentiyu.sportscoach.data.repo.TrainingCycleRepository
 import com.shangmentiyu.sportscoach.domain.scheduling.CalculateRemainingLessonsUseCase
 import com.shangmentiyu.sportscoach.domain.scheduling.ValidateScheduleUseCase
+import com.shangmentiyu.sportscoach.domain.usecase.GetUnsignedOutReminderUseCase
 import com.shangmentiyu.sportscoach.ui.analytics.AnalyticsViewModel
 import com.shangmentiyu.sportscoach.ui.bodymetric.BodyMetricChartViewModel
 import com.shangmentiyu.sportscoach.ui.coachreport.CoachDailyReportViewModel
@@ -116,10 +117,12 @@ val appModule = module {
     // 显式注入实现类 OperationRepository（其实现该接口，双通道查询逻辑唯一）
     single { ValidateScheduleUseCase(get<OperationRepository>()) }
     single { CalculateRemainingLessonsUseCase(get()) }
+    // 小班课集体签到签退 + 忘记签退提醒
+    single { GetUnsignedOutReminderUseCase(get()) }
 
     // === 视图模型层（v46 架构层四：全量迁移到 Koin） ===
     viewModel { SettingsViewModel(androidContext() as Application, get(), get(), get(), get(), get(), get()) }
-    viewModel { HomeViewModel(get(), get(), get(), get(), get()) }
+    viewModel { HomeViewModel(get(), get(), get(), get(), get(), get()) }
     viewModel { ScoringViewModel(get(), get()) }
     viewModel { LessonViewModel(get(), get(), get(), get()) }
     viewModel { SummaryViewModel(get(), get()) }

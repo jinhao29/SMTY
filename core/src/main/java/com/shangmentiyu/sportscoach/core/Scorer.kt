@@ -1,4 +1,4 @@
-package com.shangmentiyu.sportscoach.core
+    package com.shangmentiyu.sportscoach.core
 
 /** 评分结果 */
 data class ScoreResult(
