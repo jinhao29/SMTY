@@ -67,8 +67,8 @@ import androidx.compose.ui.unit.sp
 import com.shangmentiyu.sportscoach.data.model.DietTemplateEntity
 import com.shangmentiyu.sportscoach.data.model.MealItem
 import com.shangmentiyu.sportscoach.data.repo.DietRepository
-import com.shangmentiyu.sportscoach.domain.ActivityLevel
-import com.shangmentiyu.sportscoach.domain.TdeeResult
+import com.shangmentiyu.sportscoach.core.ActivityLevel
+import com.shangmentiyu.sportscoach.core.TdeeResult
 import com.shangmentiyu.sportscoach.ui.theme.AppTextField
 import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.theme.IOSCard
@@ -1061,7 +1061,10 @@ private fun TdeeResultCard(result: TdeeResult) {
             }
 
             // 减脂建议 / 发育期警告
-            if (result.isAdult && result.deficitAdvice != null) {
+            // 注：TdeeResult 已迁入 :core，跨模块 public val 不支持 smart cast，先取局部变量
+            val deficitAdvice = result.deficitAdvice
+            val warningText = result.warningText
+            if (result.isAdult && deficitAdvice != null) {
                 Spacer(Modifier.height(Spacing.sm))
                 Row(
                     modifier = Modifier
@@ -1074,12 +1077,12 @@ private fun TdeeResultCard(result: TdeeResult) {
                     Text("减脂建议", fontWeight = FontWeight.SemiBold, color = appOnSuccessContainer())
                     Spacer(Modifier.width(Spacing.sm))
                     Text(
-                        "建议每日热量缺口 ${result.deficitAdvice} 大卡（约 300~500 大卡），即摄入 ${result.tdee.toInt() - result.deficitAdvice} 大卡。",
+                        "建议每日热量缺口 $deficitAdvice 大卡（约 300~500 大卡），即摄入 ${result.tdee.toInt() - deficitAdvice} 大卡。",
                         style = MaterialTheme.typography.bodySmall,
                         color = appOnSuccessContainer()
                     )
                 }
-            } else if (!result.isAdult && result.warningText != null) {
+            } else if (!result.isAdult && warningText != null) {
                 Spacer(Modifier.height(Spacing.sm))
                 Row(
                     modifier = Modifier
@@ -1092,7 +1095,7 @@ private fun TdeeResultCard(result: TdeeResult) {
                     Text("⚠ 注意", fontWeight = FontWeight.SemiBold, color = appOnWarningContainer())
                     Spacer(Modifier.width(Spacing.sm))
                     Text(
-                        result.warningText,
+                        warningText,
                         style = MaterialTheme.typography.bodySmall,
                         color = appOnWarningContainer()
                     )

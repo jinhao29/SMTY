@@ -4,7 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shangmentiyu.sportscoach.data.model.Student
 import com.shangmentiyu.sportscoach.data.repo.StudentRepository
-import com.shangmentiyu.sportscoach.domain.HeightPredictionResult
+import com.shangmentiyu.sportscoach.core.HeightPredictionResult
 import com.shangmentiyu.sportscoach.domain.HeightPredictionUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

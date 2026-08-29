@@ -1,9 +1,15 @@
 package com.shangmentiyu.sportscoach.domain
 
+import com.shangmentiyu.sportscoach.core.HeightPredictionProcessor
+import com.shangmentiyu.sportscoach.core.HeightPredictionResult
+import com.shangmentiyu.sportscoach.core.HeightRatingProcessor
 import com.shangmentiyu.sportscoach.data.model.Student
 
 /**
  * 身高预测用例：协调 [HeightPredictionProcessor] / [HeightRatingProcessor] 与学员数据。
+ *
+ * 纯算法已于 2026-08-28 迁入 :core（com.shangmentiyu.sportscoach.core），
+ * 本类因依赖 :data 的 Student 实体而留守 :app/domain 协调层。
  *
  * 职责：
  * - 从 Student 实体提取参数并调用预测处理器与评级处理器

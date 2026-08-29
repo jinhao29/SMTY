@@ -1,4 +1,4 @@
-package com.shangmentiyu.sportscoach.domain
+package com.shangmentiyu.sportscoach.core
 
 /**
  * 当前身高评级处理器（纯逻辑单元，无状态，便于单元测试）。

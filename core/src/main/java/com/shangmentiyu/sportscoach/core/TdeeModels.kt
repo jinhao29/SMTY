@@ -1,4 +1,4 @@
-package com.shangmentiyu.sportscoach.domain
+package com.shangmentiyu.sportscoach.core
 
 /**
  * 活动水平枚举（TDEE 计算用）。

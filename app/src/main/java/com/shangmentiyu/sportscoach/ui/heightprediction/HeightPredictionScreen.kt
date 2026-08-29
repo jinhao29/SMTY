@@ -52,7 +52,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shangmentiyu.sportscoach.data.model.Student
-import com.shangmentiyu.sportscoach.domain.HeightPredictionResult
+import com.shangmentiyu.sportscoach.core.HeightPredictionResult
 import com.shangmentiyu.sportscoach.ui.theme.AppTextField
 import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.theme.FloatingSnackbarHost

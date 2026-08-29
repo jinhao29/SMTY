@@ -1,4 +1,4 @@
-package com.shangmentiyu.sportscoach.domain
+package com.shangmentiyu.sportscoach.core
 
 /**
  * 中国儿童身高标准条目（中国卫健委发布）。

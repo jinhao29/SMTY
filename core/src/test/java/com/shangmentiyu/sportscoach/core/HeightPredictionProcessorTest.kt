@@ -1,4 +1,4 @@
-package com.shangmentiyu.sportscoach.domain
+package com.shangmentiyu.sportscoach.core
 
 import com.google.common.truth.Truth.assertThat
 import org.junit.Before
@@ -6,6 +6,8 @@ import org.junit.Test
 
 /**
  * [HeightPredictionProcessor] 单元测试。
+ *
+ * 2026-08-28 自 :app/src/test 迁入 :core（被测类已迁入 :core 模块）。
  *
  * 覆盖范围（v22 单元测试基建示例）：
  * 1. CMH 遗传靶身高公式：男孩 +13、女孩 -13
@@ -21,7 +23,7 @@ import org.junit.Test
  *    - 修正值达到 +3.5 上限
  *    - 修正值达到 -3.5 下限
  *
- * 运行方式：./gradlew :app:testDebugUnitTest --tests "com.shangmentiyu.sportscoach.domain.HeightPredictionProcessorTest"
+ * 运行方式：./gradlew :core:test --tests "com.shangmentiyu.sportscoach.core.HeightPredictionProcessorTest"
  */
 class HeightPredictionProcessorTest {
 

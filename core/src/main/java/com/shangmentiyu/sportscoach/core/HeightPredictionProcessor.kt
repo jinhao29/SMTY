@@ -1,4 +1,4 @@
-package com.shangmentiyu.sportscoach.domain
+package com.shangmentiyu.sportscoach.core
 
 import kotlin.math.abs
 

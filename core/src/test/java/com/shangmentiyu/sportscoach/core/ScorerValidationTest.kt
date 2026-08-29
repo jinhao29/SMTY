@@ -9,7 +9,9 @@ import org.junit.Test
  * 锁定不变量：负数成绩必须被拒绝（ok=false），不得被 scoreLess 误判为满分
  * 或由 coerceIn(0,100) 静默吸收后入库。
  *
- * 运行方式：./gradlew :app:testDebugUnitTest --tests "com.shangmentiyu.sportscoach.core.ScorerValidationTest"
+ * 2026-08-28 自 :app/src/test 迁入 :core（被测类 Scorer 属于 :core 模块）。
+ *
+ * 运行方式：./gradlew :core:test --tests "com.shangmentiyu.sportscoach.core.ScorerValidationTest"
  */
 class ScorerValidationTest {
 

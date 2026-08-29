@@ -3,9 +3,9 @@
 //
 // 职责：纯逻辑层 / 算法层 / 计算层
 // - 包含：com.shangmentiyu.sportscoach.core.*
-//   - AbilityAnalyzer / DataAnalyzer / ReportGenerator / TrainingPlanGenerator
-//   - BmiProcessor / Scorer / Standards / JsonSafe / TemplateData
-//   - HeightPredictionProcessor / TdeeProcessor 等领域处理器
+//   - BmiProcessor / Scorer / Standards / TemplateData / ProgressState
+//   - AutoScheduleCalculator / LessonDateCalculator
+//   - GrowthStandard / HeightPrediction* / HeightRating* / Tdee*（2026-08-28 自 :app/domain 迁入）
 // - 不包含：Android Framework 依赖（Context、Room、Compose 等）
 // - 不依赖：:app 或 :data，确保可被任意上层模块复用
 //
@@ -41,6 +41,8 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    // Truth 断言库：随 HeightPredictionProcessorTest / ScorerValidationTest 迁入（2026-08-28）
+    testImplementation(libs.truth)
 }
 
 // 启用单元测试报告

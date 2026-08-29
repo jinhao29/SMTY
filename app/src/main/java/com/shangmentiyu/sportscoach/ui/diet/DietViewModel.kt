@@ -9,9 +9,9 @@ import com.shangmentiyu.sportscoach.data.repo.DietRepository
 import com.shangmentiyu.sportscoach.data.repo.DietRepository.DietNotes
 import com.shangmentiyu.sportscoach.data.repo.DietRepository.DietMeals
 import com.shangmentiyu.sportscoach.data.repo.StudentRepository
-import com.shangmentiyu.sportscoach.domain.ActivityLevel
-import com.shangmentiyu.sportscoach.domain.TdeeProcessor
-import com.shangmentiyu.sportscoach.domain.TdeeResult
+import com.shangmentiyu.sportscoach.core.ActivityLevel
+import com.shangmentiyu.sportscoach.core.TdeeProcessor
+import com.shangmentiyu.sportscoach.core.TdeeResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
