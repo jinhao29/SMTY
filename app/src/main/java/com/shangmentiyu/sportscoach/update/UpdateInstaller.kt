@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.util.Log
 import androidx.core.content.FileProvider
 import java.io.File
 
@@ -44,6 +45,18 @@ object UpdateInstaller {
     fun installApk(context: Context): Boolean {
         val apkFile = getApkFile(context)
         if (!apkFile.exists()) return false
+
+        // === P2-3 修复（2026-08-28）：启动安装器前兜底签名校验 ===
+        // 防御场景：下载完成后、用户点击安装前，本地 APK 被替换或残留了旧的可疑文件。
+        // 校验失败即删除文件并拒绝安装（fail-closed），不放行到系统安装器。
+        if (!UpdateIntegrity.verifyDownloadedApk(context)) {
+            Log.e("AutoUpdate", "installApk：签名校验失败，删除可疑 APK 并拒绝安装")
+            UpdateChecker.cleanDownloadCache(apkFile)
+            UpdateProgressBus.emit(
+                UpdateProgressBus.UpdateProgress.Failed("更新包签名校验失败，已删除可疑文件并取消安装")
+            )
+            return false
+        }
 
         // Android 8.0+ 检查安装未知来源权限
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&

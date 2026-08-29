@@ -153,6 +153,20 @@ class UpdateCheckWorker(
             }
 
             if (success) {
+                // === P2-3 修复（2026-08-28）：安装前签名完整性校验（主闸门） ===
+                // 下载完成的 APK 签名必须与当前应用一致，否则视为下载源被篡改，
+                // 删除文件并拒绝进入待安装状态（fail-closed）
+                if (!UpdateIntegrity.verifyDownloadedApk(applicationContext)) {
+                    UpdateChecker.cleanDownloadCache(UpdateInstaller.getApkFile(applicationContext))
+                    val integrityFailMsg = "更新包签名校验失败，已取消安装（下载源可能被篡改）"
+                    showFailedNotification(integrityFailMsg)
+                    UpdateProgressBus.emit(
+                        UpdateProgressBus.UpdateProgress.Failed(integrityFailMsg)
+                    )
+                    // 签名不符非瞬时性故障，重试只会重新下载同一个投毒包，故不排程重试
+                    return Result.failure()
+                }
+
                 // 下载完成，发送可安装通知（点击打开 App，由 App 内弹窗确认安装）
                 Log.d(TAG, "Worker: 下载完成，发送可安装通知")
                 showReadyNotification(version)
