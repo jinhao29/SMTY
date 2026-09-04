@@ -128,3 +128,14 @@
 # ---------- BuildConfig（自动更新 Token 注入） ----------
 -keep class com.shangmentiyu.sportscoach.BuildConfig { *; }
 
+# ---------- Release 剥离日志（防止 logcat 泄露学员 PII） ----------
+# v55 安全：release 包移除 Log.v/d/i/w/e 调用，仅保留 Log.wtf 供崩溃排查
+-assumenosideeffects class android.util.Log {
+    public static boolean isLoggable(java.lang.String, int);
+    public static int v(...);
+    public static int d(...);
+    public static int i(...);
+    public static int w(...);
+    public static int e(...);
+}
+
