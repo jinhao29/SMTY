@@ -77,6 +77,10 @@ interface LessonDao {
     @Query("SELECT COUNT(*) FROM lessons")
     fun count(): Flow<Int>
 
+    /** v35：学员课时行数（PC 消课对账基线，口径=PC meta 导出：全部行含占位/体验课） */
+    @Query("SELECT COUNT(*) FROM lessons WHERE studentName = :name")
+    fun countByStudentBlocking(name: String): Int
+
     /**
      * === v28：一次性查询 lessons 表总记录数（非 Flow） ===
      *

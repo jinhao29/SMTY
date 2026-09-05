@@ -956,6 +956,49 @@ internal object AppDatabaseMigrations {
         }
 
         /**
+         * v34 → v35：双端数据真统一（PC 收费记录镜像 + PC 消课对账状态）。
+         * - 新增 fee_records（PC 收费记录只读镜像，主键为自然键摘要，幂等 upsert）
+         * - 新增 pc_sync_state（PC 独录消课折算进度，单调不减）
+         */
+        private val MIGRATION_34_35 = object : Migration(34, 35) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS fee_records (
+                        id TEXT NOT NULL,
+                        studentName TEXT NOT NULL,
+                        date TEXT NOT NULL,
+                        amount REAL NOT NULL,
+                        hours REAL NOT NULL,
+                        method TEXT NOT NULL,
+                        note TEXT NOT NULL,
+                        syncedAt INTEGER NOT NULL,
+                        PRIMARY KEY(id)
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_fee_records_studentName " +
+                        "ON fee_records(studentName)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_fee_records_date " +
+                        "ON fee_records(date)"
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS pc_sync_state (
+                        studentName TEXT NOT NULL,
+                        appliedPcLessons INTEGER NOT NULL,
+                        updatedAt INTEGER NOT NULL,
+                        PRIMARY KEY(studentName)
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
+        /**
          * 数据库首次创建时的回调：插入预置饮食模板数据。
          *
          * 仅在数据库文件首次创建时触发（新装用户），老用户升级走 [MIGRATION_17_18]。
@@ -974,6 +1017,7 @@ internal object AppDatabaseMigrations {
         MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19,
         MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24,
         MIGRATION_24_25, MIGRATION_25_26, MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29,
-        MIGRATION_29_30, MIGRATION_30_31, MIGRATION_31_32, MIGRATION_32_33, MIGRATION_33_34
+        MIGRATION_29_30, MIGRATION_30_31, MIGRATION_31_32, MIGRATION_32_33, MIGRATION_33_34,
+        MIGRATION_34_35
     )
 }

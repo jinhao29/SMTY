@@ -14,9 +14,11 @@ import com.shangmentiyu.sportscoach.data.model.CoachPayoutRequest
 import com.shangmentiyu.sportscoach.data.model.CoachSchedule
 import com.shangmentiyu.sportscoach.data.model.CoachStudentBinding
 import com.shangmentiyu.sportscoach.data.model.DietTemplateEntity
+import com.shangmentiyu.sportscoach.data.model.FeeRecord
 import com.shangmentiyu.sportscoach.data.model.Lesson
 import com.shangmentiyu.sportscoach.data.model.LessonPackage
 import com.shangmentiyu.sportscoach.data.model.ParentReport
+import com.shangmentiyu.sportscoach.data.model.PcSyncState
 // PlanImage 仍被 PreClassScheduleCard / PreClassTab 引用（电脑端训练计划截图展示），
 // 并非死代码，保留实体与 DAO。
 import com.shangmentiyu.sportscoach.data.model.PlanImage
@@ -29,8 +31,8 @@ import com.shangmentiyu.sportscoach.data.model.StudentFts
 import com.shangmentiyu.sportscoach.data.model.TrainingCycle
 
 @Database(
-    entities = [Student::class, Lesson::class, LessonPackage::class, Coach::class, Schedule::class, ParentReport::class, TrainingCycle::class, BodyMetricHistory::class, ScheduleMemory::class, DietTemplateEntity::class, StudentDietRecord::class, StudentFts::class, ArchivedLesson::class, AuditLogEntity::class, PlanImage::class, SignInRecord::class, CoachSchedule::class, CoachPayout::class, CoachPayoutRequest::class, CoachStudentBinding::class],
-    version = 34,
+    entities = [Student::class, Lesson::class, LessonPackage::class, Coach::class, Schedule::class, ParentReport::class, TrainingCycle::class, BodyMetricHistory::class, ScheduleMemory::class, DietTemplateEntity::class, StudentDietRecord::class, StudentFts::class, ArchivedLesson::class, AuditLogEntity::class, PlanImage::class, SignInRecord::class, CoachSchedule::class, CoachPayout::class, CoachPayoutRequest::class, CoachStudentBinding::class, FeeRecord::class, PcSyncState::class],
+    version = 35,
     exportSchema = true
 )
 @TypeConverters(com.shangmentiyu.sportscoach.data.model.Converters::class)
@@ -61,6 +63,9 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun coachWorkloadDao(): CoachWorkloadDao
     /** v34 新增：教练-学员绑定 DAO */
     abstract fun coachStudentBindingDao(): CoachStudentBindingDao
+    /** v35 新增：PC 收费记录镜像 + PC 消课对账状态 DAO（双端数据真统一） */
+    abstract fun feeRecordDao(): FeeRecordDao
+    abstract fun pcSyncStateDao(): PcSyncStateDao
 
     companion object {
         @Volatile
@@ -148,6 +153,6 @@ abstract class AppDatabase : RoomDatabase() {
          *
          * 修改 @Database version 时必须同步修改此常量，否则版本检查会失效。
          */
-        const val DATABASE_VERSION = 34
+        const val DATABASE_VERSION = 35
     }
 }

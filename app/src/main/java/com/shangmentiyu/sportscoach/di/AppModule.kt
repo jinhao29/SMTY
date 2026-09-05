@@ -125,6 +125,11 @@ val appModule = module {
     single { DietRepository(get()) }
     single { BackupRepository(androidContext()) }
     single { MomentUploader(androidContext(), get()) }
+    // v35：PC 数据对账（课时包总量对账 + PC 消课折算 + 收费记录镜像）
+    single { get<AppDatabase>().feeRecordDao() }
+    single { get<AppDatabase>().pcSyncStateDao() }
+    single { com.shangmentiyu.sportscoach.data.repo.PcSyncRepository(get()) }
+    single { com.shangmentiyu.sportscoach.data.repo.FeeRecordRepository(get()) }
     single { LanSyncManager(androidContext(), get(), get(), get(), get()) }
     single { ScriptRepository(androidContext()) }
 
@@ -141,7 +146,7 @@ val appModule = module {
     // v23.6 修复：补注入 lanSyncManager（此前漏传默认 null，设置页「立即同步/测试连接」
     // 恒报「同步服务不可用」——双端同步按钮成为摆设）
     viewModel { SettingsViewModel(androidContext() as Application, get(), get(), get(), get(), get(), get(), get()) }
-    viewModel { HomeViewModel(get(), get(), get(), get(), get(), get(), get()) }
+    viewModel { HomeViewModel(get(), get(), get(), get(), get(), get(), get(), get()) }
     viewModel { ScoringViewModel(get(), get()) }
     viewModel { LessonViewModel(get(), get(), get(), get()) }
     viewModel { SummaryViewModel(get(), get()) }

@@ -62,6 +62,10 @@ interface ArchivedLessonDao {
     @Query("SELECT COUNT(*) FROM archived_lessons")
     fun count(): Flow<Int>
 
+    /** v35：学员归档课时行数（PC 消课对账基线的冷数据部分） */
+    @Query("SELECT COUNT(*) FROM archived_lessons WHERE studentName = :name")
+    fun countByStudentBlocking(name: String): Int
+
     /**
      * 物理迁移：将指定日期之前的全部热数据 lessons 行直接插入到本归档表。
      *

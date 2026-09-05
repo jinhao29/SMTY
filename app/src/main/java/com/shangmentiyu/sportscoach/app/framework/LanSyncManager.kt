@@ -60,8 +60,8 @@ class LanSyncManager(
     private val settings: SettingsRepository,
     private val backupRepo: BackupRepository,
     private val studentRepo: StudentRepository,
-    // v23.7：课时包仓储（PC→手机课时包同步）；缺省 null 兼容既有测试构造
-    private val lessonPackageRepo: com.shangmentiyu.sportscoach.data.repo.LessonPackageRepository? = null
+    // v35：PC 数据对账仓储（课时包总量 + PC 消课差值 + 收费记录镜像）；缺省 null 兼容既有测试构造
+    private val pcSyncRepo: com.shangmentiyu.sportscoach.data.repo.PcSyncRepository? = null
 ) {
 
     companion object {
@@ -433,34 +433,35 @@ class LanSyncManager(
     suspend fun syncNow(): SyncResult {
         val push = pushBackup()
         val pull = pullStudents()
-        // v23.7：拉取学员成功后顺带拉课时包（PC 录入的课时/总量同步到手机）
-        val pkgs = if (pull.success) pullPackages() else null
+        // v35：任一方向连通 PC 即拉数据总包（课时包对账 + PC 消课折算 + 收费镜像）。
+        // 推送在前：PC 先吸收手机备份，总量/消课收敛后再对账，避免旧 PC 值回写。
+        val pcData = if (push.success || pull.success) pullPcData() else null
         val parts = mutableListOf<String>()
         if (push.success) parts.add(push.message) else parts.add("推送失败：${push.message}")
         if (pull.success) parts.add(pull.message) else parts.add("拉取失败：${pull.message}")
-        if (pkgs != null && pkgs.message.isNotBlank()) parts.add(pkgs.message)
+        if (pcData != null && pcData.message.isNotBlank()) parts.add(pcData.message)
         val success = push.success || pull.success
         return SyncResult(success, parts.joinToString("\n"),
                           if (push.success) push.httpCode else pull.httpCode)
     }
 
     /**
-     * v23.7：PC → 手机 课时包同步。
+     * v35：PC → 手机 数据总包对账（GET /sync/pc_data.json）。
      *
-     * 数据源：PC 端课时记录.xlsx 汇总（GET /sync/packages.json）。
-     * 合并语义（与手机→PC 的 set_total_lessons 对称）：
-     * - 学员手机端无课时包 → 新建一条「PC 同步」包（总量/已用取 PC 值）
-     * - 已有课时包 → 取最近创建的一条，更新总课时与已用（PC 值为准），
-     *   其余历史包不动（不覆盖价格/备注/状态等本地字段）
+     * 替代 v23.7 的 pullPackages（旧端点 /sync/packages.json 仍在 PC 端保留给旧版手机）。
+     * 三步对账全部走合并/单调语义（详见 [PcSyncRepository] 与协议文档），绝不清空手机数据：
+     * 1. 课时包总量对账（PC 空数据不动现值；多包正差值新建；缩减被安全锁拒绝）
+     * 2. PC 独录消课折算进课时包已用（进度幂等，单调不减）
+     * 3. 收费记录镜像入库（只读展示，PC 为权威源）
      */
-    private suspend fun pullPackages(): SyncResult = withContext(NonCancellable + Dispatchers.IO) {
-        val repo = lessonPackageRepo
-            ?: return@withContext SyncResult(false, "课时包同步服务不可用", 0)
+    private suspend fun pullPcData(): SyncResult = withContext(NonCancellable + Dispatchers.IO) {
+        val repo = pcSyncRepo
+            ?: return@withContext SyncResult(false, "PC 数据对账服务不可用", 0)
         val (host, port, token) = readEndpoint()
             ?: return@withContext SyncResult(false, MSG_NO_ENDPOINT, 0)
         var conn: HttpURLConnection? = null
         try {
-            conn = (URL("http://$host:$port/sync/packages.json").openConnection()
+            conn = (URL("http://$host:$port/sync/pc_data.json").openConnection()
                     as HttpURLConnection).apply {
                 requestMethod = "GET"
                 connectTimeout = CONNECT_TIMEOUT_MS
@@ -470,59 +471,67 @@ class LanSyncManager(
             }
             val code = conn.responseCode
             if (code != 200) {
-                return@withContext SyncResult(false, "", code)  // 静默：拉取主体已成功
+                return@withContext SyncResult(false, "", code)  // 静默：主体同步已独立成败
             }
             val body = conn.inputStream.bufferedReader().use { it.readText() }
             val json = JSONObject(body)
             if (json.optInt("code", 1) != 0) {
                 return@withContext SyncResult(false, "", code)
             }
-            val arr = json.optJSONArray("packages") ?: org.json.JSONArray()
-            val today = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
-            var added = 0
-            var updated = 0
-            for (i in 0 until arr.length()) {
-                val obj = arr.optJSONObject(i) ?: continue
-                val name = obj.optString("studentName").trim()
-                if (name.isBlank()) continue
-                val total = obj.optInt("totalLessons", 0)
-                val used = obj.optInt("usedLessons", 0)
-                // v23.7.1 数据保护：PC 端无课时数据（total=0 且 used=0）时绝不动手机现值
-                //（曾把手机真实课时包全部覆盖清零——PC 汇总的 0 不代表"清空"）
-                if (total <= 0 && used <= 0) continue
-                val existing = repo.getPackagesByStudentBlocking(name)
-                if (existing.isEmpty()) {
-                    // 新建：只取 PC 总量，已用从 0 起（手机端扣课事实自累计）
-                    repo.addPackageBlocking(
-                        com.shangmentiyu.sportscoach.data.model.LessonPackage(
+            val packages = mutableListOf<com.shangmentiyu.sportscoach.data.repo.PcPackage>()
+            json.optJSONArray("packages")?.let { arr ->
+                for (i in 0 until arr.length()) {
+                    val o = arr.optJSONObject(i) ?: continue
+                    val name = o.optString("studentName").trim()
+                    if (name.isNotEmpty()) {
+                        packages.add(com.shangmentiyu.sportscoach.data.repo.PcPackage(
                             studentName = name,
-                            name = "PC 同步",
-                            totalLessons = total,
-                            usedLessons = 0,
-                            purchaseDate = today,
-                            note = "PC 端同步（课时记录汇总）"
-                        )
-                    )
-                    added++
-                } else {
-                    // v23.7.2：只同步总课时。usedLessons 是手机端扣课事实（含无记录
-                    // 的纯扣课），PC 端无法精确重建，绝不用 PC 值覆盖
-                    val pkg = existing.first()
-                    if (pkg.totalLessons != total) {
-                        repo.updatePackageBlocking(pkg.copy(totalLessons = total))
-                        updated++
+                            totalLessons = o.optInt("totalLessons", 0),
+                            usedLessons = o.optInt("usedLessons", 0)))
                     }
                 }
             }
-            Log.i(TAG, "课时包同步完成：新增 $added，更新 $updated")
-            SyncResult(
-                true,
-                if (added + updated > 0) "课时包同步：新增 $added 个，更新 $updated 个" else "",
-                code
-            )
+            val lessons = mutableListOf<com.shangmentiyu.sportscoach.data.repo.PcLesson>()
+            json.optJSONArray("lessons")?.let { arr ->
+                for (i in 0 until arr.length()) {
+                    val o = arr.optJSONObject(i) ?: continue
+                    val name = o.optString("studentName").trim()
+                    if (name.isNotEmpty()) {
+                        lessons.add(com.shangmentiyu.sportscoach.data.repo.PcLesson(
+                            studentName = name,
+                            date = o.optString("date"),
+                            count = o.optInt("count", 1),
+                            content = o.optString("content"),
+                            note = o.optString("note")))
+                    }
+                }
+            }
+            val fees = mutableListOf<com.shangmentiyu.sportscoach.data.repo.PcFee>()
+            json.optJSONArray("fees")?.let { arr ->
+                for (i in 0 until arr.length()) {
+                    val o = arr.optJSONObject(i) ?: continue
+                    val name = o.optString("studentName").trim()
+                    if (name.isNotEmpty()) {
+                        fees.add(com.shangmentiyu.sportscoach.data.repo.PcFee(
+                            studentName = name,
+                            date = o.optString("date"),
+                            amount = o.optDouble("amount", 0.0),
+                            hours = o.optDouble("hours", 0.0),
+                            method = o.optString("method"),
+                            note = o.optString("note")))
+                    }
+                }
+            }
+            val today = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+            val report = repo.applyPcDataBlocking(packages, lessons, fees, today)
+            if (report.pkgSkipped.isNotEmpty()) {
+                Log.w(TAG, "安全锁拦截 ${report.pkgSkipped.size} 项：${report.pkgSkipped.joinToString("；")}")
+            }
+            Log.i(TAG, "PC 数据对账完成：${report.toUserMessage()}")
+            SyncResult(true, report.toUserMessage(), code)
         } catch (e: Exception) {
-            Log.w(TAG, "课时包同步异常：${e.message}")
-            SyncResult(false, "课时包同步异常：${e.message ?: "未知错误"}", 0)
+            Log.w(TAG, "PC 数据对账异常：${e.message}")
+            SyncResult(false, "PC 数据对账异常：${e.message ?: "未知错误"}", 0)
         } finally {
             conn?.disconnect()
         }

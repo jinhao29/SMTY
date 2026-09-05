@@ -139,6 +139,99 @@ class StudentRepository(
         AutoBackupScheduler.notifyDataChange()
     }
 
+    // === v56：阻塞 DAO 版学员写入（UI 编辑/新增保存路径专用） ===
+    // 与 [importStudentsBlockingUpdatePart] 同因：Room 2.7 suspend DAO 的
+    // JobCancellationException（协程桥取消传播）会让 UI 保存随机失败。
+    // 此处保持 suspend 签名仅为复用 auditLog / 事务语义；所有 students 表
+    // 读写均走阻塞 DAO + Dispatchers.IO，完全绕开协程桥。
+
+    /** 按姓名查活跃学员（阻塞 DAO 版） */
+    suspend fun getByNameBlocking(name: String): Student? =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            dao.getByNameBlocking(name)
+        }
+
+    /**
+     * 新增学员（阻塞 DAO 版）：语义与 [addStudent] 完全一致。
+     *
+     * @throws IllegalArgumentException 任一字段不合法时抛出，message 为可读提示
+     */
+    suspend fun addStudentBlocking(
+        name: String, gender: String, grade: String, school: String, phone: String,
+        age: Int = 0, heightCm: Int = 0, weightKg: Float = 0f, bmi: Float = 0f
+    ) {
+        validateStudentFields(name, gender, age, heightCm, weightKg, bmi)
+        val existingIds = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            dao.getAllStudentIdsBlocking().toHashSet()
+        }
+        var id: String
+        do {
+            id = java.util.UUID.randomUUID().toString().take(12)
+        } while (id in existingIds)
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            dao.insertBlocking(
+                Student(
+                    name = name, gender = gender, grade = grade, school = school, phone = phone,
+                    age = age, heightCm = heightCm, weightKg = weightKg, bmi = bmi,
+                    isActive = true,
+                    studentId = id
+                )
+            )
+        }
+        // v26 优化1：记录操作日志（内部 try-catch，失败不阻断业务）
+        auditLog?.log(
+            action = "新增学员",
+            targetStudent = name,
+            after = mapOf(
+                "gender" to gender, "grade" to grade, "school" to school,
+                "age" to age, "heightCm" to heightCm, "weightKg" to weightKg, "bmi" to bmi
+            ),
+            summary = "新增学员「$name」(${age}岁/${heightCm}cm/${weightKg}kg)"
+        )
+        // v30：新增学员属于核心数据变更，触发自动备份防抖
+        AutoBackupScheduler.notifyDataChange()
+    }
+
+    /**
+     * 更新学员信息（阻塞 DAO 版）：语义与 [updateStudent] 完全一致。
+     *
+     * @param student 待更新学员对象
+     * @throws IllegalArgumentException 任一字段不合法时抛出
+     */
+    suspend fun updateStudentBlocking(student: Student) {
+        // v26 优化1：先查变更前数据用于日志对比（阻塞 DAO）
+        val before = auditLog?.let {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                dao.getByNameBlocking(student.name)
+            }
+        }
+        validateStudentFields(
+            student.name, student.gender, student.age,
+            student.heightCm, student.weightKg, student.bmi
+        )
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            dao.updateBlocking(student)
+        }
+        // v26 优化1：记录操作日志（内部 try-catch，失败不阻断业务）
+        auditLog?.log(
+            action = "修改学员",
+            targetStudent = student.name,
+            before = before?.let {
+                mapOf(
+                    "age" to it.age, "heightCm" to it.heightCm,
+                    "weightKg" to it.weightKg, "bmi" to it.bmi
+                )
+            },
+            after = mapOf(
+                "age" to student.age, "heightCm" to student.heightCm,
+                "weightKg" to student.weightKg, "bmi" to student.bmi
+            ),
+            summary = "修改学员「${student.name}」(身高 ${before?.heightCm ?: 0}→${student.heightCm}cm / 体重 ${before?.weightKg ?: 0f}→${student.weightKg}kg)"
+        )
+        // v30：修改学员属于核心数据变更，触发自动备份防抖
+        AutoBackupScheduler.notifyDataChange()
+    }
+
     /**
      * 学员字段合法性校验（v22 引入）。
      *

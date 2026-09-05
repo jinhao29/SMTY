@@ -195,6 +195,24 @@ object Standards {
         return if (code.isEmpty()) "学龄前(3-7岁)" else "年级$code"
     }
 
+    /**
+     * 年级名称 -> 年级编码 反向查找（[gradeFullLabel] 的逆）。
+     *
+     * 匹配 [GRADE_OPTIONS] 的完整名称（如 "小学三年级" -> "3"、"初一" -> "7"），
+     * 另兼容 PC 端花名册导出的 "学龄前" 简写（无 "(3-7岁)" 后缀）。
+     *
+     * @return 年级编码；未匹配返回 null（由调用方决定回退值）
+     */
+    fun gradeCodeFromLabel(label: String): String? {
+        val t = label.trim()
+        if (t.isEmpty()) return null
+        for ((code, name) in GRADE_OPTIONS) {
+            if (name == t) return code
+        }
+        if (t == "学龄前") return "0"
+        return null
+    }
+
     /** 数字转中文（1-10） */
     private fun chineseNum(n: Int): String = when (n) {
         1 -> "一"; 2 -> "二"; 3 -> "三"; 4 -> "四"; 5 -> "五"

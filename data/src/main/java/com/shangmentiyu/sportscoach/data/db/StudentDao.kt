@@ -36,6 +36,10 @@ interface StudentDao {
     @Query("SELECT * FROM students WHERE name = :name")
     fun getByNameIncludeDeletedBlocking(name: String): Student?
 
+    /** 按姓名查活跃学员（阻塞版，同上绕开协程桥，供 UI 编辑保存路径使用） */
+    @Query("SELECT * FROM students WHERE name = :name AND isActive = 1")
+    fun getByNameBlocking(name: String): Student?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertBlocking(student: Student)
 

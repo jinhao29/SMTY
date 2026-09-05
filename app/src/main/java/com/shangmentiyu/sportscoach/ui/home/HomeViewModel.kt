@@ -56,7 +56,9 @@ class HomeViewModel(
     /** 忘记签退提醒（小班课集体签到签退功能）：检测过去日期已签到未签退的课时 */
     private val getUnsignedOutReminder: GetUnsignedOutReminderUseCase,
     /** 教练-学员绑定仓库（v53 智能粘贴批量导入用） */
-    private val bindingRepo: CoachStudentRepository
+    private val bindingRepo: CoachStudentRepository,
+    /** v35：PC 收费记录镜像（只读）；缺省 null 兼容既有测试构造 */
+    private val feeRepo: com.shangmentiyu.sportscoach.data.repo.FeeRecordRepository? = null
 ) : ViewModel() {
 
     // === 修复：将 _toast 与 appExceptionHandler 提前到 init 块之前 ===
@@ -166,6 +168,15 @@ class HomeViewModel(
     /** 续费提醒列表（按学员聚合） */
     val renewalAlerts: StateFlow<List<OperationRepository.RenewalAlert>> = opRepo.getRenewalAlerts()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /**
+     * v35：PC 收费记录镜像（PC→手机只读同步，双端财务真统一）。
+     * 仅在「课时管理」Tab 订阅时激活；feeRepo 未注入（旧测试构造）时恒为空列表。
+     */
+    val pcFeeRecords: StateFlow<List<com.shangmentiyu.sportscoach.data.model.FeeRecord>> =
+        (feeRepo?.getAll()
+            ?: kotlinx.coroutines.flow.flowOf(emptyList()))
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /**
      * === v25 优化1：全局到期预警课时包列表 ===
@@ -572,7 +583,7 @@ class HomeViewModel(
     ) {
         safeLaunch {
             try {
-                studentRepo.addStudent(name, gender, grade, school, phone, age, heightCm, weightKg, bmi)
+                studentRepo.addStudentBlocking(name, gender, grade, school, phone, age, heightCm, weightKg, bmi)
             } catch (e: IllegalArgumentException) {
                 // v22：输入边界校验失败 → 转 Toast 提示用户
                 toast(e.message ?: "学员数据不合法")
@@ -591,11 +602,11 @@ class HomeViewModel(
     ) {
         safeLaunch {
             try {
-                studentRepo.addStudent(name, gender, grade, school, phone, age, heightCm, weightKg, bmi)
+                studentRepo.addStudentBlocking(name, gender, grade, school, phone, age, heightCm, weightKg, bmi)
                 if (packageTotal > 0) {
                     // v51 断链修复：课时包携带 studentId 软关联键
                     // （新增学员后通过姓名反查刚生成的唯一 ID，保证改名级联不丢包）
-                    val sid = studentRepo.getByName(name)?.studentId
+                    val sid = studentRepo.getByNameBlocking(name)?.studentId
                     val pkg = com.shangmentiyu.sportscoach.data.model.LessonPackage(
                         studentName = name,
                         studentId = sid,
@@ -650,7 +661,7 @@ class HomeViewModel(
                             errors.add("第 $lineNo 行：学员「$name」与第 $first 行重复（学员以姓名为主键，无法保留两条）")
                             return@forEachIndexed
                         }
-                        if (studentRepo.getByName(name) != null) {
+                        if (studentRepo.getByNameBlocking(name) != null) {
                             errors.add("第 $lineNo 行：学员「$name」已存在（同名请用编辑功能）")
                             return@forEachIndexed
                         }
@@ -666,8 +677,8 @@ class HomeViewModel(
                             return@forEachIndexed
                         }
                         try {
-                            studentRepo.addStudent(name, "男", "1", community, "")
-                            val sid = studentRepo.getByName(name)?.studentId
+                            studentRepo.addStudentBlocking(name, "男", "1", community, "")
+                            val sid = studentRepo.getByNameBlocking(name)?.studentId
                             opRepo.addPackage(
                                 com.shangmentiyu.sportscoach.data.model.LessonPackage(
                                     studentName = name, studentId = sid,
@@ -697,7 +708,7 @@ class HomeViewModel(
     ) {
         safeLaunch {
             try {
-                studentRepo.updateStudent(
+                studentRepo.updateStudentBlocking(
                     original.copy(
                         gender = gender, grade = grade, school = school, phone = phone,
                         age = age, heightCm = heightCm, weightKg = weightKg, bmi = bmi,
@@ -739,7 +750,7 @@ class HomeViewModel(
             try {
                 if (original.name != newName) {
                     studentRepo.renameStudentCascade(original.name, newName)
-                    studentRepo.updateStudent(
+                    studentRepo.updateStudentBlocking(
                         original.copy(
                             name = newName,
                             gender = gender, grade = grade, school = school, phone = phone,
@@ -750,7 +761,7 @@ class HomeViewModel(
                     toast("已更新「$newName」的全部信息，全局数据已同步")
                 } else {
                     // 姓名未变，直接更新其他字段
-                    studentRepo.updateStudent(
+                    studentRepo.updateStudentBlocking(
                         original.copy(
                             gender = gender, grade = grade, school = school, phone = phone,
                             age = age, heightCm = heightCm, weightKg = weightKg, bmi = bmi,

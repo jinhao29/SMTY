@@ -78,6 +78,8 @@ fun LessonManageTab(vm: HomeViewModel) {
 
     val packages by opVm.packages.collectAsStateWithLifecycle()
     val students by vm.students.collectAsStateWithLifecycle()
+    // v35：PC 收费记录镜像（PC→手机只读同步，双端财务统一核对用）
+    val feeRecords by vm.pcFeeRecords.collectAsStateWithLifecycle()
 
     // === v32：全体学员课时/费用统计（纯内存计算，依赖 packages 与 students） ===
     val stats = remember(packages, students) { computeLessonStats(packages, students) }
@@ -171,6 +173,50 @@ fun LessonManageTab(vm: HomeViewModel) {
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
                                 )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // === v35：PC 收费记录（PC 录账 → 同步 → 手机核对，只读镜像） ===
+        item(key = "pc_fees") {
+            var feesExpanded by remember { mutableStateOf(false) }
+            IosCard {
+                Column(modifier = Modifier.padding(Spacing.md)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("PC 收费记录", style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        if (feeRecords.isNotEmpty()) {
+                            TextButton(onClick = { feesExpanded = !feesExpanded }) {
+                                Text(if (feesExpanded) "收起" else "展开")
+                            }
+                        }
+                    }
+                    if (feeRecords.isEmpty()) {
+                        Text("暂无 PC 收费记录（在 PC 端录入收费并同步后显示）",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.outline)
+                    } else {
+                        Text("共 ${feeRecords.size} 笔 · 合计 ${money(feeRecords.sumOf { it.amount })}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f))
+                        if (feesExpanded) {
+                            feeRecords.take(30).forEach { f ->
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    "${f.date}  ${f.studentName}  ${money(f.amount)}" +
+                                        "（${if (f.hours % 1.0 == 0.0) f.hours.toInt().toString() else f.hours.toString()} 课时）" +
+                                        if (f.method.isNotBlank()) " · ${f.method}" else "",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            if (feeRecords.size > 30) {
+                                Spacer(Modifier.height(4.dp))
+                                Text("…其余 ${feeRecords.size - 30} 笔见 PC 端财务页",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.outline)
                             }
                         }
                     }

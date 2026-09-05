@@ -368,12 +368,12 @@ object ExcelSync {
      * 模糊列映射规则（基于关键字包含匹配）：
      * - 姓名：包含"姓"或"名"或"name"
      * - 性别：包含"性"或"别"或"gender"
-     * - 年级：包含"年"或"级"或"grade"
      * - 学校：包含"学"或"校"或"school"
+     * - 年龄：包含"龄"或"age"（须先于"年级"判定，"年龄"含"年"字）
+     * - 年级：包含"年"或"级"或"grade"
      * - 电话：包含"电"或"话"或"手"或"机"或"phone"
      * - 身高：包含"高"或"height"
      * - 体重：包含"体"或"重"或"weight"
-     * - 年龄：包含"龄"或"age"
      * - 备注：包含"备"或"注"或"remark"
      *
      * 即使表头稍微不准（如"身高" 写成 "高度"），也能顺利导入，降低用户心理压力。
@@ -443,6 +443,10 @@ object ExcelSync {
                 // 学校（必须先于"年级"判断，因都含"学"字；优先匹配"校"字）
                 headerText.contains("校") || lowerHeader.contains("school") ->
                     if (mapping["school"] == null) mapping["school"] = colIdx
+                // 年龄（必须先于"年级"判断：表头"年龄"含"年"字，
+                // 若先判年级会被误映射为 grade，导致 age 列永远丢失）
+                headerText.contains("龄") || lowerHeader.contains("age") ->
+                    if (mapping["age"] == null) mapping["age"] = colIdx
                 // 年级
                 headerText.contains("年") || headerText.contains("级") || lowerHeader.contains("grade") ->
                     if (mapping["grade"] == null) mapping["grade"] = colIdx
@@ -456,9 +460,6 @@ object ExcelSync {
                 // 体重（含"体"或"重"字，如"体重"、"重量"）
                 headerText.contains("体") || headerText.contains("重") || lowerHeader.contains("weight") ->
                     if (mapping["weightKg"] == null) mapping["weightKg"] = colIdx
-                // 年龄
-                headerText.contains("龄") || lowerHeader.contains("age") ->
-                    if (mapping["age"] == null) mapping["age"] = colIdx
                 // 备注
                 headerText.contains("备") || headerText.contains("注") || lowerHeader.contains("remark") ->
                     if (mapping["note"] == null) mapping["note"] = colIdx
@@ -548,21 +549,28 @@ object ExcelSync {
     }
 
     /**
-     * 从字符串中提取年级编码（1-13）。
+     * 从字符串中提取年级编码（0=学龄前，1-13）。
      *
      * 支持格式：
+     * - PC 端全名精确匹配（优先）："小学一年级"/"初中二年级"/"高中三年级"/"中考"
+     * - 学龄前/幼儿园/幼儿："0"（学龄前编码）
      * - 纯数字："3" -> "3"
      * - "X年级"："7年级" -> "7"
      * - "小X" / "初X" / "高X"："小3" -> "3"，"初2" -> "8"，"高1" -> "10"
      * - "高一" / "初一" -> "10" / "7"
      * - "中考" -> "13"
      *
-     * @return 1-13 的字符串，无法识别返回 "1"
+     * @return 0（学龄前）/ 1-13 的字符串，无法识别返回 "1"
      */
     private fun parseGradeFromString(raw: String): String {
         if (raw.isBlank()) return "1"
+        // PC 端全名年级精确匹配（小学一年级/初中二年级/学龄前...），
+        // 优先于模糊正则，避免全名落入默认值 "1"
+        Standards.gradeCodeFromLabel(raw)?.let { return it }
         // 处理"中考"
         if (raw.contains("中考")) return "13"
+        // 学龄前（PC 端花名册导出的年级值；0 = 学龄前编码，见 Standards）
+        if (raw.contains("学龄前") || raw.contains("幼儿园") || raw.contains("幼儿")) return "0"
 
         // 中文数字映射
         val chineseMap = mapOf(
