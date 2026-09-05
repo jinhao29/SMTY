@@ -27,7 +27,7 @@ import androidx.compose.material.icons.outlined.Computer
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.SportsScore
+import androidx.compose.material.icons.outlined.SupervisorAccount
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -308,10 +308,11 @@ private fun DesktopConnectionBanner(
 @Composable
 fun SportsApp() {
     val navController = rememberNavController()
+    // v34：教练管理升级为底部导航主 Tab；中考体育整合进"成绩查看"页 Tab
     val bottomItems = listOf(
         BottomItem(Routes.HOME, "主页", Icons.Outlined.Home),
-        BottomItem(Routes.SPORT_CATEGORY, "中考体育", Icons.Outlined.SportsScore),
         BottomItem(Routes.SCORE, "成绩查看", Icons.Outlined.Analytics),
+        BottomItem(Routes.COACH_MANAGE, "教练管理", Icons.Outlined.SupervisorAccount),
         BottomItem(Routes.SETTINGS, "设置", Icons.Outlined.Settings),
     )
 
@@ -326,7 +327,7 @@ fun SportsApp() {
     }
     val showBottomBar by remember(currentRoute) {
         derivedStateOf {
-            currentRoute in setOf(Routes.HOME, Routes.SPORT_CATEGORY, Routes.SCORE, Routes.SETTINGS)
+            currentRoute in setOf(Routes.HOME, Routes.SCORE, Routes.COACH_MANAGE, Routes.SETTINGS)
         }
     }
 
@@ -485,7 +486,8 @@ fun SportsApp() {
                 ScoreScreen(
                     onBack = null,
                     onOpenLesson = { lessonId -> navController.navigate(Routes.lesson(lessonId)) },
-                    onEditScore = { lessonId -> navController.navigate(Routes.scoringWithLesson(lessonId)) }
+                    onEditScore = { lessonId -> navController.navigate(Routes.scoringWithLesson(lessonId)) },
+                    onOpenSportDetail = { sportId -> navController.navigate(Routes.sportStandardDetail(sportId)) }
                 )
             }
             composable(Routes.SETTINGS) {
@@ -649,6 +651,15 @@ fun SportsApp() {
             composable(Routes.BMI_CALCULATOR) {
                 com.shangmentiyu.sportscoach.ui.tools.BmiCalculatorScreen(
                     onBack = { navController.popBackStack() }
+                )
+            }
+
+            // === 教练管理（档案 / 学员排课 / 排班·工作量 / 团队 / 薪资） ===
+            // v34：升级为底部导航主 Tab，无返回箭头（设置页二级入口共用此路由）
+            composable(Routes.COACH_MANAGE) {
+                com.shangmentiyu.sportscoach.ui.coach.CoachManageScreen(
+                    viewModel = koinViewModel(),
+                    onBack = null
                 )
             }
 

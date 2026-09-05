@@ -31,6 +31,9 @@ object Routes {
     // === 工具类 ===
     const val BMI_CALCULATOR = "bmi_calculator"
 
+    // === 教练管理（设置页二级入口：档案/排班/团队/薪资） ===
+    const val COACH_MANAGE = "coach_manage"
+
     // === 体育中考标准 ===
     const val SPORT_CATEGORY = "sport_category"
     const val SPORT_STANDARD_DETAIL = "sport_standard_detail/{sportId}"

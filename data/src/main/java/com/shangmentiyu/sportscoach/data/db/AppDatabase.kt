@@ -9,6 +9,10 @@ import com.shangmentiyu.sportscoach.data.model.ArchivedLesson
 import com.shangmentiyu.sportscoach.data.model.AuditLogEntity
 import com.shangmentiyu.sportscoach.data.model.BodyMetricHistory
 import com.shangmentiyu.sportscoach.data.model.Coach
+import com.shangmentiyu.sportscoach.data.model.CoachPayout
+import com.shangmentiyu.sportscoach.data.model.CoachPayoutRequest
+import com.shangmentiyu.sportscoach.data.model.CoachSchedule
+import com.shangmentiyu.sportscoach.data.model.CoachStudentBinding
 import com.shangmentiyu.sportscoach.data.model.DietTemplateEntity
 import com.shangmentiyu.sportscoach.data.model.Lesson
 import com.shangmentiyu.sportscoach.data.model.LessonPackage
@@ -25,8 +29,8 @@ import com.shangmentiyu.sportscoach.data.model.StudentFts
 import com.shangmentiyu.sportscoach.data.model.TrainingCycle
 
 @Database(
-    entities = [Student::class, Lesson::class, LessonPackage::class, Coach::class, Schedule::class, ParentReport::class, TrainingCycle::class, BodyMetricHistory::class, ScheduleMemory::class, DietTemplateEntity::class, StudentDietRecord::class, StudentFts::class, ArchivedLesson::class, AuditLogEntity::class, PlanImage::class, SignInRecord::class],
-    version = 32,
+    entities = [Student::class, Lesson::class, LessonPackage::class, Coach::class, Schedule::class, ParentReport::class, TrainingCycle::class, BodyMetricHistory::class, ScheduleMemory::class, DietTemplateEntity::class, StudentDietRecord::class, StudentFts::class, ArchivedLesson::class, AuditLogEntity::class, PlanImage::class, SignInRecord::class, CoachSchedule::class, CoachPayout::class, CoachPayoutRequest::class, CoachStudentBinding::class],
+    version = 34,
     exportSchema = true
 )
 @TypeConverters(com.shangmentiyu.sportscoach.data.model.Converters::class)
@@ -50,6 +54,13 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun planImageDao(): PlanImageDao
     /** v32 新增：签到记录 DAO（排课与签到分离 + 防重） */
     abstract fun signInDao(): SignInDao
+    /** v33 新增：教练管理模块 DAO（可上课时段 / 薪资结算 / 提现申请 / 工作量统计） */
+    abstract fun coachScheduleDao(): CoachScheduleDao
+    abstract fun coachPayoutDao(): CoachPayoutDao
+    abstract fun coachPayoutRequestDao(): CoachPayoutRequestDao
+    abstract fun coachWorkloadDao(): CoachWorkloadDao
+    /** v34 新增：教练-学员绑定 DAO */
+    abstract fun coachStudentBindingDao(): CoachStudentBindingDao
 
     companion object {
         @Volatile
@@ -137,6 +148,6 @@ abstract class AppDatabase : RoomDatabase() {
          *
          * 修改 @Database version 时必须同步修改此常量，否则版本检查会失效。
          */
-        const val DATABASE_VERSION = 32
+        const val DATABASE_VERSION = 34
     }
 }

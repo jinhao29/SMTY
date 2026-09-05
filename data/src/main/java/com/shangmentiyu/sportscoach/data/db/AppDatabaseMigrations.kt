@@ -857,6 +857,105 @@ internal object AppDatabaseMigrations {
         }
 
         /**
+         * v32 → v33：教练管理模块。
+         * - coaches 表新增角色 / 上级 / 证书 / 薪资参数 / 日排课上限字段
+         * - schedules 表新增 assistantCoach（助教）字段
+         * - 新增 coach_schedules（可上课时段）/ coach_payouts（薪资结算）/
+         *   coach_payout_requests（提现申请）三张表
+         */
+        private val MIGRATION_32_33 = object : Migration(32, 33) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE coaches ADD COLUMN role TEXT NOT NULL DEFAULT 'parttime'")
+                db.execSQL("ALTER TABLE coaches ADD COLUMN superiorId TEXT")
+                db.execSQL("ALTER TABLE coaches ADD COLUMN certificates TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE coaches ADD COLUMN baseSalary REAL NOT NULL DEFAULT 0.0")
+                db.execSQL("ALTER TABLE coaches ADD COLUMN lessonRate REAL NOT NULL DEFAULT 0.0")
+                db.execSQL("ALTER TABLE coaches ADD COLUMN commissionRate REAL NOT NULL DEFAULT 0.0")
+                db.execSQL("ALTER TABLE coaches ADD COLUMN dailyLimit INTEGER NOT NULL DEFAULT 8")
+                db.execSQL("ALTER TABLE schedules ADD COLUMN assistantCoach TEXT NOT NULL DEFAULT ''")
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS coach_schedules (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        coachName TEXT NOT NULL,
+                        dayOfWeek INTEGER NOT NULL,
+                        startTime TEXT NOT NULL,
+                        endTime TEXT NOT NULL,
+                        note TEXT NOT NULL DEFAULT ''
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS idx_coach_schedules_coach " +
+                        "ON coach_schedules(coachName)"
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS coach_payouts (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        coachName TEXT NOT NULL,
+                        periodStart TEXT NOT NULL,
+                        periodEnd TEXT NOT NULL,
+                        lessonCount INTEGER NOT NULL,
+                        baseAmount REAL NOT NULL,
+                        lessonFee REAL NOT NULL,
+                        commission REAL NOT NULL,
+                        totalAmount REAL NOT NULL,
+                        status TEXT NOT NULL DEFAULT '待发放',
+                        note TEXT NOT NULL DEFAULT '',
+                        createdAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_coach_payouts_period " +
+                        "ON coach_payouts(coachName, periodStart, periodEnd)"
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS coach_payout_requests (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        coachName TEXT NOT NULL,
+                        amount REAL NOT NULL,
+                        status TEXT NOT NULL DEFAULT '待审核',
+                        appliedAt INTEGER NOT NULL DEFAULT 0,
+                        processedAt INTEGER NOT NULL DEFAULT 0,
+                        note TEXT NOT NULL DEFAULT ''
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
+        /**
+         * v33 → v34：教练管理模块增强（教练绑定学员）。
+         * - 新增 coach_student_bindings（教练-学员绑定）表
+         */
+        private val MIGRATION_33_34 = object : Migration(33, 34) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS coach_student_bindings (
+                        coachName TEXT NOT NULL,
+                        studentName TEXT NOT NULL,
+                        studentId TEXT,
+                        boundAt INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY(coachName, studentName)
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS idx_coach_student_coach " +
+                        "ON coach_student_bindings(coachName)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS idx_coach_student_student " +
+                        "ON coach_student_bindings(studentName)"
+                )
+            }
+        }
+
+        /**
          * 数据库首次创建时的回调：插入预置饮食模板数据。
          *
          * 仅在数据库文件首次创建时触发（新装用户），老用户升级走 [MIGRATION_17_18]。
@@ -875,6 +974,6 @@ internal object AppDatabaseMigrations {
         MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19,
         MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24,
         MIGRATION_24_25, MIGRATION_25_26, MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29,
-        MIGRATION_29_30, MIGRATION_30_31, MIGRATION_31_32
+        MIGRATION_29_30, MIGRATION_30_31, MIGRATION_31_32, MIGRATION_32_33, MIGRATION_33_34
     )
 }
