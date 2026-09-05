@@ -31,7 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import com.shangmentiyu.sportscoach.ui.theme.AppTopBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -101,7 +101,7 @@ fun ScriptDetailScreen(
     Scaffold(
         containerColor = appBackground(),
         topBar = {
-            TopAppBar(
+            AppTopBar(
                 title = {
                     Text(
                         if (isEdit) "编辑话术" else "新建话术",
@@ -138,7 +138,8 @@ fun ScriptDetailScreen(
                 },
                 colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
                     containerColor = appBackground()
-                )
+                ),
+                shareLabel = "话术编辑",
             )
         }
     ) { padding ->

@@ -103,7 +103,13 @@ fun ScoreInputTab() {
                 }
             }
         } else {
-        Column(modifier = Modifier.fillMaxSize()) {
+        // === 修复：底部"保存成绩"按钮被悬浮导航栏遮挡 ===
+        // SportsApp 把 FloatingBottomBar 作为独立浮层放在外层 Box.align(BottomCenter)，
+        // Scaffold 的 bottomBar slot 未占用，因此 NavHost 内容延伸到屏幕底部。
+        // 悬浮导航栏总高 ~88dp（70dp 导航 + 12dp 间距 + 系统手势条），给最外层 Column 加底部 padding
+        // 让 LazyColumn 内的滚动内容可滚到底、底部"保存成绩"按钮也不被遮挡。
+        // 仅作用于 ScoreScreen（Route.SCORE 主入口），不影响二级路由（ScoringScreen 无底部导航栏）。
+        Column(modifier = Modifier.fillMaxSize().padding(bottom = 88.dp)) {
             // 学员选择器（统一 StyledDropdown 视觉）
             StyledDropdown(
                 selected = selectedStudent,

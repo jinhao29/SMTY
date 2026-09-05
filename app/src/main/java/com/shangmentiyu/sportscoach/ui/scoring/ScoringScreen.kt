@@ -11,6 +11,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.*
+import com.shangmentiyu.sportscoach.ui.theme.AppTopBar
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,9 +59,10 @@ fun ScoringScreen(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { FloatingSnackbarHost(snackbarHostState) },
         topBar = {
-            TopAppBar(
+            AppTopBar(
                 title = { Text("数据记录") },
                 colors = glassTopAppBarColors(),
+                shareLabel = "数据记录",
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
@@ -263,6 +265,12 @@ private fun ScoreRow(
 /**
  * 自定义项目成绩行：项目名称 + 单位 + 备注 + 成绩值，仅记录原值不计算得分。
  * 支持移除该自定义项目。
+ *
+ * === v46 视觉优化 ===
+ * - 关闭顶部 4dp 珊瑚橙渐变条（accentGradient=false）：自定义项目作为辅助录入项，
+ *   不需要主卡片那种品牌强调；用更克制的左侧 2dp 珊瑚橙竖线作轻量 brand 标识
+ * - 移除按钮从 IconButton 改为更低调的"移除"小字 + 图标，避免单个垃圾桶抢镜
+ * - "自定义" 标签改为带浅珊瑚橙底色的胶囊，与主品牌呼应但不刺眼
  */
 @Composable
 internal fun CustomScoreRow(
@@ -271,38 +279,60 @@ internal fun CustomScoreRow(
     onValueChange: (String) -> Unit,
     onRemove: () -> Unit
 ) {
-    GlassCard {
+    GlassCard(accentGradient = false) {
+        // 左侧 2dp 珊瑚橙竖线：克制的 brand 标识（替代顶部渐变条）
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(project.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                Box(
+                    modifier = Modifier
+                        .width(2.dp)
+                        .height(18.dp)
+                        .background(MaterialTheme.colorScheme.primary)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    project.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1
+                )
                 if (project.unit.isNotBlank()) {
                     Spacer(Modifier.width(6.dp))
                     Text(
                         project.unit,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
                     )
                 }
             }
-            Text(
-                "自定义",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary
-            )
+            // "自定义" 改为浅珊瑚橙胶囊标签，与主品牌呼应但不刺眼
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                contentColor = MaterialTheme.colorScheme.primary
+            ) {
+                Text(
+                    "自定义",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                )
+            }
         }
         if (project.note.isNotBlank()) {
             Spacer(Modifier.height(4.dp))
             Text(
                 project.note,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.outline
+                color = MaterialTheme.colorScheme.outline,
+                maxLines = 2
             )
         }
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(10.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -310,18 +340,36 @@ internal fun CustomScoreRow(
             AppTextField(
                 value = inputValue,
                 onValueChange = onValueChange,
-                label = { Text("成绩值") },
+                placeholder = { Text("成绩值") },
                 modifier = Modifier.weight(1f),
                 singleLine = true,
 )
             Spacer(modifier = Modifier.width(8.dp))
-            IconButton(onClick = onRemove) {
-                Icon(
-                    Icons.Outlined.Delete,
-                    contentDescription = "移除",
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(20.dp)
-                )
+            // 移除按钮：低调文字 + 小垃圾桶，比纯 IconButton 更克制
+            // Surface(onClick) 内置 onClick + 形状，无需再 clip
+            Surface(
+                onClick = onRemove,
+                shape = RoundedCornerShape(50),
+                color = Color.Transparent
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Outlined.Delete,
+                        contentDescription = "移除",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(Modifier.width(3.dp))
+                    Text(
+                        "移除",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
         }
     }
@@ -340,6 +388,11 @@ internal fun RowScope.EntryModeChip(label: String, selected: Boolean, onClick: (
 
 /**
  * 添加自定义项目对话框：项目名称 + 单位 + 备注自由输入。
+ *
+ * === v46 视觉优化 ===
+ * GlassAlertDialog 设计意图是"取消 = 浅灰胶囊 / 确认 = 珊瑚橙胶囊"，但当前实现
+ * 透传了调用方的裸 TextButton，导致底部"取消/添加"是裸文字、视觉权重=0。
+ * 这里按意图补回胶囊样式（不修改公共 GlassAlertDialog，避免影响其他 8 个调用方）。
  */
 @Composable
 internal fun AddCustomProjectDialog(
@@ -353,37 +406,59 @@ internal fun AddCustomProjectDialog(
         onDismissRequest = onDismiss,
         title = "添加自定义项目",
         content = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 AppTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("项目名称") },
+                    placeholder = { Text("项目名称") },
                     singleLine = true,
-modifier = Modifier.fillMaxWidth()
-)
+                    modifier = Modifier.fillMaxWidth()
+                )
                 AppTextField(
                     value = unit,
                     onValueChange = { unit = it },
-                    label = { Text("单位（如：次/秒/米，可空）") },
+                    placeholder = { Text("单位（如：次/秒/米，可空）") },
                     singleLine = true,
-modifier = Modifier.fillMaxWidth()
-)
+                    modifier = Modifier.fillMaxWidth()
+                )
                 AppTextField(
                     value = note,
                     onValueChange = { note = it },
-                    label = { Text("备注（可选）") },
+                    placeholder = { Text("备注（可选）") },
                     singleLine = true,
-modifier = Modifier.fillMaxWidth()
-)
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         },
         confirmButton = {
-            androidx.compose.material3.TextButton(
-                onClick = { onConfirm(name, unit, note) }
-            ) { Text("添加") }
+            // 确认按钮：珊瑚橙胶囊 + 白字（Surface 内置 onClick 给标准涟漪反馈）
+            Surface(
+                onClick = { onConfirm(name, unit, note) },
+                shape = RoundedCornerShape(50),
+                color = MaterialTheme.colorScheme.primary,
+                contentColor = Color.White
+            ) {
+                Text(
+                    "添加",
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp)
+                )
+            }
         },
         dismissButton = {
-            androidx.compose.material3.TextButton(onClick = onDismiss) { Text("取消") }
+            // 取消按钮：浅灰胶囊 + 深灰字
+            Surface(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(50),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+            ) {
+                Text(
+                    "取消",
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp)
+                )
+            }
         }
     )
 }

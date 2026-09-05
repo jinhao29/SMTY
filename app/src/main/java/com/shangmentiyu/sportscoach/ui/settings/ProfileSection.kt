@@ -11,8 +11,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.List
+import androidx.compose.material.icons.outlined.Calculate
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -29,9 +32,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.shangmentiyu.sportscoach.ui.Routes
 import com.shangmentiyu.sportscoach.ui.settings.components.IosGroupedListCard
 import com.shangmentiyu.sportscoach.ui.settings.components.IosIconBadge
 import com.shangmentiyu.sportscoach.ui.settings.components.IosSectionWrapper
+import com.shangmentiyu.sportscoach.ui.settings.components.SettingsActionRow
 import com.shangmentiyu.sportscoach.ui.settings.components.StatDivider
 import com.shangmentiyu.sportscoach.ui.settings.components.StatItem
 import com.shangmentiyu.sportscoach.ui.theme.AppTextField
@@ -213,4 +218,58 @@ internal fun ProfileSection(vm: SettingsViewModel) {
     AppearanceSection(vm)
     CoachSection(vm)
     StatsSection(vm)
+}
+
+/**
+ * 工具与扩展功能：BMI 计算器、教练管理、话术管理（家长沟通）。
+ *
+ * 设计意图：与「统计信息」紧邻，作为教练日常高频入口的快捷组；
+ * 视觉上沿用 iOS 分组卡片（每个分组单独卡片），不堆叠成大块。
+ */
+@Composable
+internal fun ToolsSection(onNavigate: (String) -> Unit) {
+    // 工具（独立计算器，不依赖学员数据）
+    IosSectionWrapper(text = "工具") {
+        IosGroupedListCard {
+            SettingsActionRow(
+                icon = Icons.Outlined.Calculate,
+                iconBgColor = LightPrimary,
+                iconContentDescription = "BMI 计算器",
+                title = "BMI 计算器",
+                subtitle = "输入身高体重快速计算 BMI",
+                showTopDivider = false,
+                onClick = { onNavigate(Routes.BMI_CALCULATOR) }
+            )
+        }
+    }
+
+    // === 教练管理：档案 / 排班工作量 / 合伙人团队 / 薪资分成 ===
+    IosSectionWrapper(text = "教练管理") {
+        IosGroupedListCard {
+            SettingsActionRow(
+                icon = Icons.Outlined.Groups,
+                iconBgColor = LightPrimary,
+                iconContentDescription = "教练管理",
+                title = "教练管理",
+                subtitle = "教练档案 · 排班工作量 · 合伙人团队 · 薪资分成",
+                showTopDivider = false,
+                onClick = { onNavigate(Routes.COACH_MANAGE) }
+            )
+        }
+    }
+
+    // === 话术管理：自定义家长沟通话术，复制后粘贴给家长 ===
+    IosSectionWrapper(text = "家长沟通") {
+        IosGroupedListCard {
+            SettingsActionRow(
+                icon = Icons.AutoMirrored.Outlined.List,
+                iconBgColor = LightPrimary,
+                iconContentDescription = "话术管理",
+                title = "话术管理",
+                subtitle = "自定义话术项目，复制后粘贴给家长",
+                showTopDivider = false,
+                onClick = { onNavigate(Routes.SCRIPT_LIST) }
+            )
+        }
+    }
 }

@@ -17,6 +17,7 @@ import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.SportsScore
 import androidx.compose.material.icons.outlined.Summarize
 import androidx.compose.material3.*
+import com.shangmentiyu.sportscoach.ui.theme.AppTopBar
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,9 +67,10 @@ fun LessonScreen(
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
+            AppTopBar(
                 title = { Text(lesson?.let { "${it.studentName} · ${it.date}" } ?: "课堂记录") },
                 colors = glassTopAppBarColors(),
+                shareLabel = "课堂记录",
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")

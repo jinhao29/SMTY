@@ -11,9 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.outlined.Apps
-import androidx.compose.material.icons.outlined.Calculate
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Refresh
@@ -27,7 +25,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.shangmentiyu.sportscoach.BuildConfig
-import com.shangmentiyu.sportscoach.ui.Routes
 import com.shangmentiyu.sportscoach.ui.settings.components.IosGroupedListCard
 import com.shangmentiyu.sportscoach.ui.settings.components.IosIconBadge
 import com.shangmentiyu.sportscoach.ui.settings.components.IosSectionWrapper
@@ -43,7 +40,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * 关于与更多区块：应用更新、工具（BMI 计算器）、家长沟通（话术管理）、应用信息。
+ * 关于与更多区块：应用更新 + 关于。
+ *
+ * 历史说明：原"工具 / 教练管理 / 家长沟通"三个分组已迁移到 [ToolsSection]
+ * （紧随 [ProfileSection] 的"统计信息"下方），本区块仅保留更新与关于信息。
  */
 @Composable
 internal fun AboutSection(
@@ -51,36 +51,6 @@ internal fun AboutSection(
     onNavigate: (String) -> Unit
 ) {
     UpdateSection(vm, LocalContext.current)
-
-    // 工具（独立计算器，不依赖学员数据）
-    IosSectionWrapper(text = "工具") {
-        IosGroupedListCard {
-            SettingsActionRow(
-                icon = Icons.Outlined.Calculate,
-                iconBgColor = LightPrimary,
-                iconContentDescription = "BMI 计算器",
-                title = "BMI 计算器",
-                subtitle = "输入身高体重快速计算 BMI",
-                showTopDivider = false,
-                onClick = { onNavigate(Routes.BMI_CALCULATOR) }
-            )
-        }
-    }
-
-    // === 话术管理：自定义家长沟通话术，复制后粘贴给家长 ===
-    IosSectionWrapper(text = "家长沟通") {
-        IosGroupedListCard {
-            SettingsActionRow(
-                icon = Icons.AutoMirrored.Outlined.List,
-                iconBgColor = LightPrimary,
-                iconContentDescription = "话术管理",
-                title = "话术管理",
-                subtitle = "自定义话术项目，复制后粘贴给家长",
-                showTopDivider = false,
-                onClick = { onNavigate(Routes.SCRIPT_LIST) }
-            )
-        }
-    }
 
     // 关于：应用信息
     IosSectionWrapper(text = "关于") {

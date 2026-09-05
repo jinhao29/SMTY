@@ -35,8 +35,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import com.shangmentiyu.sportscoach.ui.theme.AppTopBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -188,7 +188,7 @@ fun GrowthScreen(
     Scaffold(
         containerColor = appGroupedBackground(),
         topBar = {
-            TopAppBar(
+            AppTopBar(
                 title = { Text("成长档案", color = Color.White, fontWeight = FontWeight.SemiBold) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
@@ -196,6 +196,7 @@ fun GrowthScreen(
                     titleContentColor = Color.White,
                     actionIconContentColor = Color.White
                 ),
+                shareLabel = "成长档案",
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")

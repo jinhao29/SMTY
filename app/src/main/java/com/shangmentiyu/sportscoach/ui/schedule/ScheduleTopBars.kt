@@ -29,7 +29,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import com.shangmentiyu.sportscoach.ui.theme.AppTopBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -75,7 +75,7 @@ internal fun ScheduleTopBar(
     onEnterMultiSelect: () -> Unit,
     onClearAll: () -> Unit
 ) {
-    TopAppBar(
+    AppTopBar(
         title = { Text("课表", fontWeight = FontWeight.Bold) },
         colors = glassTopAppBarColors(),
         navigationIcon = {
@@ -83,6 +83,7 @@ internal fun ScheduleTopBar(
                 Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
             }
         },
+        shareLabel = "课表",
         actions = {
             // 颜色规范：珊瑚橙 #FF6B47（appPrimary）/ 深灰 #6B6B6B（appOnSurfaceVariant）
             ScheduleActionButton(
@@ -133,7 +134,7 @@ internal fun MultiSelectTopBar(
     onClose: () -> Unit,
     onToggleAllDay: () -> Unit
 ) {
-    TopAppBar(
+    AppTopBar(
         title = { Text("已选 $selectedCount 条", fontWeight = FontWeight.Bold) },
         colors = glassTopAppBarColors(),
         navigationIcon = {

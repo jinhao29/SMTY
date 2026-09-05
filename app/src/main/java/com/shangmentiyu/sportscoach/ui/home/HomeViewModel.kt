@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shangmentiyu.sportscoach.data.model.Lesson
 import com.shangmentiyu.sportscoach.data.model.Student
+import com.shangmentiyu.sportscoach.data.repo.CoachStudentRepository
 import com.shangmentiyu.sportscoach.data.repo.LessonRepository
 import com.shangmentiyu.sportscoach.data.repo.OperationRepository
 import com.shangmentiyu.sportscoach.data.repo.SettingsRepository
@@ -53,7 +54,9 @@ class HomeViewModel(
      */
     private val momentUploader: com.shangmentiyu.sportscoach.app.framework.MomentUploader? = null,
     /** 忘记签退提醒（小班课集体签到签退功能）：检测过去日期已签到未签退的课时 */
-    private val getUnsignedOutReminder: GetUnsignedOutReminderUseCase
+    private val getUnsignedOutReminder: GetUnsignedOutReminderUseCase,
+    /** 教练-学员绑定仓库（v53 智能粘贴批量导入用） */
+    private val bindingRepo: CoachStudentRepository
 ) : ViewModel() {
 
     // === 修复：将 _toast 与 appExceptionHandler 提前到 init 块之前 ===
@@ -611,6 +614,80 @@ class HomeViewModel(
             } catch (e: Exception) {
                 toast("添加失败：${e.message ?: "未知错误"}")
             }
+        }
+    }
+
+    /**
+     * 智能粘贴批量导入学员（v53）。
+     * 每行一条：姓名，小区，课程具体内容，代课教练，课时包（逗号/中文逗号/制表符分隔）。
+     * 字段映射：小区→school、课程内容→课时包备注、教练→模糊匹配并建立绑定、
+     * 课时包→提取数字作为总课时（如 "20节课包"→20，自动创建 "N次卡"）。
+     * 容错：字段数≠5 / 姓名为空 / 教练未找到 / 课时包无法识别 / 姓名重复 → 跳过该行并记录原因。
+     * 注：学员以姓名为主键，同批（或库中）同名无法保留两条，按错误行报告。
+     *
+     * @param onResult 成功导入数 + 错误明细（行号 + 原因）
+     */
+    fun importStudentsFromText(text: String, onResult: (Int, List<String>) -> Unit) {
+        safeLaunch {
+            val errors = mutableListOf<String>()
+            var okCount = 0
+            try {
+                val coaches = opRepo.getAllCoaches().first()
+                val seen = mutableMapOf<String, Int>() // name → 首次出现的行号
+                text.lines().map { it.trim() }.filter { it.isNotEmpty() }
+                    .forEachIndexed { idx, raw ->
+                        val lineNo = idx + 1
+                        val parts = raw.split(",", "，", "\t").map { it.trim() }
+                        if (parts.size != 5) {
+                            errors.add("第 $lineNo 行：应为 5 个字段（姓名，小区，课程，教练，课时包），实际 ${parts.size} 个")
+                            return@forEachIndexed
+                        }
+                        val (name, community, courseNote, coachRaw, pkgRaw) = parts
+                        if (name.isBlank()) {
+                            errors.add("第 $lineNo 行：姓名为空"); return@forEachIndexed
+                        }
+                        seen[name]?.let { first ->
+                            errors.add("第 $lineNo 行：学员「$name」与第 $first 行重复（学员以姓名为主键，无法保留两条）")
+                            return@forEachIndexed
+                        }
+                        if (studentRepo.getByName(name) != null) {
+                            errors.add("第 $lineNo 行：学员「$name」已存在（同名请用编辑功能）")
+                            return@forEachIndexed
+                        }
+                        val coach = coaches.firstOrNull { it.name == coachRaw }
+                            ?: coaches.firstOrNull { coachRaw.isNotEmpty() && (it.name.contains(coachRaw) || coachRaw.contains(it.name)) }
+                        if (coach == null) {
+                            errors.add("第 $lineNo 行：教练「$coachRaw」未找到")
+                            return@forEachIndexed
+                        }
+                        val total = Regex("\\d+").find(pkgRaw)?.value?.toIntOrNull()
+                        if (total == null || total <= 0) {
+                            errors.add("第 $lineNo 行：课时包格式无法识别「$pkgRaw」")
+                            return@forEachIndexed
+                        }
+                        try {
+                            studentRepo.addStudent(name, "男", "1", community, "")
+                            val sid = studentRepo.getByName(name)?.studentId
+                            opRepo.addPackage(
+                                com.shangmentiyu.sportscoach.data.model.LessonPackage(
+                                    studentName = name, studentId = sid,
+                                    name = "${total}次卡", totalLessons = total,
+                                    purchaseDate = java.time.LocalDate.now()
+                                        .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd")),
+                                    expireDate = "", note = courseNote
+                                )
+                            )
+                            bindingRepo.bind(coach.name, name, sid)
+                            seen[name] = lineNo
+                            okCount++
+                        } catch (e: Exception) {
+                            errors.add("第 $lineNo 行：导入失败（${e.message ?: "未知错误"}）")
+                        }
+                    }
+            } catch (e: Exception) {
+                errors.add("导入过程异常：${e.message ?: "未知错误"}")
+            }
+            onResult(okCount, errors)
         }
     }
 

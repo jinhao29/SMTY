@@ -57,8 +57,6 @@ fun SportCategoryScreen(
     onBack: () -> Unit,
     onItemClick: (String) -> Unit
 ) {
-    val categories = remember { mockSportCategories() }
-
     Scaffold(
         containerColor = appBackground(),
         contentWindowInsets = WindowInsets(0)
@@ -88,44 +86,55 @@ fun SportCategoryScreen(
                     color = appOnSurface()
                 )
             }
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(3),
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                    start = Spacing.screenH,
-                    end = Spacing.screenH,
-                    top = Spacing.screenV,
-                    bottom = 160.dp
-                ),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                verticalArrangement = Arrangement.spacedBy(Spacing.md)
-            ) {
-                categories.forEachIndexed { index, category ->
-                    if (index > 0) {
-                        item(span = { GridItemSpan(maxLineSpan) }) {
-                            Spacer(Modifier.height(Spacing.xl))
-                        }
-                    }
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        Text(
-                            text = category.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = appOnSurface(),
-                            fontSize = 17.sp,
-                            modifier = Modifier.padding(vertical = Spacing.sm)
-                        )
-                    }
-                    items(
-                        items = category.items,
-                        key = { it.id }
-                    ) { item ->
-                        SportGridItem(
-                            item = item,
-                            onClick = { onItemClick(item.id) }
-                        )
-                    }
+            SportCategoryContent(onItemClick = onItemClick)
+        }
+    }
+}
+
+/**
+ * 中考体育分类网格（无标题栏，供整页与"成绩查看"页 Tab 嵌入复用）。
+ *
+ * @param onItemClick 点击项目回调，参数为项目 ID（跳转标准详情）
+ */
+@Composable
+fun SportCategoryContent(onItemClick: (String) -> Unit) {
+    val categories = remember { mockSportCategories() }
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(3),
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            start = Spacing.screenH,
+            end = Spacing.screenH,
+            top = Spacing.sm,
+            bottom = 160.dp
+        ),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+        verticalArrangement = Arrangement.spacedBy(Spacing.md)
+    ) {
+        categories.forEachIndexed { index, category ->
+            if (index > 0) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Spacer(Modifier.height(Spacing.xl))
                 }
+            }
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Text(
+                    text = category.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = appOnSurface(),
+                    fontSize = 17.sp,
+                    modifier = Modifier.padding(vertical = Spacing.sm)
+                )
+            }
+            items(
+                items = category.items,
+                key = { it.id }
+            ) { item ->
+                SportGridItem(
+                    item = item,
+                    onClick = { onItemClick(item.id) }
+                )
             }
         }
     }

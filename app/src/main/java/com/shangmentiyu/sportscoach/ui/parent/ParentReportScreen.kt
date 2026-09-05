@@ -32,7 +32,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import com.shangmentiyu.sportscoach.ui.theme.AppTopBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -83,7 +83,7 @@ fun ParentReportScreen(onBack: () -> Unit) {
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { FloatingSnackbarHost(snackbarHostState) },
         topBar = {
-            TopAppBar(
+            AppTopBar(
                 title = { Text("家长服务", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -95,7 +95,8 @@ fun ParentReportScreen(onBack: () -> Unit) {
                         Icon(Icons.Outlined.Add, contentDescription = "生成报告")
                     }
                 },
-                colors = glassTopAppBarColors()
+                colors = glassTopAppBarColors(),
+                shareLabel = "家长服务",
             )
         }
     ) { padding ->

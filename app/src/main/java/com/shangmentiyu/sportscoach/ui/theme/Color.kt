@@ -14,7 +14,7 @@ import androidx.compose.ui.graphics.Color
  *   → 高对比度文字、大点击区、留白充足、避免低饱和度色块。
  *
  * 色板层级：
- * 1. 背景：暖白底 #FAFAFA + 暖灰分组底 #F2F2F5
+ * 1. 背景：浅冷灰底 #F5F6F8 + 暖灰分组底 #F2F2F5
  * 2. 表面：纯白卡片 #FFFFFF（浮在分组底之上）
  * 3. 强调：珊瑚橙 #FF6B47（单一强调色，≤10% 面积）
  * 4. 文字：主 #1A1A1A（≥12:1）/ 次 #6B6B6B（≥4.6:1 WCAG AA）
@@ -34,7 +34,7 @@ import androidx.compose.ui.graphics.Color
  */
 
 // === 1. 亮色主题（Light）===
-val LightBackground = Color(0xFFFAFAFA)              // 暖白主背景
+val LightBackground = Color(0xFFF5F6F8)              // 浅冷灰主背景（白卡片的衬托底）
 val LightSurface = Color(0xFFFFFFFF)                 // 纯白卡片表面
 val LightSurfaceVariant = Color(0xFFF2F2F5)           // 次级表面（输入框底色）
 
@@ -215,6 +215,15 @@ fun appDividerColor(): Color = MaterialTheme.colorScheme.outlineVariant
 
 @Composable
 fun appOutline(): Color = MaterialTheme.colorScheme.outline
+
+/**
+ * 分段控件（AppSegmentedTabs）选中滑块底色。
+ * 亮色：纯白 #FFFFFF，浮于浅灰轨道之上（微缩的白卡片）。
+ * 暗色：抬升灰 #5A5A5F，比轨道 #3A3A3C 亮一档（iOS 暗色分段控件的惯用处理，
+ * M3 无对应字段，material3 darkColorScheme 的 surface 反而比 surfaceVariant 深）。
+ */
+@Composable
+fun appSegmentThumb(): Color = if (isDarkScheme()) Color(0xFF5A5A5F) else Color(0xFFFFFFFF)
 
 // === 7. 语义色访问器（v48：信息横幅/状态提示，随主题切换）===
 // M3 1.3.1 无 success/warning 字段，按当前生效色板（三态开关已收敛到

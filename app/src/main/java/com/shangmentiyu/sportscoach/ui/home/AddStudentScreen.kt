@@ -33,8 +33,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import com.shangmentiyu.sportscoach.ui.theme.AppTopBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,6 +50,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.room.Room
 import com.shangmentiyu.sportscoach.data.db.AppDatabase
 import com.shangmentiyu.sportscoach.data.repo.BatchScheduleRepository
+import com.shangmentiyu.sportscoach.data.repo.CoachStudentRepository
 import com.shangmentiyu.sportscoach.data.repo.LessonArchiveRepository
 import com.shangmentiyu.sportscoach.data.repo.LessonConsumptionRepository
 import com.shangmentiyu.sportscoach.data.repo.LessonRepository
@@ -117,6 +118,11 @@ fun AddStudentScreen(
     var snackbar by remember { mutableStateOf<String?>(null) }
     var showConfirmDialog by remember { mutableStateOf(false) }
 
+    // === v53 智能粘贴批量导入（仅新增模式） ===
+    var pasteText by remember { mutableStateOf("") }
+    var importing by remember { mutableStateOf(false) }
+    var importResult by remember { mutableStateOf<Pair<Int, List<String>>?>(null) }
+
     // 学龄前判定：年龄 1-7 岁隐藏年级字段（3-7岁幼儿不要求年级）
     // 年龄为空或 0 时显示年级（默认状态），年龄 >7 时显示年级（学龄期）
     val ageInt = age.toIntOrNull() ?: 0
@@ -142,7 +148,7 @@ fun AddStudentScreen(
     Scaffold(
         containerColor = appGroupedBackground(),
         topBar = {
-            TopAppBar(
+            AppTopBar(
                 title = {
                     Text(
                         if (isEdit) "编辑学员" else "添加学员",
@@ -157,6 +163,7 @@ fun AddStudentScreen(
                     navigationIconContentColor = MaterialTheme.colorScheme.primary,
                     actionIconContentColor = MaterialTheme.colorScheme.primary
                 ),
+                shareLabel = "学员档案",
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
@@ -203,6 +210,66 @@ fun AddStudentScreen(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(Spacing.xl)
             ) {
+                // 分组 0：智能粘贴批量导入（仅新增模式）
+                if (!isEdit) {
+                    IosFormSectionHeader("智能粘贴（批量导入）")
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFFF5F6FA), RoundedCornerShape(10.dp))
+                            .padding(Spacing.md),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+                    ) {
+                        AppTextField(
+                            value = pasteText,
+                            onValueChange = { pasteText = it },
+                            modifier = Modifier.fillMaxWidth().height(150.dp),
+                            placeholder = {
+                                Text(
+                                    "粘贴学员信息，每行一条，字段用逗号分隔\n姓名，小区，课程具体内容，代课教练，课时包",
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            },
+                            minLines = 6,
+                            enabled = !importing,
+                            textStyle = MaterialTheme.typography.bodySmall
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (importing) {
+                                Text(
+                                    "正在导入…",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = appOnSurfaceVariant(),
+                                    modifier = Modifier.weight(1f)
+                                )
+                            } else {
+                                Spacer(Modifier.weight(1f))
+                            }
+                            Button(
+                                onClick = {
+                                    importing = true
+                                    vm.importStudentsFromText(pasteText) { ok, errs ->
+                                        importing = false
+                                        importResult = ok to errs
+                                    }
+                                },
+                                enabled = !importing && pasteText.isNotBlank(),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = appPrimary(),
+                                    contentColor = appOnPrimary()
+                                )
+                            ) {
+                                Text("识别并导入")
+                            }
+                        }
+                    }
+                }
+
                 // 分组 1：基本信息
                 IosFormSectionHeader("基本信息")
                 IosFormCard {
@@ -425,6 +492,48 @@ fun AddStudentScreen(
                         .padding(16.dp)
                 ) {
                     Text(it)
+                }
+            }
+
+            // v53 智能粘贴导入结果汇总
+            importResult?.let { (ok, errs) ->
+                GlassAlertDialog(
+                    onDismissRequest = { importResult = null },
+                    title = "导入结果",
+                    confirmButton = {
+                        Button(onClick = {
+                            importResult = null
+                            if (ok > 0) onBack()  // 有成功导入：关闭页面，列表经 Room Flow 自动刷新
+                        }) { Text(if (ok > 0) "完成" else "知道了") }
+                    },
+                    dismissButton = null
+                ) {
+                    Column {
+                        Text("成功导入 $ok 名学员")
+                        if (errs.isNotEmpty()) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                "跳过 ${errs.size} 行（格式错误）：",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f, fill = false)
+                                    .verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                errs.take(20).forEach { msg ->
+                                    Text(msg, style = MaterialTheme.typography.bodySmall, color = appOnSurfaceVariant())
+                                }
+                                if (errs.size > 20) {
+                                    Text("…其余 ${errs.size - 20} 条略", style = MaterialTheme.typography.bodySmall, color = appOnSurfaceVariant())
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -865,7 +974,8 @@ private fun AddStudentScreenPreview() {
                     ),
                     archiveRepo = LessonArchiveRepository(db.lessonDao(), null, db)
                 ),
-                getUnsignedOutReminder = GetUnsignedOutReminderUseCase(db.lessonDao())
+                getUnsignedOutReminder = GetUnsignedOutReminderUseCase(db.lessonDao()),
+                bindingRepo = CoachStudentRepository(db.coachStudentBindingDao())
             )
         }
     )

@@ -32,7 +32,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import com.shangmentiyu.sportscoach.ui.theme.AppTopBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.tooling.preview.Preview
@@ -91,7 +91,7 @@ fun ScriptListScreen(
     Scaffold(
         containerColor = appBackground(),
         topBar = {
-            TopAppBar(
+            AppTopBar(
                 title = {
                     Text(
                         "话术管理",
@@ -110,7 +110,8 @@ fun ScriptListScreen(
                 },
                 colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
                     containerColor = appBackground()
-                )
+                ),
+                shareLabel = "话术管理",
             )
         },
         floatingActionButton = {

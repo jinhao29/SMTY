@@ -26,8 +26,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import com.shangmentiyu.sportscoach.ui.theme.AppTopBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -75,7 +75,7 @@ fun BmiCalculatorScreen(
     Scaffold(
         containerColor = appBackground(),
         topBar = {
-            TopAppBar(
+            AppTopBar(
                 title = {
                     Text(
                         text = "BMI 计算器",
@@ -95,7 +95,8 @@ fun BmiCalculatorScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = appBackground()
-                )
+                ),
+                shareLabel = "BMI 计算器",
             )
         }
     ) { paddingValues ->

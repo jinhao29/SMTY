@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -48,11 +49,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shangmentiyu.sportscoach.R
+import com.shangmentiyu.sportscoach.app.framework.LanSyncManager
 import com.shangmentiyu.sportscoach.data.model.LessonPackage
 import com.shangmentiyu.sportscoach.data.model.Student
 import com.shangmentiyu.sportscoach.domain.usecase.UnsignedOutReminderState
 import org.koin.androidx.compose.koinViewModel
+import org.koin.core.context.GlobalContext
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
+import com.shangmentiyu.sportscoach.ui.theme.AppSegmentedTabs
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
@@ -120,27 +124,17 @@ fun HomeScreen(
                 stringResource(R.string.home_tab_post_class),
                 stringResource(R.string.home_tab_student_list)
             )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    // === 仅水平边距，无垂直 padding，无 Spacer，无 top padding ===
-                    .padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
-            ) {
-                // === 性能优化：抽出独立 HomeTabItem @Composable ===
-                // 原 forEachIndexed 闭包内对 tabIndex 的读取会让整个 Row 在 tabIndex 变化时全量重组。
-                // 抽成独立 @Composable 后，Compose 只会重组 isSelected 状态发生变化的两个 Tab 项
-                // （旧选中 → 新选中），其余 Tab 项保持不动，切换更丝滑。
-                tabLabels.forEachIndexed { index, label ->
-                    HomeTabItem(
-                        label = label,
-                        isSelected = index == tabIndex,
-                        onClick = { tabIndex = index }
-                    )
-                }
-            }
+            // === 顶部分段控件（iOS 风轨道+滑块，theme/SegmentedTabs.kt 统一组件）===
+            AppSegmentedTabs(
+                labels = tabLabels,
+                selectedIndex = tabIndex,
+                onSelect = { tabIndex = it },
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
             // === 警示横幅：胶囊 Tab 下方固定 4dp 间距 ===
             Spacer(Modifier.height(4.dp))
+            // === v23.6：PC 连接状态横幅（自动识别 Wi-Fi/USB，在线时展示，未连接不占位） ===
+            DesktopSyncBanner()
             // === v25 优化1：全局到期预警横幅 ===
             // === 性能优化：只传 expiringPackages 数据，不传 vm，隔离重组范围 ===
             ExpiryBanner(
@@ -155,13 +149,16 @@ fun HomeScreen(
                 onView = onOpenUnsignedOutLessons,
                 onDismiss = { vm.dismissUnsignedOutReminder() }
             )
-            // Crossfade 平滑切换 Tab
+            // === 修复：Tab 切换动画拖沓 ===
+            // 原 220ms Crossfade 会让整页内容先淡出再淡入，体感延迟明显。
+            // 改 80ms 短 fade：保留轻微衔接避免硬切突兀，同时体感接近"瞬切"，
+            // 满足"简单迅速"的诉求。
             // === 性能优化：显式 label 便于 Layout Inspector 定位重组 ===
             // 注：Crossfade 不支持 contentKey（该参数属于 AnimatedContent），
             // Int targetState 本身即稳定类型，Compose 自动按值对比，无需额外 key
             Crossfade(
                 targetState = tabIndex,
-                animationSpec = tween(durationMillis = 220),
+                animationSpec = tween(durationMillis = 80),
                 label = "HomeTabCrossfade"
             ) { index ->
                 when (index) {
@@ -184,55 +181,58 @@ fun HomeScreen(
 }
 
 /**
- * 单个胶囊 Tab 项（独立 @Composable，隔离重组范围）。
+ * === v23.6：PC 连接状态横幅 ===
  *
- * === 性能优化说明 ===
- * 原实现将 Tab 内容直接写在 forEachIndexed 闭包内，导致 tabIndex 变化时
- * 整个 Row 都会进入重组。抽成独立 @Composable 后：
- * - Compose 编译器可识别该函数仅依赖 [label] / [isSelected] / [onClick]
- * - 当 tabIndex 变化时，只有旧选中项 + 新选中项两个 HomeTabItem 重组
- * - 其余 Tab 项因参数未变而跳过重组，Tab 切换更丝滑
+ * 订阅 [LanSyncManager.desktopOnline]（10s 轮询：Wi-Fi 心跳优先，/health 探测兜底，
+ * USB 回环自动识别）。在线时展开一条浅绿细横幅提示「已连接电脑端」；
+ * 未连接时不占任何空间（不干扰正常使用）。
  *
- * 注：使用 RowScope 接收者，使内部可用 Modifier.weight(1f) 实现等分宽度。
- *
- * @param label Tab 文本
- * @param isSelected 是否选中
- * @param onClick 点击回调
+ * 设计要点：
+ * - 自包含：不依赖 HomeViewModel（避免 God 类继续膨胀），直接读 Koin 单例
+ * - 克制：仅在线时出现，无关闭按钮（状态类信息不打断操作）
  */
 @Composable
-private fun RowScope.HomeTabItem(
-    label: String,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    // === 动画优化：Tab 切换颜色用 animateColorAsState 平滑过渡 ===
-    // 原实现硬切换，切换瞬间有闪烁感；200ms tween 让选中/未选中过渡更丝滑
-    val bgColor by androidx.compose.animation.animateColorAsState(
-        targetValue = if (isSelected) appPrimary() else appSurfaceVariant(),
-        animationSpec = androidx.compose.animation.core.tween(durationMillis = 200),
-        label = "tab_bg"
-    )
-    val textColor by androidx.compose.animation.animateColorAsState(
-        targetValue = if (isSelected) Color.White else appOnSurfaceVariant(),
-        animationSpec = androidx.compose.animation.core.tween(durationMillis = 200),
-        label = "tab_text"
-    )
-    Box(
-        modifier = Modifier
-            .weight(1f)
-            .clip(RoundedCornerShape(50))
-            .background(bgColor)
-            .clickable(onClick = onClick)
-            .padding(vertical = 8.dp),
-        contentAlignment = Alignment.Center
+private fun DesktopSyncBanner() {
+    val lanSync = remember { GlobalContext.get().get<LanSyncManager>() }
+    val link by lanSync.desktopOnline.collectAsStateWithLifecycle()
+
+    AnimatedVisibility(
+        visible = link != null,
+        enter = fadeIn(tween(120)) + expandVertically(tween(120)),
+        exit = fadeOut(tween(120)) + shrinkVertically(tween(120))
     ) {
-        Text(
-            text = label,
-            color = textColor,
-            fontSize = 12.sp,
-            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-            maxLines = 1
-        )
+        val current = link ?: return@AnimatedVisibility
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 2.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFFE7F8EF))
+                .padding(horizontal = 12.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(7.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(Color(0xFF34D399))
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                "已连接 ${current.pcName}（${current.host}:${current.port}）",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Medium,
+                color = Color(0xFF15803D),
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+            )
+            Text(
+                if (current.viaUsb) "USB" else "Wi-Fi",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFF15803D).copy(alpha = 0.75f)
+            )
+        }
     }
 }
 

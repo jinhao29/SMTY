@@ -33,8 +33,8 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import com.shangmentiyu.sportscoach.ui.theme.AppTopBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -123,7 +123,7 @@ fun HeightPredictionScreen(
         containerColor = appGroupedBackground(),
         snackbarHost = { FloatingSnackbarHost(snackbarHostState) },
         topBar = {
-            TopAppBar(
+            AppTopBar(
                 title = { Text("身高预测", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -132,7 +132,8 @@ fun HeightPredictionScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = appSurface()
-                )
+                ),
+                shareLabel = "身高预测",
             )
         }
     ) { innerPadding ->

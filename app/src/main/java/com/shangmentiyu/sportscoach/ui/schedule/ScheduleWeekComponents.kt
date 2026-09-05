@@ -216,7 +216,7 @@ internal fun DaySelector(
  * @param onClick 点击回调
  */
 @Composable
-private fun WeekShiftButton(
+internal fun WeekShiftButton(
     text: String,
     icon: ImageVector,
     onClick: () -> Unit
@@ -256,7 +256,7 @@ private fun WeekShiftButton(
  * @param onClick 点击回调，调用 OperationViewModel.resetToThisWeek
  */
 @Composable
-private fun TodayButton(onClick: () -> Unit) {
+internal fun TodayButton(onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(8.dp))

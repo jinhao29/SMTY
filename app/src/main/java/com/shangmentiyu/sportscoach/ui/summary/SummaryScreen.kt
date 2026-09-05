@@ -48,7 +48,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import com.shangmentiyu.sportscoach.ui.theme.AppTopBar
 import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -124,9 +124,10 @@ fun SummaryScreen(
     Scaffold(
         containerColor = appGroupedBackground(),
         topBar = {
-            TopAppBar(
+            AppTopBar(
                 title = { Text("课后小结") },
                 colors = glassTopAppBarColors(),
+                shareLabel = "课后小结",
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")

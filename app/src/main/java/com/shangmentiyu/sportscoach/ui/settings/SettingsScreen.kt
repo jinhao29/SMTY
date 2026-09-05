@@ -55,9 +55,10 @@ import org.koin.androidx.compose.koinViewModel
  * 结构：本文件仅保留状态管理（SAF 文件选择器）+ 导航 + 组装，
  * 各功能区块拆分为独立 @Composable：
  * - [ProfileSection]：外观 / 教练设置 / 统计信息
+ * - [ToolsSection]：工具 / 教练管理 / 家长沟通（紧跟统计信息）
  * - [LessonManageSection]：数据同步（导出/导入/修正排课/清理课表）
  * - [DataManageSection]：备份恢复 / 存储空间
- * - [AboutSection]：缓存 / 更新 / 工具 / 家长沟通 / 关于
+ * - [AboutSection]：更新 / 关于
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -206,21 +207,29 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(Spacing.lg)
             ) {
-                // 【首要元素】"设置"大标题：紧贴状态栏，前面绝无 Spacer，也无 padding(top)
+                // 【首要元素】"设置"大标题：紧贴状态栏。
+                // 美化（v51）：displayMedium(45sp)+Bold 视觉过于厚重突兀，
+                // 改 headlineLarge(32sp)+SemiBold 更柔和，跟 Material 3 Large Title 节奏一致。
                 Text(
                     text = "设置",
                     modifier = Modifier.padding(horizontal = Spacing.screenH),
-                    style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.SemiBold),
                     color = appOnSurface()
                 )
+                Spacer(Modifier.height(4.dp))
+                // 副标题：改用 bodyMedium 主题 typography（替代裸 fontSize=14.sp），
+                // letterSpacing 微调让"·"分隔的节奏更舒展。
                 Text(
                     text = "教练信息 · 外观 · 数据同步 · 关于",
                     modifier = Modifier.padding(horizontal = Spacing.screenH),
-                    fontSize = 14.sp,
+                    style = MaterialTheme.typography.bodyMedium.copy(letterSpacing = 0.3.sp),
                     color = appOnSurfaceVariant()
                 )
 
                 ProfileSection(vm)
+
+                // 工具 / 教练管理 / 家长沟通（紧随"统计信息"下方）
+                ToolsSection(onNavigate)
 
                 // 分组 3：数据同步（iOS Settings 风格列表项）
                 LessonManageSection(
@@ -240,10 +249,13 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
                     onRequestRestore = { restoreFileLauncher.launch(arrayOf("*/*")) }
                 )
 
+                // 分组 4.5：桌面同步（双端互通：推送备份到 PC + 拉取 PC 学员数据）
+                DesktopSyncSection(vm)
+
                 StorageSection(vm)
                 CacheSection(vm)
 
-                // 分组 5：更新 / 工具 / 家长沟通 / 关于
+                // 分组 5：应用更新 + 关于（工具/教练管理/家长沟通 已迁到 ToolsSection）
                 AboutSection(vm, onNavigate)
 
                 // === 底部避让：140dp 防止悬浮导航胶囊遮挡最后一项 ===

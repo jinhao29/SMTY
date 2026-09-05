@@ -21,19 +21,27 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -48,6 +56,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -55,7 +65,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.shangmentiyu.sportscoach.data.db.AppDatabase
@@ -68,12 +80,17 @@ import com.shangmentiyu.sportscoach.ui.schedule.ScheduleEditDialog
 import com.shangmentiyu.sportscoach.ui.theme.PrimaryButton
 import com.shangmentiyu.sportscoach.ui.theme.ScheduleListSkeleton
 import com.shangmentiyu.sportscoach.ui.theme.SecondaryButton
+import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
+import com.shangmentiyu.sportscoach.ui.theme.LightSecondary
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appBackground
+import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 import com.shangmentiyu.sportscoach.ui.theme.appPrimaryContainer
+import com.shangmentiyu.sportscoach.ui.theme.appSurface
+import com.shangmentiyu.sportscoach.ui.theme.appSurfaceVariant
 
 /**
  * 课前准备 Tab：展示选定日期的排课时间线。
@@ -665,17 +682,37 @@ private fun RecentSchedulesDialogContent(
 // - ZoomableImageDialog（全屏可缩放图片查看器）
 // 拆分目的：切断重绘传播，主文件重组时卡片可被 Compose 编译器跳过
 
+// ============================================================
+// === v55：全部历史归档对话框（视觉升级） ===
+// 与主页 `TodayOverviewHeader` + `FloatingStatCard` 视觉语言一致：
+// 珊瑚橙渐变头部 + 三个白色悬浮统计卡 + iOS Inset Grouped 卡片，
+// 加入年份筛选 + 月份分组，让上千条归档数据仍可快速定位。
+// ============================================================
+
 /**
- * === v28 优化1：历史归档课时列表对话框 ===
+ * v55 月份段条目：(header key, 全部条数, 可见列表)。
+ * 提取到顶层避免在 @Composable 函数内定义本地类带来的潜在稳定性问题。
+ */
+private data class MonthSection(
+    val key: String,
+    val totalCount: Int,
+    val visible: List<com.shangmentiyu.sportscoach.data.model.ArchivedLesson>
+)
+
+/**
+ * === v55：历史归档课时列表对话框（升级） ===
  *
- * 全屏展示全部归档课时（archived_lessons 表），按日期降序、时间降序。
- * 与热数据 lessons 表查询分离，仅在用户主动打开时加载，不影响日常列表性能。
+ * 全屏展示全部归档课时（archived_lessons 表）。
  *
- * 设计原则：
- * - 数据量大时仅显示前 500 条 + 顶部统计（避免一次性渲染数千条导致 OOM）
- * - 卡片样式与 [PreClassScheduleCard] 保持一致，确保视觉统一
+ * 视觉层级（与首页今日概览/设置页保持同一套设计语言）：
+ * 1. iOS Large Title 顶部栏（小标题 + 大标题 + 关闭按钮）
+ * 2. 珊瑚橙渐变统计头部（总条数 / 学员数 / 时间跨度）
+ * 3. 年份筛选 chip 行（"全部 N" + 各年份）
+ * 4. 按月份分组 LazyColumn（"YYYY年M月 · X 条"小标题 + 行式卡片）
  *
- * @param lessons 归档课时列表
+ * 性能：仍仅渲染前 500 条 + 底部提示，避免一次性绘制大量卡片 OOM。
+ *
+ * @param lessons 归档课时列表（已按日期降序）
  * @param loading 是否正在加载
  * @param onDismiss 关闭回调
  */
@@ -694,89 +731,200 @@ private fun ArchivedLessonsDialog(
                 .fillMaxSize()
                 .background(appBackground())
         ) {
-            // 顶部栏：标题 + 关闭按钮 + 统计
+            // 顶部栏：iOS Large Title（小标 + 大标 + 关闭）
+            ArchivedDialogTopBar(
+                totalCount = lessons.size,
+                onDismiss = onDismiss
+            )
+
+            when {
+                loading -> ArchivedLoadingState(modifier = Modifier.weight(1f))
+                lessons.isEmpty() -> ArchivedEmptyState(modifier = Modifier.weight(1f))
+                else -> ArchivedLessonsBody(
+                    lessons = lessons,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * v55 顶部栏：左侧两层（small label + large title），右侧关闭按钮。
+ * 视觉对标 iOS Settings 大标题：上方一行小灰色"历史归档"，下方一行 22sp Bold 大标题。
+ */
+@Composable
+private fun ArchivedDialogTopBar(
+    totalCount: Int,
+    onDismiss: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                start = Spacing.screenH,
+                top = Spacing.md,
+                bottom = Spacing.sm,
+                end = Spacing.xs
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                "历史归档",
+                style = MaterialTheme.typography.labelMedium,
+                color = appOnSurfaceVariant(),
+                fontWeight = FontWeight.Medium
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                "全部归档课时",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = appOnSurface()
+            )
+            if (totalCount > 0) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    "一年前自动归档，共 $totalCount 条记录",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = appOnSurfaceVariant()
+                )
+            }
+        }
+        // 关闭按钮：圆形浅灰背景，与首页胶囊按钮风格统一
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(appSurfaceVariant())
+                .clickable(onClick = onDismiss),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Outlined.Close,
+                contentDescription = "关闭",
+                tint = appOnSurface(),
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+/**
+ * v55 加载中状态：居中 spinner + 文案，垂直/水平双居中。
+ */
+@Composable
+private fun ArchivedLoadingState(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            CircularProgressIndicator(
+                color = appPrimary(),
+                modifier = Modifier.size(40.dp)
+            )
+            Spacer(Modifier.height(Spacing.md))
+            Text(
+                "正在加载归档数据…",
+                style = MaterialTheme.typography.bodyMedium,
+                color = appOnSurfaceVariant()
+            )
+        }
+    }
+}
+
+/**
+ * v55 空状态：渐变圆形图标 + 主标题 + 副标题 + 自动归档规则说明卡。
+ * 比 v28 单时钟图标+两行字的版本更具「这个页面已完成」感。
+ */
+@Composable
+private fun ArchivedEmptyState(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.xl),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // 大圆形 + 珊瑚橙径向渐变背景 + Inventory2 仓储图标
+        Box(
+            modifier = Modifier
+                .size(124.dp)
+                .clip(CircleShape)
+                .background(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            appPrimary().copy(alpha = 0.22f),
+                            appPrimary().copy(alpha = 0.04f)
+                        )
+                    )
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Inventory2,
+                contentDescription = null,
+                tint = appPrimary(),
+                modifier = Modifier.size(54.dp)
+            )
+        }
+
+        Spacer(Modifier.height(Spacing.xl))
+
+        Text(
+            "暂无归档课时",
+            color = appOnSurface(),
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(Modifier.height(Spacing.sm))
+        Text(
+            "一年前的旧课时会自动归档到这里",
+            color = appOnSurfaceVariant(),
+            fontSize = 14.sp,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(Modifier.height(Spacing.xl))
+
+        // 自动归档规则小卡：iOS Inset Grouped 风格，与设置页一致
+        IosCard(modifier = Modifier.fillMaxWidth()) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(Spacing.md),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                modifier = Modifier.padding(Spacing.md),
+                verticalAlignment = Alignment.Top
             ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(appPrimaryContainer()),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Outlined.AutoAwesome,
+                        contentDescription = null,
+                        tint = appPrimary(),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(Modifier.width(Spacing.md))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "全部历史归档",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
+                        "自动归档规则",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = appOnSurface()
                     )
+                    Spacer(Modifier.height(4.dp))
                     Text(
-                        "共 ${lessons.size} 条已归档课时（一年前）",
-                        style = MaterialTheme.typography.labelSmall,
+                        "当主表课时数超过 2000 条且存在 365 天前的旧记录时，" +
+                            "App 会在启动时自动迁移到归档表，无需手动操作。",
+                        style = MaterialTheme.typography.bodySmall,
                         color = appOnSurfaceVariant()
                     )
-                }
-                IconButton(onClick = onDismiss) {
-                    Icon(Icons.Outlined.Close, contentDescription = "关闭")
-                }
-            }
-
-            if (loading) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        androidx.compose.material3.CircularProgressIndicator(
-                            color = appPrimary()
-                        )
-                        Spacer(Modifier.height(Spacing.sm))
-                        Text("正在加载归档数据...", color = appOnSurfaceVariant())
-                    }
-                }
-            } else if (lessons.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Outlined.Schedule,
-                            contentDescription = null,
-                            tint = appOnSurfaceVariant(),
-                            modifier = Modifier.size(48.dp)
-                        )
-                        Spacer(Modifier.height(Spacing.sm))
-                        Text("暂无归档课时", color = appOnSurfaceVariant())
-                        Text(
-                            "数据量超过 2000 条且存在一年以上旧记录时会自动归档",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = appOnSurfaceVariant()
-                        )
-                    }
-                }
-            } else {
-                // 仅显示前 500 条避免一次性渲染过多导致 OOM
-                val displayList = remember(lessons) { if (lessons.size > 500) lessons.take(500) else lessons }
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(horizontal = Spacing.md),
-                    verticalArrangement = Arrangement.spacedBy(Spacing.sm)
-                ) {
-                    items(displayList, key = { it.id }) { lesson ->
-                        ArchivedLessonCard(lesson = lesson)
-                    }
-                    if (lessons.size > 500) {
-                        item {
-                            IosCard {
-                                Box(
-                                    modifier = Modifier.fillMaxWidth().padding(Spacing.md),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        "仅显示前 500 条，共 ${lessons.size} 条归档记录",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = appOnSurfaceVariant()
-                                    )
-                                }
-                            }
-                        }
-                    }
                 }
             }
         }
@@ -784,62 +932,554 @@ private fun ArchivedLessonsDialog(
 }
 
 /**
- * 单条归档课时卡片：展示学员、日期、时间、内容、教练寄语等关键信息。
+ * v55 数据态主体：渐变统计头 + 年份筛选 + 按月分组的 LazyColumn。
  */
 @Composable
-private fun ArchivedLessonCard(lesson: com.shangmentiyu.sportscoach.data.model.ArchivedLesson) {
-    IosCard {
-        Column(modifier = Modifier.padding(Spacing.md)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    Icons.Outlined.Schedule,
-                    contentDescription = null,
-                    tint = appPrimary(),
-                    modifier = Modifier.padding(end = 8.dp).size(16.dp)
+private fun ArchivedLessonsBody(
+    lessons: List<com.shangmentiyu.sportscoach.data.model.ArchivedLesson>,
+    modifier: Modifier = Modifier
+) {
+    // 年份筛选（null = 全部）
+    var selectedYear by remember { mutableStateOf<Int?>(null) }
+
+    // 按年份聚合（用于 chip 角标）
+    val yearCounts = remember(lessons) {
+        lessons.groupBy { it.date.substring(0, 4) }
+            .mapValues { it.value.size }
+    }
+    val availableYears = remember(yearCounts) {
+        yearCounts.keys.map { it.toInt() }.sortedDescending()
+    }
+
+    // 应用筛选后的列表
+    val filtered = remember(lessons, selectedYear) {
+        if (selectedYear == null) lessons
+        else lessons.filter { it.date.startsWith("${selectedYear}-") }
+    }
+
+    // 按月份分组（YYYY-MM 降序）
+    val grouped = remember(filtered) {
+        filtered.groupBy { it.date.substring(0, 7) }
+            .toList()
+            .sortedByDescending { it.first }
+    }
+
+    // 汇总统计：覆盖学员数、最早日期、最晚日期
+    val studentCount = remember(filtered) { filtered.map { it.studentName }.distinct().size }
+    val earliestDate = remember(filtered) { filtered.minOfOrNull { it.date } ?: "—" }
+    val latestDate = remember(filtered) { filtered.maxOfOrNull { it.date } ?: "—" }
+
+    // 月份段列表渲染用：仅显示前 500 条，OOM 防护。
+    val displayCap = 500
+    val monthSections = remember(grouped, displayCap) {
+        val result = ArrayList<MonthSection>(grouped.size)
+        var emitted = 0
+        for ((monthKey, monthLessons) in grouped) {
+            if (emitted >= displayCap) break
+            val remaining = displayCap - emitted
+            val visible =
+                if (monthLessons.size > remaining) monthLessons.take(remaining) else monthLessons
+            result.add(MonthSection(monthKey, monthLessons.size, visible))
+            emitted += visible.size
+        }
+        result
+    }
+    val truncateNoticeVisible = filtered.size > displayCap
+
+    Column(modifier = modifier.fillMaxSize()) {
+        // 1. 珊瑚橙渐变统计头部
+        ArchivedOverviewHeader(
+            filteredCount = filtered.size,
+            totalCount = lessons.size,
+            studentCount = studentCount,
+            earliestDate = earliestDate,
+            latestDate = latestDate
+        )
+
+        Spacer(Modifier.height(Spacing.md))
+
+        // 2. 年份 chip 筛选（仅在有多年份时显示）
+        if (availableYears.isNotEmpty() && availableYears.size > 1) {
+            YearFilterChips(
+                totalCount = lessons.size,
+                years = availableYears,
+                yearCounts = yearCounts,
+                selectedYear = selectedYear,
+                onSelect = { selectedYear = it }
+            )
+            Spacer(Modifier.height(Spacing.sm))
+        }
+
+        // 3. 月度分组列表
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                start = Spacing.screenH,
+                end = Spacing.screenH,
+                top = Spacing.xs,
+                bottom = Spacing.xl
+            ),
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+        ) {
+            monthSections.forEach { section ->
+                item(key = "month_header_${section.key}") {
+                    MonthSectionHeader(monthKey = section.key, count = section.totalCount)
+                }
+                items(section.visible, key = { it.id }) { lesson ->
+                    ArchivedLessonRow(lesson = lesson)
+                }
+            }
+            if (truncateNoticeVisible) {
+                item(key = "truncate_notice") {
+                    ArchivedTruncateNotice(
+                        shown = displayCap.coerceAtMost(filtered.size),
+                        total = filtered.size
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * v55 渐变统计头部：复用 `TodayOverviewHeader` 的珊瑚橙径向视觉，
+ * 但展示归档专属 KPI（条数 / 覆盖学员数 / 时间跨度）。
+ */
+@Composable
+private fun ArchivedOverviewHeader(
+    filteredCount: Int,
+    totalCount: Int,
+    studentCount: Int,
+    earliestDate: String,
+    latestDate: String
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.screenH)
+            .shadow(
+                elevation = 8.dp,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                ambientColor = appPrimary().copy(alpha = 0.10f),
+                spotColor = appPrimary().copy(alpha = 0.18f)
+            )
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(24.dp))
+            .background(
+                brush = Brush.horizontalGradient(
+                    colors = listOf(LightPrimary, LightSecondary)
+                )
+            )
+            .padding(horizontal = 22.dp, vertical = 22.dp)
+    ) {
+        Column {
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    text = if (filteredCount == totalCount) "已归档 "
+                    else "当前显示 ",
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium
                 )
                 Text(
-                    "${lesson.date} ${lesson.time}",
-                    style = MaterialTheme.typography.titleSmall,
+                    text = "$filteredCount",
+                    color = Color.White,
+                    fontSize = 34.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.2.sp,
+                    lineHeight = 38.sp
+                )
+                Text(
+                    text = " 节课时",
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            // 三栏 KPI 行：覆盖学员 / 时间跨度 / 归档规则
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.md)
+            ) {
+                ArchivedHeaderKpi(
+                    icon = Icons.Outlined.Person,
+                    top = "$studentCount",
+                    bottom = "位学员"
+                )
+                ArchivedHeaderKpi(
+                    icon = Icons.Outlined.CalendarMonth,
+                    top = earliestDate.takeLast(5) + " ~ " + latestDate.takeLast(5),
+                    bottom = "起止日期"
+                )
+                ArchivedHeaderKpi(
+                    icon = Icons.Outlined.History,
+                    top = if (earliestDate != "—") earliestDate.substring(0, 4) else "—",
+                    bottom = "最早一年"
+                )
+            }
+        }
+    }
+}
+
+/**
+ * v55 渐变头中的单项 KPI：图标 + 大数字 + 小标签，纵向排布。
+ * 文字纯白，与珊瑚橙背景形成强对比。
+ */
+@Composable
+private fun ArchivedHeaderKpi(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    top: String,
+    bottom: String
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.22f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(15.dp)
+            )
+        }
+        Spacer(Modifier.width(6.dp))
+        Column {
+            Text(
+                top,
+                color = Color.White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
+            )
+            Text(
+                bottom,
+                color = Color.White.copy(alpha = 0.85f),
+                fontSize = 10.sp,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+/**
+ * v55 年份 chip 行：横向滚动 chips，"全部 N" 永远在最左侧。
+ *
+ * 选中态：珊瑚橙填充 + 白字 + 阴影；
+ * 未选中：纯白卡片底 + 次级文字。
+ * 让上千条数据可按年快速切换上下文。
+ */
+@Composable
+private fun YearFilterChips(
+    totalCount: Int,
+    years: List<Int>,
+    yearCounts: Map<String, Int>,
+    selectedYear: Int?,
+    onSelect: (Int?) -> Unit
+) {
+    androidx.compose.foundation.lazy.LazyRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = Spacing.screenH)
+    ) {
+        item(key = "chip_all") {
+            YearChip(
+                label = "全部",
+                count = totalCount,
+                selected = selectedYear == null,
+                onClick = { onSelect(null) }
+            )
+        }
+        items(years, key = { "chip_$it" }) { y ->
+            YearChip(
+                label = "$y",
+                count = yearCounts["$y"] ?: 0,
+                selected = selectedYear == y,
+                onClick = { onSelect(y) }
+            )
+        }
+    }
+}
+
+/**
+ * 单个年份 chip：胶囊形，20dp 圆角。
+ */
+@Composable
+private fun YearChip(label: String, count: Int, selected: Boolean, onClick: () -> Unit) {
+    val bg = if (selected) appPrimary() else appSurface()
+    val fg = if (selected) Color.White else appOnSurface()
+    val secondaryFg = if (selected) Color.White.copy(alpha = 0.85f) else appOnSurfaceVariant()
+
+    Box(
+        modifier = Modifier
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
+            .then(
+                if (selected) Modifier.shadow(
+                    elevation = 4.dp,
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+                    ambientColor = appPrimary().copy(alpha = 0.20f),
+                    spotColor = appPrimary().copy(alpha = 0.30f)
+                ) else Modifier
+            )
+            .background(bg)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                label,
+                color = fg,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                "·",
+                color = secondaryFg,
+                fontSize = 13.sp
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                if (count >= 1000) String.format("%.1fk", count / 1000.0) else "$count",
+                color = secondaryFg,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+/**
+ * v55 月度分组小标题：与设置页 IosSectionHeader 风格一致。
+ * "2025年8月" 珊瑚橙 + "X 条归档" 灰色副标签。
+ */
+@Composable
+private fun MonthSectionHeader(monthKey: String, count: Int) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = Spacing.md, bottom = Spacing.xs, start = Spacing.xs),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = formatMonthKey(monthKey),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = appPrimary()
+        )
+        Spacer(Modifier.width(Spacing.sm))
+        Text(
+            text = "· ${formatCount(count)} 条归档",
+            style = MaterialTheme.typography.labelSmall,
+            color = appOnSurfaceVariant()
+        )
+        Spacer(Modifier.weight(1f))
+        // 极细分隔线，营造 iOS Mail 风格分组感
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(0.5.dp)
+                .background(appDividerColor())
+        )
+    }
+}
+
+/**
+ * v55 月份键格式化："2024-08" → "2024年8月"。
+ */
+private fun formatMonthKey(key: String): String {
+    val parts = key.split("-")
+    return if (parts.size == 2) "${parts[0]}年${parts[1].toInt()}月" else key
+}
+
+/**
+ * v55 数字格式化：1k+ 显示 k，否则原样。
+ */
+private fun formatCount(c: Int): String =
+    if (c >= 1000) String.format("%.1fk", c / 1000.0) else "$c"
+
+/**
+ * v55 单条归档行：左侧圆形头像（首字符 + 哈希配色）+ 中间学员/日期 + 右侧时间 + 状态。
+ * 视觉密度比 v28 IosCard 高，但仍保持克制。
+ */
+@Composable
+private fun ArchivedLessonRow(lesson: com.shangmentiyu.sportscoach.data.model.ArchivedLesson) {
+    IosCard(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.padding(
+                horizontal = Spacing.md,
+                vertical = Spacing.md
+            ),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 左侧：头像（首字符 + 项目统一调色板 hash）
+            AvatarCircle(name = lesson.studentName)
+
+            Spacer(Modifier.width(Spacing.md))
+
+            // 中间：姓名（粗体）+ 元数据行
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = lesson.studentName.ifBlank { "未知学员" },
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = appOnSurface(),
+                        maxLines = 1
+                    )
+                    Spacer(Modifier.width(Spacing.sm))
+                    ArchivedStatusPill(status = lesson.status)
+                }
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Outlined.CalendarMonth,
+                        contentDescription = null,
+                        tint = appOnSurfaceVariant(),
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = lesson.date,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = appOnSurfaceVariant()
+                    )
+                    if (lesson.lessonType.isNotBlank()) {
+                        Spacer(Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(2.dp)
+                                .clip(CircleShape)
+                                .background(appDividerColor())
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = lesson.lessonType,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = appOnSurfaceVariant(),
+                            maxLines = 1
+                        )
+                    }
+                }
+                // 内容预览（仅在有内容时显示，最多 2 行）
+                if (lesson.content.isNotBlank()) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = lesson.content,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = appOnSurfaceVariant(),
+                        maxLines = 2
+                    )
+                }
+            }
+
+            Spacer(Modifier.width(Spacing.sm))
+
+            // 右侧：时间块（大字 + AM/PM 小字）
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = lesson.time.takeIf { it.isNotBlank() } ?: "—",
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = appPrimary()
                 )
-                Spacer(Modifier.weight(1f))
-                // 归档时间标签
-                Text(
-                    "已归档",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = appOnSurfaceVariant(),
-                    modifier = Modifier
-                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
-                        .background(appOnSurfaceVariant().copy(alpha = 0.1f))
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                )
+                if (lesson.duration > 0) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = "${lesson.duration} 分钟",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = appOnSurfaceVariant()
+                    )
+                }
             }
-            Spacer(Modifier.height(4.dp))
-            Text(
-                lesson.studentName,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium
+        }
+    }
+}
+
+/**
+ * v55 学员头像圆形：复用首页 `avatarColorFor` 的配色策略，按首字符 hash 分配。
+ * 显示学员名字首字符（在字符串非空时），点击空字符串也不崩。
+ */
+@Composable
+private fun AvatarCircle(name: String) {
+    val bg = avatarColorFor(name)
+    val initial = name.trim().firstOrNull()?.toString() ?: "·"
+
+    Box(
+        modifier = Modifier
+            .size(42.dp)
+            .clip(CircleShape)
+            .background(bg),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = initial,
+            color = Color.White,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+/**
+ * v55 状态胶囊：复用首页 `ScoreExcellent/Pass/Fail` 风格。
+ * "已签退" 浅绿、"已签到" 浅蓝、"待签到" 浅橙。
+ */
+@Composable
+private fun ArchivedStatusPill(status: String) {
+    val (bg, fg) = when (status) {
+        "已签退" -> Color(0xFFE8F5E9) to Color(0xFF2E7D32)
+        "已签到" -> Color(0xFFE3F2FD) to Color(0xFF1565C0)
+        "待签到" -> Color(0xFFFFF3E0) to Color(0xFFE65100)
+        else -> appSurfaceVariant() to appOnSurfaceVariant()
+    }
+    Box(
+        modifier = Modifier
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+            .background(bg)
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+    ) {
+        Text(
+            status,
+            color = fg,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
+/**
+ * v55 仅显示前 500 条的提示卡：放在 LazyColumn 底部，与 IosCard 同款。
+ */
+@Composable
+private fun ArchivedTruncateNotice(shown: Int, total: Int) {
+    IosCard(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Spacing.md),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                Icons.Outlined.Tune,
+                contentDescription = null,
+                tint = appOnSurfaceVariant(),
+                modifier = Modifier.size(16.dp)
             )
-            if (lesson.content.isNotBlank()) {
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "内容：${lesson.content.take(80)}${if (lesson.content.length > 80) "..." else ""}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = appOnSurfaceVariant()
-                )
-            }
-            if (lesson.coachComment.isNotBlank()) {
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "寄语：${lesson.coachComment.take(80)}${if (lesson.coachComment.length > 80) "..." else ""}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = appOnSurfaceVariant()
-                )
-            }
+            Spacer(Modifier.width(Spacing.sm))
+            Text(
+                "仅显示前 $shown 条，共 $total 条，可按年份筛选缩小范围",
+                style = MaterialTheme.typography.labelSmall,
+                color = appOnSurfaceVariant()
+            )
         }
     }
 }

@@ -31,49 +31,44 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
+import com.shangmentiyu.sportscoach.ui.sportcategory.SportCategoryContent
+import com.shangmentiyu.sportscoach.ui.theme.AppSegmentedTabs
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 import com.shangmentiyu.sportscoach.ui.theme.appSurfaceVariant
 
 /**
- * 成绩查看页：底部导航主入口，整合"录入成绩"与"查看成绩"两个 Tab。
+ * 成绩查看页：底部导航主入口，整合"录入成绩" / "查看成绩" / "中考体育"三个 Tab。
  *
  * 设计要点：
- * - 顶部为胶囊按钮 Tab（与主页 HomeTabItem 完全一致：选中珊瑚橙 #FF6B47 白字 / 未选中浅灰 #F0F0F0 深灰 #6B6B6B 文字，无下划线）
+ * - 顶部为分段控件 Tab（theme/SegmentedTabs.kt 的 AppSegmentedTabs，与主页共用同一组件）
  * - 默认展示"查看成绩"Tab（tabIndex = 1）
- * - Tab 内容分别由 ScoreInputTab / ScoreViewTab 承载
+ * - "中考体育"Tab 复用 [SportCategoryContent] 分类网格，点击项目跳转标准详情
+ * - Tab 内容分别由 ScoreInputTab / ScoreViewTab / SportCategoryContent 承载
  *
  * @param onBack 返回回调（底部 Tab 页通常为 null）
  * @param onOpenLesson 打开课时详情回调
  * @param onEditScore 编辑已有成绩回调，参数为课时 ID（跳转 ScoringScreen 加载已有成绩）
+ * @param onOpenSportDetail 打开中考体育项目标准详情回调，参数为项目 ID
  */
 @Composable
 fun ScoreScreen(
     onBack: (() -> Unit)? = null,
     onOpenLesson: (String) -> Unit,
-    onEditScore: (String) -> Unit = {}
+    onEditScore: (String) -> Unit = {},
+    onOpenSportDetail: (String) -> Unit = {}
 ) {
     var tabIndex by remember { mutableStateOf(1) } // 默认"查看成绩"
 
     Scaffold(contentWindowInsets = WindowInsets(0)) {
         Box(modifier = Modifier.fillMaxSize()) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // === 顶部胶囊 Tab 栏（替代原 PrimaryTabRow，彻底移除紫色实线下划线）===
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                ScoreTabItem(
-                    label = "录入成绩",
-                    selected = tabIndex == 0,
-                    onClick = { tabIndex = 0 }
+                // === 顶部分段控件（iOS 风轨道+滑块，theme/SegmentedTabs.kt 统一组件）===
+                AppSegmentedTabs(
+                    labels = listOf("录入成绩", "查看成绩", "中考体育"),
+                    selectedIndex = tabIndex,
+                    onSelect = { tabIndex = it },
+                    modifier = Modifier.padding(horizontal = 16.dp)
                 )
-                ScoreTabItem(
-                    label = "查看成绩",
-                    selected = tabIndex == 1,
-                    onClick = { tabIndex = 1 }
-                )
-                }
                 Crossfade(
                     targetState = tabIndex,
                     animationSpec = tween(durationMillis = 220),
@@ -82,52 +77,11 @@ fun ScoreScreen(
                     when (index) {
                         0 -> ScoreInputTab()
                         1 -> ScoreViewTab(onEditScore = onEditScore)
+                        else -> SportCategoryContent(onItemClick = onOpenSportDetail)
                     }
                 }
             }
         }
-    }
-}
-
-/**
- * 单个胶囊 Tab 项：与主页 HomeTabItem 视觉完全一致（独立 @Composable，隔离重组范围）。
- *
- * - 选中：珊瑚橙 #FF6B47（appPrimary）背景 + 纯白 #FFFFFF 文字
- * - 未选中：浅灰 #F0F0F0 背景 + 深灰 #6B6B6B 文字
- * - 全圆角胶囊 RoundedCornerShape(50)，选中/未选中 200ms 颜色平滑过渡
- */
-@Composable
-private fun RowScope.ScoreTabItem(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    val bgColor by animateColorAsState(
-        targetValue = if (selected) appPrimary() else appSurfaceVariant(),
-        animationSpec = tween(durationMillis = 200),
-        label = "score_tab_bg"
-    )
-    val textColor by animateColorAsState(
-        targetValue = if (selected) Color.White else appOnSurfaceVariant(),
-        animationSpec = tween(durationMillis = 200),
-        label = "score_tab_text"
-    )
-    Box(
-        modifier = Modifier
-            .weight(1f)
-            .clip(RoundedCornerShape(50))
-            .background(bgColor)
-            .clickable(onClick = onClick)
-            .padding(vertical = 8.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = label,
-            color = textColor,
-            fontSize = 12.sp,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-            maxLines = 1
-        )
     }
 }
 

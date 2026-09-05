@@ -51,9 +51,11 @@ fun <T> StyledDropdown(
     onSelected: (T) -> Unit,
     modifier: Modifier = Modifier,
     placeholder: String = "请选择",
+    // 数据源为空时收起态显示的占位文案（如"暂无教练"）
+    emptyText: String = "暂无数据",
     // === v52 闪退加固：数据源为空时自动禁用 ===
     // options 为空（如 Room Flow 首帧未到达 / 学员列表为空 / 无历史记忆）时，
-    // 点击不再展开空菜单，显示 placeholder 占位文字，绝不允许访问 items[0] 等越界行为。
+    // 点击不再展开空菜单，显示 emptyText 占位文字，绝不允许访问 items[0] 等越界行为。
     enabled: Boolean = options.isNotEmpty()
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -86,7 +88,11 @@ fun <T> StyledDropdown(
             )
             Spacer(Modifier.width(8.dp))
             Text(
-                text = if (selected != null) optionLabel(selected) else placeholder,
+                text = when {
+                    selected != null -> optionLabel(selected)
+                    options.isEmpty() -> emptyText
+                    else -> placeholder
+                },
                 color = if (selected != null) MaterialTheme.colorScheme.onSurface else unselectedGray,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,

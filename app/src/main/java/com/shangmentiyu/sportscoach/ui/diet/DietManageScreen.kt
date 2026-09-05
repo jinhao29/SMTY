@@ -45,7 +45,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -88,6 +87,7 @@ import com.shangmentiyu.sportscoach.ui.theme.appWarningContainer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.LocalContentColor
+import com.shangmentiyu.sportscoach.ui.theme.AppTopBar
 
 /**
  * 学员饮食管理页面（3+2 饮食法）。
@@ -158,7 +158,7 @@ fun DietManageScreen(
         containerColor = appGroupedBackground(),
         snackbarHost = { FloatingSnackbarHost(snackbarHostState) },
         topBar = {
-            TopAppBar(
+            AppTopBar(
                 title = { Text("饮食管理", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -167,7 +167,8 @@ fun DietManageScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = appSurface()
-                )
+                ),
+                shareLabel = "饮食管理",
             )
         }
     ) { innerPadding ->
