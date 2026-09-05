@@ -395,7 +395,10 @@ object ExcelSync {
                     val headerRow = sheet.getRow(0) ?: continue
                     // 构建列索引映射：列名 -> 列号
                     val colMap = buildColumnMapping(headerRow)
-                    if (colMap.isEmpty()) continue  // 没有可识别的表头
+                    if (colMap.isEmpty()) {
+                        android.util.Log.w("ExcelSync", "sheet[$sheetName] 表头无可识别列")
+                        continue  // 没有可识别的表头
+                    }
 
                     // 从第 2 行开始读取学员数据
                     val lastRow = sheet.lastRowNum
@@ -406,9 +409,11 @@ object ExcelSync {
                     }
                 }
             } catch (e: Exception) {
-                // 跳过无法解析的文件
+                // 跳过无法解析的文件（v23.6.1：留日志便于诊断整包解析失败）
+                android.util.Log.e("ExcelSync", "解析学员表失败（整包丢弃）", e)
             }
         }
+        android.util.Log.i("ExcelSync", "表格式导入解析完成：${students.size} 名学员")
         return students
     }
 
@@ -457,6 +462,9 @@ object ExcelSync {
                 // 备注
                 headerText.contains("备") || headerText.contains("注") || lowerHeader.contains("remark") ->
                     if (mapping["note"] == null) mapping["note"] = colIdx
+                // 数据更新时间（v23 双端同步 LWW 判新；PC 端毫秒时间戳列）
+                headerText.contains("更新") || lowerHeader.contains("updated") ->
+                    if (mapping["updated_at"] == null) mapping["updated_at"] = colIdx
             }
         }
         return mapping
@@ -477,32 +485,27 @@ object ExcelSync {
         fileIdx: Int,
         rowIdx: Int
     ): Student? {
-        // 姓名：必须存在且非空，否则跳过该行
+        // 姓名：必须存在且非空，否则跳过该行（v23.6.1：数字型单元格容错，防整行异常）
         val nameCol = colMap["name"] ?: return null
-        val nameCell = row.getCell(nameCol)
-        val name = nameCell?.stringCellValue?.trim() ?: ""
+        val name = getStringCell(row, nameCol)
         if (name.isBlank()) return null
 
         // 性别：默认"男"
         val gender = colMap["gender"]?.let { col ->
-            row.getCell(col)?.stringCellValue?.trim()?.ifBlank { "男" } ?: "男"
+            getStringCell(row, col).ifBlank { "男" }
         } ?: "男"
 
         // 年级：从字符串提取数字（支持"高一"、"7年级"、"3"等），默认"1"
         val grade = colMap["grade"]?.let { col ->
-            val raw = row.getCell(col)?.stringCellValue?.trim() ?: ""
-            parseGradeFromString(raw)
+            parseGradeFromString(getStringCell(row, col))
         } ?: "1"
 
         // 学校
-        val school = colMap["school"]?.let { col ->
-            row.getCell(col)?.stringCellValue?.trim() ?: ""
-        } ?: ""
+        val school = getStringCell(row, colMap["school"])
 
-        // 电话
-        val phone = colMap["phone"]?.let { col ->
-            row.getCell(col)?.stringCellValue?.trim() ?: ""
-        } ?: ""
+        // 电话（v23.6.1：统一容错读取——PC 真实档案的电话常是数字单元格，
+        // stringCellValue 对 NUMERIC 抛 IllegalStateException 曾炸掉整包）
+        val phone = getStringCell(row, colMap["phone"])
 
         // 身高（数字类型，单位 cm）
         val heightCm = colMap["heightCm"]?.let { col ->
@@ -525,6 +528,11 @@ object ExcelSync {
             (weightKg / (h * h)).toFloat()
         } else 0f
 
+        // 数据更新时间（v23 双端同步 LWW；PC 端未提供时为 null → 导入端按原行为处理）
+        val updatedAtMs = colMap["updated_at"]?.let { col ->
+            getCellAsDouble(row, col).takeIf { it > 0 }?.toLong()
+        }
+
         return Student(
             name = name,
             gender = gender,
@@ -534,7 +542,8 @@ object ExcelSync {
             age = age,
             heightCm = heightCm,
             weightKg = weightKg,
-            bmi = bmi
+            bmi = bmi,
+            updatedAt = updatedAtMs ?: System.currentTimeMillis()
         )
     }
 
@@ -605,6 +614,35 @@ object ExcelSync {
      *
      * @return 单元格数值（无法解析返回 0.0）
      */
+    /**
+     * v23.6.1：文本单元格统一容错读取——NUMERIC（电话/学号等数字单元格）、
+     * FORMULA、BLANK 一律转字符串，绝不抛出。
+     * （stringCellValue 对非 STRING 类型抛 IllegalStateException，曾炸掉整包解析）
+     */
+    private fun getStringCell(row: Row, colIdx: Int?): String {
+        if (colIdx == null) return ""
+        val cell = row.getCell(colIdx) ?: return ""
+        return try {
+            when (cell.cellType) {
+                CellType.STRING -> cell.stringCellValue.trim()
+                CellType.NUMERIC -> {
+                    val n = cell.numericCellValue
+                    if (n == n.toLong().toDouble()) n.toLong().toString()
+                    else n.toString()
+                }
+                CellType.FORMULA -> try {
+                    cell.stringCellValue.trim()
+                } catch (_: Exception) {
+                    cell.numericCellValue.let { if (it == it.toLong().toDouble()) it.toLong().toString() else it.toString() }
+                }
+                CellType.BOOLEAN -> cell.booleanCellValue.toString()
+                else -> ""
+            }
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
     private fun getCellAsDouble(row: Row, colIdx: Int): Double {
         return try {
             val cell = row.getCell(colIdx) ?: return 0.0

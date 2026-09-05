@@ -1,6 +1,7 @@
 package com.shangmentiyu.sportscoach.di
 
 import android.app.Application
+import com.shangmentiyu.sportscoach.app.framework.LanSyncManager
 import com.shangmentiyu.sportscoach.app.framework.MomentUploader
 import com.shangmentiyu.sportscoach.data.db.AppDatabase
 import com.shangmentiyu.sportscoach.data.db.ArchivedLessonDao
@@ -8,6 +9,9 @@ import com.shangmentiyu.sportscoach.data.repo.AuditLogRepository
 import com.shangmentiyu.sportscoach.data.repo.BackupRepository
 import com.shangmentiyu.sportscoach.data.repo.BodyMetricRepository
 import com.shangmentiyu.sportscoach.data.repo.CoachRepository
+import com.shangmentiyu.sportscoach.data.repo.CoachPayrollRepository
+import com.shangmentiyu.sportscoach.data.repo.CoachScheduleRepository
+import com.shangmentiyu.sportscoach.data.repo.CoachStudentRepository
 import com.shangmentiyu.sportscoach.data.repo.BatchScheduleRepository
 import com.shangmentiyu.sportscoach.data.repo.DietRepository
 import com.shangmentiyu.sportscoach.data.repo.LessonArchiveRepository
@@ -77,6 +81,13 @@ val appModule = module {
     single { get<AppDatabase>().archivedLessonDao() }
     single { get<AppDatabase>().auditLogDao() }
     single { get<AppDatabase>().signInDao() }
+    // v33 教练管理模块 DAO
+    single { get<AppDatabase>().coachScheduleDao() }
+    single { get<AppDatabase>().coachPayoutDao() }
+    single { get<AppDatabase>().coachPayoutRequestDao() }
+    single { get<AppDatabase>().coachWorkloadDao() }
+    // v34 教练绑定学员 DAO
+    single { get<AppDatabase>().coachStudentBindingDao() }
 
     // === 仓库层 ===
     single { AuditLogRepository(get(), get()) }
@@ -99,6 +110,11 @@ val appModule = module {
     }
     single { LessonPackageRepository(get(), get(), get()) }
     single { CoachRepository(get()) }
+    // v33 教练管理：排班/工作量 + 薪资/提现
+    single { CoachScheduleRepository(get(), get()) }
+    single { CoachPayrollRepository(get(), get(), get(), get()) }
+    // v34 教练绑定学员
+    single { CoachStudentRepository(get()) }
     single { ScheduleRepository(get(), get()) }
     single { ScheduleQueryRepository(get(), get(), get(), get(), get()) }
     single { TrainingCycleRepository(get()) }
@@ -109,6 +125,7 @@ val appModule = module {
     single { DietRepository(get()) }
     single { BackupRepository(androidContext()) }
     single { MomentUploader(androidContext(), get()) }
+    single { LanSyncManager(androidContext(), get(), get(), get(), get()) }
     single { ScriptRepository(androidContext()) }
 
     // === 领域层 ===
@@ -121,8 +138,10 @@ val appModule = module {
     single { GetUnsignedOutReminderUseCase(get()) }
 
     // === 视图模型层（v46 架构层四：全量迁移到 Koin） ===
-    viewModel { SettingsViewModel(androidContext() as Application, get(), get(), get(), get(), get(), get()) }
-    viewModel { HomeViewModel(get(), get(), get(), get(), get(), get()) }
+    // v23.6 修复：补注入 lanSyncManager（此前漏传默认 null，设置页「立即同步/测试连接」
+    // 恒报「同步服务不可用」——双端同步按钮成为摆设）
+    viewModel { SettingsViewModel(androidContext() as Application, get(), get(), get(), get(), get(), get(), get()) }
+    viewModel { HomeViewModel(get(), get(), get(), get(), get(), get(), get()) }
     viewModel { ScoringViewModel(get(), get()) }
     viewModel { LessonViewModel(get(), get(), get(), get()) }
     viewModel { SummaryViewModel(get(), get()) }
@@ -136,6 +155,7 @@ val appModule = module {
     viewModel { TrainingCycleViewModel(get(), get()) }
     viewModel { BodyMetricChartViewModel(get(), get()) }
     viewModel { CoachDailyReportViewModel(get(), get(), get()) }
+    viewModel { com.shangmentiyu.sportscoach.ui.coach.CoachManageViewModel(get(), get(), get(), get(), get(), get()) }
     viewModel { LessonCheckInViewModel(get(), get(), get()) }
     viewModel { HeightPredictionViewModel(get()) }
     viewModel { DietViewModel(get(), get()) }

@@ -74,18 +74,57 @@ data class LessonPackage(
 }
 
 /**
+ * 教练角色常量：全职 / 兼职 / 一级合伙人 / 二级合伙人。
+ * 薪资结构由角色决定（见 PayoutCalculator），不单独存 salaryMode，避免双源配置冲突。
+ */
+object CoachRole {
+    const val FULLTIME = "fulltime"
+    const val PARTTIME = "parttime"
+    const val PARTNER_L1 = "partner_level1"
+    const val PARTNER_L2 = "partner_level2"
+
+    /** 角色显示名 */
+    fun label(role: String): String = when (role) {
+        FULLTIME -> "全职教练"
+        PARTTIME -> "兼职教练"
+        PARTNER_L1 -> "一级合伙人"
+        PARTNER_L2 -> "二级合伙人"
+        else -> "未设置"
+    }
+
+    /** 管理层级：L1=4 > L2=3 > 全职=2 > 兼职=1（上级/转让合法性判断用） */
+    fun rank(role: String): Int = when (role) {
+        PARTNER_L1 -> 4
+        PARTNER_L2 -> 3
+        FULLTIME -> 2
+        else -> 1
+    }
+
+    /** 全部角色选项（下拉用） */
+    val ALL = listOf(FULLTIME, PARTTIME, PARTNER_L1, PARTNER_L2)
+}
+
+/**
  * 教练实体：多教练协作管理。
  *
  * 记录教练基础信息与绩效统计（统计在业务层计算）。
+ * v33 教练管理模块：新增角色 / 上级 / 薪资参数字段，支撑合伙人层级与薪资结算。
  */
 @Entity(tableName = "coaches")
 // v26 优化2：@Stable 让 LazyColumn 教练列表按字段对比，避免无效重组
 data class Coach(
     @PrimaryKey val name: String,         // 教练姓名（主键）
     val phone: String = "",               // 联系电话
-    val specialty: String = "",           // 专长（如"田径"、"球类"）
+    val specialty: String = "",           // 专长（如"田径"、"球类"），逗号分隔多项
     val hireDate: String = "",            // 入职日期
-    val status: String = "在职",          // 在职 / 离职
+    val status: String = "在职",          // 在职 / 休假 / 离职（启用/禁用）
+    val role: String = CoachRole.PARTTIME,            // 教练角色（CoachRole.FULLTIME 等）
+    val superiorId: String? = null,       // 所属上级教练姓名（合伙人层级树，null=无上级）
+    val certificates: String = "",        // 资质证书（逗号分隔）
+    val baseSalary: Double = 0.0,         // 底薪（全职/合伙人月度）
+    val lessonRate: Double = 0.0,         // 课时费单价（元/节）
+    val commissionRate: Double = 0.0,     // 分成比例（0-100，L1=净利润分红% L2=团队课时费提成%）
+    val dailyLimit: Int = 8,              // 单日最大排课数（负荷预警阈值）
     val note: String = "",
     val createdAt: Long = System.currentTimeMillis()
 )
@@ -115,7 +154,8 @@ data class Schedule(
     @PrimaryKey val id: String = java.util.UUID.randomUUID().toString().take(8),
     val studentName: String,              // 学员姓名（软关联，保留用于显示）
     val studentId: String? = null,        // 学员唯一ID（软关联外键，v20 引入，旧数据 NULL）
-    val coachName: String = "",           // 教练姓名
+    val coachName: String = "",           // 教练姓名（主讲）
+    val assistantCoach: String = "",      // 助教姓名（v33 教练管理模块，空=无助教）
     val dayOfWeek: Int,                   // 周几（1=周一 ... 7=周日）
     val startTime: String,                // HH:mm
     val durationMinutes: Int = 60,        // 单次时长

@@ -84,6 +84,15 @@ class LessonPackageRepository(
             this
         }
 
+    // === v23.7.2：阻塞版（双端同步课时包导入专用）——必须在 Dispatchers.IO 上调用 ===
+
+    fun getPackagesByStudentBlocking(studentName: String): List<LessonPackage> =
+        pkgDao.getAllByStudentBlocking(studentName)
+
+    fun addPackageBlocking(pkg: LessonPackage) = pkgDao.insertBlocking(pkg.normalizeStatus())
+
+    fun updatePackageBlocking(pkg: LessonPackage) = pkgDao.updateBlocking(pkg.normalizeStatus())
+
     /**
      * 删除课时包：事务级联清理该学员名下所有排课记录。
      *
@@ -178,6 +187,10 @@ class LessonPackageRepository(
             .filter { it.status == "活跃" && !it.isExhausted && !it.isExpired }
             .sortedBy { it.purchaseDate }
     }
+
+    /** v23.7：按学员姓名查全部课时包（含非活跃，双端同步 upsert 用） */
+    suspend fun getPackagesByStudentIncludeInactive(studentName: String): List<LessonPackage> =
+        pkgDao.getAllByStudent(studentName)
 
     /**
      * 计算学员在指定日期"有效"的课时包剩余总课时。

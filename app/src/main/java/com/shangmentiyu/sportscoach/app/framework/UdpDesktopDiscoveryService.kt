@@ -85,6 +85,101 @@ class UdpDesktopDiscoveryService : Service() {
         fun stop(context: Context) {
             context.stopService(Intent(context, UdpDesktopDiscoveryService::class.java))
         }
+
+        /**
+         * v23.5 发现的桌面端信息。
+         *
+         * @param host PC 局域网 IP
+         * @param port 同步服务端口（心跳报文携带）
+         * @param token PC 端鉴权 token（心跳携带，手机端为零配置自动填充）
+         * @param pcName PC 名称（展示用）
+         * @param lastSeenAtMs 最近心跳时间
+         */
+        data class DiscoveredDesktop(
+            val host: String,
+            val port: Int,
+            val token: String,
+            val pcName: String,
+            val lastSeenAtMs: Long
+        )
+
+        /**
+         * 读取最近发现的桌面端信息（v23 双端同步）。
+         *
+         * 供设置页「自动发现 PC」一键填充 syncHost/syncPort/syncToken 使用；
+         * 心跳报文的 port/token 即 PC 同步服务端口与鉴权令牌。
+         *
+         * @return 从未发现过返回 null
+         */
+        fun getDiscoveredDesktop(context: Context): DiscoveredDesktop? {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val host = prefs.getString("host", "") ?: ""
+            val port = prefs.getInt("port", 0)
+            val lastSeenAt = prefs.getLong("last_seen_at", 0L)
+            if (host.isBlank() || port <= 0) return null
+            return DiscoveredDesktop(
+                host = host,
+                port = port,
+                token = prefs.getString("token", "") ?: "",
+                pcName = prefs.getString("pc_name", "") ?: "",
+                lastSeenAtMs = lastSeenAt
+            )
+        }
+
+        @Volatile
+        private var lastHelloAtMs = 0L
+
+        /**
+         * v23.6.1：设备指纹回执（USB/兜底探测场景）。
+         *
+         * 原实现只在收到 UDP 心跳后回执——心跳被路由器拦截或 USB（不走 UDP）场景下
+         * PC 端 sync_devices 永远为空，顶栏「手机在线」指示失效。现供
+         * LanSyncManager 在线轮询在探测到 PC 后主动调用，4 分钟节流
+         * （PC 端 5 分钟无回执才判离线）。
+         */
+        fun sendDeviceHello(context: Context, host: String, port: Int) {
+            if (System.currentTimeMillis() - lastHelloAtMs < 4 * 60_000L) return
+            lastHelloAtMs = System.currentTimeMillis()
+            Thread {
+                var conn: java.net.HttpURLConnection? = null
+                try {
+                    val deviceId = android.provider.Settings.Secure.getString(
+                        context.contentResolver, android.provider.Settings.Secure.ANDROID_ID
+                    ) ?: return@Thread
+                    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    val token = prefs.getString("token", "") ?: ""
+                    val body = org.json.JSONObject()
+                        .put("type", "phone_hello")
+                        .put("device_id", deviceId)
+                        .put("device_name", "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+                        .put("timestamp", System.currentTimeMillis())
+                    conn = (java.net.URL("http://$host:$port/device/hello").openConnection()
+                            as java.net.HttpURLConnection).apply {
+                        requestMethod = "POST"
+                        connectTimeout = 3000
+                        readTimeout = 3000
+                        doOutput = true
+                        useCaches = false
+                        if (token.isNotEmpty()) setRequestProperty("X-Sync-Token", token)
+                        setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                        setRequestProperty("Content-Length", body.toString().toByteArray(StandardCharsets.UTF_8).size.toString())
+                    }
+                    conn.outputStream.use { out ->
+                        out.write(body.toString().toByteArray(StandardCharsets.UTF_8))
+                        out.flush()
+                    }
+                    android.util.Log.d(TAG, "在线探测后设备回执：HTTP ${conn.responseCode}")
+                } catch (e: Exception) {
+                    android.util.Log.d(TAG, "设备回执失败（下轮探测重试）：${e.message}")
+                } finally {
+                    conn?.disconnect()
+                }
+            }.apply {
+                isDaemon = true
+                name = "DeviceHelloProbe"
+                start()
+            }
+        }
     }
 
     /** UDP socket（在后台线程中阻塞接收） */
@@ -193,11 +288,75 @@ class UdpDesktopDiscoveryService : Service() {
                 .putString("host", host)
                 .putInt("port", port)
                 .putLong("last_seen_at", now)
+                // v23.5 零配置配对：心跳携带 token 与 PC 名称，自动存储
+                .putString("token", json.optString("token", ""))
+                .putString("pc_name", json.optString("name", ""))
                 .apply()
 
             Log.d(TAG, "收到桌面端心跳：$host:$port")
+
+            // v23.5 设备信任：向 PC 回执设备指纹（ANDROID_ID），供 PC 端信任管理
+            replyDeviceHello(host, port)
         } catch (e: Exception) {
             Log.w(TAG, "广播报文解析失败：${e.message}")
+        }
+    }
+
+    /**
+     * v23.5 设备信任：向 PC 端回执设备指纹。
+     *
+     * POST http://{host}:{port}/device/hello
+     * Body: {"type":"phone_hello","device_id":"<ANDROID_ID>","device_name":"<型号>"}
+     * Header: X-Sync-Token（手机端已配置时携带）
+     *
+     * 在独立线程执行（接收线程不可阻塞）；失败静默——心跳 3 秒一次，
+     * 下次心跳自然重试。仅登记用途，不含任何学员数据。
+     */
+    private fun replyDeviceHello(host: String, port: Int) {
+        Thread {
+            var conn: java.net.HttpURLConnection? = null
+            try {
+                val deviceId = android.provider.Settings.Secure.getString(
+                    contentResolver, android.provider.Settings.Secure.ANDROID_ID
+                ) ?: return@Thread
+                val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val token = prefs.getString("token", "") ?: ""
+                val body = JSONObject()
+                    .put("type", "phone_hello")
+                    .put("device_id", deviceId)
+                    .put("device_name", "${Build.MANUFACTURER} ${Build.MODEL}")
+                    .put("timestamp", System.currentTimeMillis())
+
+                conn = (java.net.URL("http://$host:$port/device/hello").openConnection()
+                        as java.net.HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 3000
+                    readTimeout = 3000
+                    doOutput = true
+                    useCaches = false
+                    if (token.isNotEmpty()) setRequestProperty("X-Sync-Token", token)
+                    setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                    setRequestProperty("Content-Length", body.toString().toByteArray().size.toString())
+                }
+                conn.outputStream.use { out ->
+                    out.write(body.toString().toByteArray(StandardCharsets.UTF_8))
+                    out.flush()
+                }
+                val code = conn.responseCode
+                if (code == 200) {
+                    Log.d(TAG, "设备指纹回执成功（PC 端可信任管理）")
+                } else {
+                    Log.w(TAG, "设备指纹回执失败 HTTP $code")
+                }
+            } catch (e: Exception) {
+                Log.d(TAG, "设备指纹回执异常（下次心跳重试）：${e.message}")
+            } finally {
+                conn?.disconnect()
+            }
+        }.apply {
+            isDaemon = true
+            name = "DeviceHello"
+            start()
         }
     }
 

@@ -48,7 +48,9 @@ class SettingsViewModel(
     // v45：运营 Repository，用于一键修正历史错误排课
     private val opRepo: OperationRepository,
     // v26 优化1：操作日志 Repository（审计溯源）
-    private val auditLogRepo: com.shangmentiyu.sportscoach.data.repo.AuditLogRepository? = null
+    private val auditLogRepo: com.shangmentiyu.sportscoach.data.repo.AuditLogRepository? = null,
+    // v23 双端同步：PC 推送/拉取管理器（Koin 注入；缺省 null 兼容既有测试构造）
+    private val lanSyncManager: com.shangmentiyu.sportscoach.app.framework.LanSyncManager? = null
 ) : ViewModel() {
 
     val coach: StateFlow<String> = settingsRepo.coach
@@ -59,6 +61,88 @@ class SettingsViewModel(
     // 用户在设置页切换后，调用 setAutoBackupEnabled 立即触发 AutoBackupScheduler.reloadSettings
     val autoBackupEnabled: StateFlow<Boolean> = settingsRepo.autoBackupEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    // === v23 双端同步（PC 推送/拉取） ===
+    val syncEnabled: StateFlow<Boolean> = settingsRepo.syncEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val syncHost: StateFlow<String> = settingsRepo.syncHost
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+    val syncPort: StateFlow<String> = settingsRepo.syncPort
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsRepository.DEFAULT_SYNC_PORT)
+    val syncToken: StateFlow<String> = settingsRepo.syncToken
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+
+    private val _syncInProgress = MutableStateFlow(false)
+    val syncInProgress: StateFlow<Boolean> = _syncInProgress.asStateFlow()
+
+    // v23.6.1：双端同步独立作用域——「立即同步/测试连接」不随设置页销毁被取消
+    //（曾复现：pull 中途 viewModelScope 被 cancel，同步静默中断；同步本就是后台语义）
+    private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    fun setSyncEnabled(value: Boolean) {
+        viewModelScope.launch { settingsRepo.setSyncEnabled(value) }
+    }
+
+    fun setSyncHost(value: String) {
+        viewModelScope.launch { settingsRepo.setSyncHost(value) }
+    }
+
+    fun setSyncPort(value: String) {
+        viewModelScope.launch { settingsRepo.setSyncPort(value) }
+    }
+
+    fun setSyncToken(value: String) {
+        viewModelScope.launch { settingsRepo.setSyncToken(value) }
+    }
+
+    /**
+     * 一键双向同步：先推送整库备份到 PC（自动合并），再拉取 PC 学员汇总（UPDATE_PART 合并）。
+     * 两个方向独立成败，聚合消息经 statusMessage 反馈。
+     */
+    fun syncNow() {
+        val mgr = lanSyncManager
+        if (mgr == null) {
+            updateStatus("同步服务不可用")
+            return
+        }
+        if (_syncInProgress.value) {
+            updateStatus("正在同步中，请稍候")
+            return
+        }
+        syncScope.launch {
+            _syncInProgress.value = true
+            try {
+                val r = mgr.syncNow()
+                updateStatus(r.message.replace("\n", "　|　"))
+            } catch (e: Exception) {
+                // v23.6.1 诊断：堆栈前 3 行随 Toast 显示（vivo 屏蔽 logcat）
+                val stack = e.stackTraceToString().lineSequence()
+                    .filter { it.trim().isNotEmpty() }.take(3).joinToString(" ← ")
+                updateStatus("同步异常：${e.message}｜$stack")
+            } finally {
+                _syncInProgress.value = false
+            }
+        }
+    }    /**
+     * v23.6 测试连接：/health 握手探测 PC 端同步服务（空地址自动回退 127.0.0.1 → USB）。
+     * 结果经 statusMessage 反馈（成功含连接方式与延迟）。
+     */
+    fun testConnection() {
+        val mgr = lanSyncManager
+        if (mgr == null) {
+            updateStatus("同步服务不可用")
+            return
+        }
+        syncScope.launch {
+            updateStatus("正在测试连接…")
+            try {
+                val r = mgr.pingDesktop()
+                updateStatus(r.message)
+            } catch (e: Exception) {
+                updateStatus("测试连接异常：${e.message ?: "未知错误"}")
+            }
+        }
+    }
 
     val floatingWindowEnabled: StateFlow<Boolean> = settingsRepo.floatingWindowEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
@@ -708,6 +792,21 @@ class SettingsViewModel(
                 }
                 _statusMessage.value = result.message
                 _backupProgress.value = BackupProgress.Done(result.message)
+
+                // === v23 双端同步：开启「桌面同步」时，手动备份成功即自动推送到 PC 合并 ===
+                // 独立 runCatching：推送失败不影响备份成功状态
+                if (result.success) {
+                    runCatching {
+                        if (settingsRepo.syncEnabled.first()) {
+                            lanSyncManager?.let { mgr ->
+                                val push = mgr.pushBackupUri(
+                                    app, targetUri,
+                                    name = "smty_backup_${System.currentTimeMillis() / 1000}.smty_backup")
+                                _statusMessage.value = "${result.message}；${push.message}"
+                            }
+                        }
+                    }
+                }
             } finally {
                 _backupInProgress.value = false
             }

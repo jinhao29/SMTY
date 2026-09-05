@@ -90,6 +90,17 @@ object AutoBackupScheduler {
     private var initialized: Boolean = false
 
     /**
+     * 备份完成回调（v23 双端同步新增，可选）。
+     *
+     * 由 :app 层（SportsCoachApp）在初始化时注册：
+     * 若用户开启「桌面同步」，备份成功后自动把该 zip 推送到 PC 端合并。
+     * 参数为本次成功生成的备份文件；回调在备份协程（Dispatchers.IO）内执行，
+     * 实现方需自行保证线程安全与异常吞噬（失败不影响备份本身的成功状态）。
+     */
+    @Volatile
+    var onBackupCompleted: ((File) -> Unit)? = null
+
+    /**
      * 初始化调度器（由 [com.shangmentiyu.sportscoach.SportsCoachApp.onCreate] 调用）。
      *
      * - 注入应用上下文，用于访问 filesDir 与 DataStore
@@ -246,6 +257,8 @@ object AutoBackupScheduler {
                     Log.i(TAG, "自动备份成功：${backupFile.name}（${backupFile.length() / 1024} KB）")
                     // 3.3 清理旧备份
                     cleanupOldBackups(backupDir)
+                    // 3.4 v23 双端同步：通知外层（如自动推送到 PC），失败不影响备份状态
+                    runCatching { onBackupCompleted?.invoke(backupFile) }
                 } else {
                     // 备份失败：删除可能生成的不完整文件
                     if (backupFile.exists()) {

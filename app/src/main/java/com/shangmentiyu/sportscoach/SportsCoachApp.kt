@@ -17,6 +17,8 @@ import com.shangmentiyu.sportscoach.data.repo.StudentRepository
 import com.shangmentiyu.sportscoach.di.appModule
 import com.shangmentiyu.sportscoach.update.UpdateManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
 import org.koin.core.context.startKoin
@@ -102,6 +104,29 @@ class SportsCoachApp : Application() {
         // 保证任何 Repository 首次数据变更前调度器必然已就绪。
         runCatching { AutoBackupScheduler.init(this) }
 
+        // === v23 双端同步：自动备份成功后按「桌面同步」开关自动推送到 PC ===
+        // - 静默执行：失败仅写 Log，不影响备份本身与用户操作
+        // - 用户在设置页开启 syncEnabled + 填好 PC 地址后即生效（无需其他操作）
+        runCatching {
+            val koin = GlobalContext.get()
+            val lanSync = koin.get<com.shangmentiyu.sportscoach.app.framework.LanSyncManager>()
+            val settingsRepo = koin.get<com.shangmentiyu.sportscoach.data.repo.SettingsRepository>()
+            AutoBackupScheduler.onBackupCompleted = { backupFile ->
+                kotlinx.coroutines.CoroutineScope(
+                    kotlinx.coroutines.SupervisorJob() + Dispatchers.IO
+                ).launch {
+                    runCatching {
+                        if (settingsRepo.syncEnabled.first()) {
+                            val r = lanSync.pushBackupFile(backupFile)
+                            android.util.Log.i("LanSync", "自动推送结果：${r.message}")
+                        }
+                    }.onFailure { e ->
+                        android.util.Log.w("LanSync", "自动推送异常：${e.message}")
+                    }
+                }
+            }
+        }
+
         // 关键：使用 ProcessLifecycleOwner 的 lifecycleScope 在应用前台时延迟初始化
         // 避免在 Application.onCreate 主线程同步路径上阻塞首帧渲染
         ProcessLifecycleOwner.get().lifecycleScope.launch {
@@ -131,6 +156,19 @@ class SportsCoachApp : Application() {
                 // - 教练打开 App 即可看到"已连接：电脑端 192.168.x.x"绿色指示灯
                 runCatching {
                     UdpDesktopDiscoveryService.start(this@SportsCoachApp)
+                }
+                // v23.6：启动 PC 在线状态轮询（心跳优先，USB 回环 /health 探测兜底）
+                // - 首页横幅与设置页「连接状态」订阅 desktopOnline，打开 App 即自动识别连接
+                runCatching {
+                    GlobalContext.get()
+                        .get<com.shangmentiyu.sportscoach.app.framework.LanSyncManager>()
+                        .startOnlineWatch()
+                }
+                // v23.1 双端同步：注册周期双向同步任务（每 30 分钟，仅 syncEnabled 开启时实际执行）
+                runCatching {
+                    com.shangmentiyu.sportscoach.app.framework.PeriodicSyncWorker.schedule(
+                        this@SportsCoachApp
+                    )
                 }
                 // v20：回填旧学员的 studentId（NULL → UUID），
                 // 必须在数据库升级完成后执行；失败不阻塞启动。

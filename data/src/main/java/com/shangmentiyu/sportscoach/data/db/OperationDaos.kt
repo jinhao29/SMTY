@@ -29,6 +29,20 @@ interface LessonPackageDao {
     @Query("SELECT * FROM lesson_packages")
     suspend fun getAllOnce(): List<LessonPackage>
 
+    /** v23.7：按学员姓名查全部课时包（含非活跃，双端同步 upsert 用） */
+    @Query("SELECT * FROM lesson_packages WHERE studentName = :name ORDER BY createdAt DESC")
+    suspend fun getAllByStudent(name: String): List<LessonPackage>
+
+    // === v23.7.2：阻塞版（双端同步课时包导入专用，绕开 Room suspend 桥的取消传播） ===
+    @Query("SELECT * FROM lesson_packages WHERE studentName = :name ORDER BY createdAt DESC")
+    fun getAllByStudentBlocking(name: String): List<LessonPackage>
+
+    @Insert
+    fun insertBlocking(pkg: LessonPackage)
+
+    @Update
+    fun updateBlocking(pkg: LessonPackage): Int
+
     @Query("SELECT * FROM lesson_packages WHERE id = :id")
     suspend fun getById(id: String): LessonPackage?
 
@@ -88,6 +102,14 @@ interface CoachDao {
 
     @Query("SELECT * FROM coaches WHERE name = :name")
     suspend fun getByName(name: String): Coach?
+
+    /** v33 教练管理：按角色查在职教练（合伙人层级 / 团队管理用） */
+    @Query("SELECT * FROM coaches WHERE role = :role AND status = '在职' ORDER BY name")
+    fun getByRole(role: String): Flow<List<Coach>>
+
+    /** v33 教练管理：查某教练的直接下属（团队树用） */
+    @Query("SELECT * FROM coaches WHERE superiorId = :superiorName ORDER BY name")
+    fun getBySuperior(superiorName: String): Flow<List<Coach>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(coach: Coach)

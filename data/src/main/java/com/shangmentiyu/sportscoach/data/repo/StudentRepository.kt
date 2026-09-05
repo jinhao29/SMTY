@@ -643,21 +643,29 @@ class StudentRepository(
                             dao.insert(s.copy(studentId = generateUniqueStudentId()))
                             added++
                         } else {
-                            // 仅更新身体形态指标 + 基础资料，保留 createdAt / studentId / isActive / 子表数据
-                            dao.update(
-                                existing.copy(
-                                    gender = s.gender,
-                                    grade = s.grade,
-                                    school = s.school,
-                                    phone = s.phone,
-                                    age = s.age,
-                                    heightCm = s.heightCm,
-                                    weightKg = s.weightKg,
-                                    bmi = s.bmi,
-                                    updatedAt = System.currentTimeMillis()
+                            // v23 双端同步 LWW： incoming.updatedAt 较旧 → 跳过，保留本端较新数据
+                            // （PC 同步包带「数据更新时间」列；手动 Excel 导入无该列时
+                            //   updatedAt=当前时间，恒为新 → 行为与旧版无条件更新一致）
+                            if (s.updatedAt in 1 until existing.updatedAt) {
+                                skipped++
+                            } else {
+                                // 仅更新身体形态指标 + 基础资料，保留 createdAt / studentId / isActive / 子表数据
+                                // v23.6.1：PC 端未录（<=0）的身高/体重/BMI 不覆盖手机端已录值
+                                dao.update(
+                                    existing.copy(
+                                        gender = s.gender,
+                                        grade = s.grade,
+                                        school = s.school,
+                                        phone = s.phone,
+                                        age = s.age,
+                                        heightCm = if (s.heightCm > 0) s.heightCm else existing.heightCm,
+                                        weightKg = if (s.weightKg > 0f) s.weightKg else existing.weightKg,
+                                        bmi = if (s.bmi > 0f) s.bmi else existing.bmi,
+                                        updatedAt = s.updatedAt
+                                    )
                                 )
-                            )
-                            overwritten++
+                                overwritten++
+                            }
                         }
                     }
                 }
@@ -667,6 +675,67 @@ class StudentRepository(
             }
         }
         // v30：批量导入发生数据变更（added/overwritten > 0 时），触发自动备份防抖
+        if (added > 0 || overwritten > 0) {
+            AutoBackupScheduler.notifyDataChange()
+        }
+        return ImportResult(added, skipped, overwritten, failed)
+    }
+
+    /**
+     * v23.6.1：阻塞版批量导入（仅 UPDATE_PART）——双端同步拉取专用。
+     *
+     * 背景：Room 2.7 suspend DAO 在部分调用上下文抛 JobCancellationException
+     * （内部 driver 协程取消传播，NonCancellable/独立 Job 均复现），导致
+     * PC→手机拉取 100% 失败。本方法用阻塞 DAO + withContext(Dispatchers.IO)
+     * 彻底绕开协程桥。语义与 [importStudentsWithStrategy] UPDATE_PART 一致，
+     * 外加「PC 端未录（<=0）的身高/体重/BMI 不覆盖手机端已录值」。
+     *
+     * 必须在 IO 调度器上调用（内部含阻塞 DB 访问）。
+     */
+    fun importStudentsBlockingUpdatePart(students: List<Student>): ImportResult {
+        var added = 0
+        var skipped = 0
+        var overwritten = 0
+        var failed = 0
+
+        val existingIds = dao.getAllStudentIdsBlocking().toHashSet()
+        for (s in students) {
+            try {
+                validateStudentFields(s.name, s.gender, s.age, s.heightCm, s.weightKg, s.bmi)
+                val existing = dao.getByNameIncludeDeletedBlocking(s.name)
+                if (existing == null) {
+                    // 新增：生成与现有 ID 不冲突的唯一 ID（同步算法）
+                    var id: String
+                    do { id = java.util.UUID.randomUUID().toString().take(12) } while (id in existingIds)
+                    existingIds.add(id)
+                    dao.insertBlocking(s.copy(studentId = id))
+                    added++
+                } else {
+                    // LWW：incoming.updatedAt 较旧 → 跳过
+                    if (s.updatedAt in 1 until existing.updatedAt) {
+                        skipped++
+                    } else {
+                        dao.updateBlocking(
+                            existing.copy(
+                                gender = s.gender,
+                                grade = s.grade,
+                                school = s.school,
+                                phone = s.phone,
+                                age = s.age,
+                                // PC 端未录（<=0）的身高/体重/BMI 不覆盖手机端已录值
+                                heightCm = if (s.heightCm > 0) s.heightCm else existing.heightCm,
+                                weightKg = if (s.weightKg > 0f) s.weightKg else existing.weightKg,
+                                bmi = if (s.bmi > 0f) s.bmi else existing.bmi,
+                                updatedAt = s.updatedAt
+                            )
+                        )
+                        overwritten++
+                    }
+                }
+            } catch (e: IllegalArgumentException) {
+                failed++
+            }
+        }
         if (added > 0 || overwritten > 0) {
             AutoBackupScheduler.notifyDataChange()
         }

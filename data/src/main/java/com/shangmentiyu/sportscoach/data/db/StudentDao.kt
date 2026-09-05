@@ -29,6 +29,23 @@ interface StudentDao {
     @Query("SELECT * FROM students WHERE name = :name")
     suspend fun getByNameIncludeDeleted(name: String): Student?
 
+    // === v23.6.1：阻塞版 DAO（双端同步导入专用） ===
+    // Room 2.7 suspend DAO 在部分调用上下文（NonCancellable/独立 Job 均复现）会抛
+    // JobCancellationException（内部 driver 协程的取消传播）。同步导入走
+    // withContext(Dispatchers.IO) + 阻塞 DAO，彻底绕开协程桥。
+    @Query("SELECT * FROM students WHERE name = :name")
+    fun getByNameIncludeDeletedBlocking(name: String): Student?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insertBlocking(student: Student)
+
+    @Update
+    fun updateBlocking(student: Student)
+
+    /** 已使用的 studentId 集合（阻塞版，供同步 ID 生成去重） */
+    @Query("SELECT studentId FROM students WHERE studentId IS NOT NULL")
+    fun getAllStudentIdsBlocking(): List<String>
+
     /**
      * === v33 数据流加固：按 studentId 查活跃学员 ===
      *

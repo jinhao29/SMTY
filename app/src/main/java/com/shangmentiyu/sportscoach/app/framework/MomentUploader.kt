@@ -229,36 +229,6 @@ class MomentUploader(
         }
     }
 
-    /**
-     * 探测 PC 端 HTTP 服务是否在线（复用 LanPlanSender 的 /health 端点）。
-     *
-     * 调用时机：HomeScreen 顶部"同步横幅"定时握手探测。
-     *
-     * @return true=PC 端接收服务在线；false=不可达
-     */
-    suspend fun pingDesktop(): Boolean = withContext(Dispatchers.IO) {
-        val host = settings.syncHost.first().trim()
-        if (host.isBlank()) return@withContext false
-        if (!isLocalNetworkHost(host)) return@withContext false
-        val port = settings.syncPort.first().trim()
-            .ifBlank { SettingsRepository.DEFAULT_SYNC_PORT }
-
-        val urlStr = "http://$host:$port/health"
-        var conn: HttpURLConnection? = null
-        try {
-            conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = 2_500
-                readTimeout = 2_500
-            }
-            conn.responseCode == 200
-        } catch (e: Exception) {
-            false
-        } finally {
-            conn?.disconnect()
-        }
-    }
-
     // ============================================================
     // 内部工具
     // ============================================================
