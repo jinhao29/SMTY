@@ -431,6 +431,20 @@ class LanSyncManager(
      * 两个方向独立成败，消息聚合返回；任一方向成功即 success=true。
      */
     suspend fun syncNow(): SyncResult {
+        // v23.9：互斥防重入（周期同步 / PC 变更触发 / 手动可能并发）
+        if (!syncMutex.tryLock()) {
+            return SyncResult(false, "同步进行中，已跳过本次触发")
+        }
+        try {
+            return syncNowInternal()
+        } finally {
+            syncMutex.unlock()
+        }
+    }
+
+    private val syncMutex = kotlinx.coroutines.sync.Mutex()
+
+    private suspend fun syncNowInternal(): SyncResult {
         val push = pushBackup()
         val pull = pullStudents()
         // v35：任一方向连通 PC 即拉数据总包（课时包对账 + PC 消课折算 + 收费镜像）。

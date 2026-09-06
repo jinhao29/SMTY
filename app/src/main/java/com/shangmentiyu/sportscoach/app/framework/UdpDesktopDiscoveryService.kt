@@ -130,6 +130,14 @@ class UdpDesktopDiscoveryService : Service() {
         private var lastHelloAtMs = 0L
 
         /**
+         * v23.9：PC 数据变更广播事件（PC 端本地编辑后触发手机端自动拉取）。
+         * 值 = PC 端数据版本时间戳（ms）。收集方做防抖后触发 syncNow。
+         */
+        val dataChangedEvents = kotlinx.coroutines.flow.MutableSharedFlow<Long>(
+            extraBufferCapacity = 8, onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST
+        )
+
+        /**
          * v23.6.1：设备指纹回执（USB/兜底探测场景）。
          *
          * 原实现只在收到 UDP 心跳后回执——心跳被路由器拦截或 USB（不走 UDP）场景下
@@ -276,6 +284,12 @@ class UdpDesktopDiscoveryService : Service() {
         try {
             val json = JSONObject(jsonStr)
             val type = json.optString("type", "")
+            // v23.9：PC 端本地数据变更广播 → 通知收集方自动同步
+            if (type == "desktop_data_changed") {
+                dataChangedEvents.tryEmit(json.optLong("timestamp", System.currentTimeMillis()))
+                Log.i(TAG, "收到 PC 数据变更广播，稍后自动同步")
+                return
+            }
             if (type != "desktop_online") return
 
             val host = json.optString("host", "")
