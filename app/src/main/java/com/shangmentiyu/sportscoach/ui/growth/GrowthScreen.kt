@@ -188,14 +188,9 @@ fun GrowthScreen(
     Scaffold(
         containerColor = appGroupedBackground(),
         topBar = {
+            // 顶栏落在浅灰分组背景上：白字对比度不足（灰白看不清），改用主题默认深色
             AppTopBar(
-                title = { Text("成长档案", color = Color.White, fontWeight = FontWeight.SemiBold) },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                    navigationIconContentColor = Color.White,
-                    titleContentColor = Color.White,
-                    actionIconContentColor = Color.White
-                ),
+                title = { Text("成长档案", fontWeight = FontWeight.SemiBold) },
                 shareLabel = "成长档案",
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -211,8 +206,7 @@ fun GrowthScreen(
                         if (isGenerating) {
                             androidx.compose.material3.CircularProgressIndicator(
                                 modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp,
-                                color = Color.White
+                                strokeWidth = 2.dp
                             )
                         } else {
                             Icon(Icons.Outlined.PictureAsPdf, contentDescription = "生成成长报告")

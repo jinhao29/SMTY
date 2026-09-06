@@ -97,6 +97,8 @@ fun CoachManageScreen(
 
     Scaffold(
         topBar = {
+            // 修复：顶栏去掉 glass 半透明色与"分享"图标——教练管理无可分享内容，
+            // 玻璃色在浅底上发灰；改用标准顶栏（surface 底 + 深色标题）
             AppTopBar(
                 title = { Text("教练管理", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
@@ -106,8 +108,6 @@ fun CoachManageScreen(
                         }
                     }
                 },
-                colors = glassTopAppBarColors(),
-                shareLabel = "教练管理",
             )
         }
     ) { padding ->
@@ -132,8 +132,8 @@ fun CoachManageScreen(
                         text = {
                             Text(
                                 title,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium,
+                                fontSize = 14.sp,
+                                fontWeight = if (tabIndex == index) FontWeight.SemiBold else FontWeight.Medium,
                                 maxLines = 1,
                                 softWrap = false
                             )

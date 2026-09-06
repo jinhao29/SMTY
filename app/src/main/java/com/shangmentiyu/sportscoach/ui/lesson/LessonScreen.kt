@@ -144,25 +144,23 @@ private fun InfoCard(lesson: com.shangmentiyu.sportscoach.data.model.Lesson, vm:
             trailingIcon = { Text("分钟") },
 )
         Spacer(modifier = Modifier.height(8.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AppTextField(
-                value = coach,
-                onValueChange = { coach = it },
-                label = { Text("教练") },
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-)
-            // 地点：接入 ScheduleMemoryRepository(field="checkin_location") 历史记忆下拉建议
-            val locationMemories by vm.locationMemories.collectAsStateWithLifecycle()
-            StyledSuggestionField(
-                value = location,
-                onValueChange = { location = it },
-                label = "地点",
-                presets = (locationMemories + location).distinct().filter { it.isNotBlank() },
-                modifier = Modifier.weight(1f)
-            )
-        }
+        // 教练/地点纵向排列：半宽行会让自定义下拉组件溢出（标签截断、箭头错位），与其他字段保持一致
+        AppTextField(
+            value = coach,
+            onValueChange = { coach = it },
+            label = { Text("教练") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+        )
         Spacer(modifier = Modifier.height(8.dp))
+        // 地点：接入 ScheduleMemoryRepository(field="checkin_location") 历史记忆下拉建议
+        val locationMemories by vm.locationMemories.collectAsStateWithLifecycle()
+        StyledSuggestionField(
+            value = location,
+            onValueChange = { location = it },
+            label = "地点",
+            presets = (locationMemories + location).distinct().filter { it.isNotBlank() }
+        )
         // 课时类型（自定义输入 + 快捷下拉建议）
         StyledSuggestionField(
             value = lesson.lessonType,

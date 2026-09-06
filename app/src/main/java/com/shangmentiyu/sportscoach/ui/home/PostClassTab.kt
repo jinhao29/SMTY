@@ -2,6 +2,8 @@ package com.shangmentiyu.sportscoach.ui.home
 
 import android.content.Intent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -435,10 +437,14 @@ private fun DateSectionHeader(
             date
         }
     }
+    // 日期分组头：浅橙圆角胶囊，与下方白卡片形成清晰层次
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = Spacing.sm, end = Spacing.sm, top = Spacing.sm, bottom = Spacing.xs),
+            .padding(start = Spacing.sm, end = Spacing.sm, top = Spacing.sm, bottom = Spacing.xs)
+            .clip(RoundedCornerShape(10.dp))
+            .background(com.shangmentiyu.sportscoach.ui.theme.appPrimary().copy(alpha = 0.08f))
+            .padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
@@ -451,7 +457,7 @@ private fun DateSectionHeader(
         Text(
             text = "$lessonCount 条",
             style = MaterialTheme.typography.labelSmall,
-            color = com.shangmentiyu.sportscoach.ui.theme.appOutline()
+            color = com.shangmentiyu.sportscoach.ui.theme.appPrimary().copy(alpha = 0.7f)
         )
     }
 }
