@@ -37,3 +37,6 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
+
+# Kotlin 2.x 构建输出
+.kotlin/
