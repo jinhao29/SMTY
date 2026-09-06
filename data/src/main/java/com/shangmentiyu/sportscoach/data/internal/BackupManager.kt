@@ -360,6 +360,7 @@ object BackupManager {
                 .put("totalLessons", p.totalLessons)
                 .put("usedLessons", p.usedLessons)
                 .put("price", p.price)
+                .put("paidAmount", p.paidAmount)
                 .put("purchaseDate", p.purchaseDate)
                 .put("expireDate", p.expireDate)
                 .put("status", p.status)
