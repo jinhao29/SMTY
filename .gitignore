@@ -40,3 +40,6 @@ $RECYCLE.BIN/
 
 # Kotlin 2.x 构建输出
 .kotlin/
+
+# 同步服务运行时备份目录
+backups/

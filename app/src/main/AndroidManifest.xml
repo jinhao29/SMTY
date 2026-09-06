@@ -70,7 +70,7 @@
         <!-- 前台 Service，长期监听桌面端 desktop_beacon.py 发送的"在线心跳"广播 -->
         <!-- 收到广播后写入 SharedPreferences，UI 顶部状态栏显示绿色"已连接"指示灯 -->
         <service
-            android:name=".core.UdpDesktopDiscoveryService"
+            android:name=".app.framework.UdpDesktopDiscoveryService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
