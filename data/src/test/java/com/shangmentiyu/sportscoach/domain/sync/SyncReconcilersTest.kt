@@ -45,13 +45,18 @@ class SyncReconcilersTest {
     // === PackageReconciler：单包 ===
 
     @Test
-    fun `单包 pc 总量不同则更新（加购与修正均可）`() {
+    fun `单包 pc 总量高于现值则更新`() {
         val r = PackageReconciler.reconcile("张三", 40, 5, listOf(pkg(30, 5)), "2026-09-06")
         assertThat(r.setTotals).hasSize(1)
         assertThat(r.setTotals.first().newTotal).isEqualTo(40)
+    }
 
-        val r2 = PackageReconciler.reconcile("张三", 25, 5, listOf(pkg(30, 5)), "2026-09-06")
-        assertThat(r2.setTotals.first().newTotal).isEqualTo(25)  // 修正下调允许
+    @Test
+    fun `单包 pc 总量低于现值则安全锁拒绝缩减`() {
+        // v23.9.1：与多包负差值同语义——PC 误改小/换电脑清空时，同步不得削掉手机真实包
+        val r = PackageReconciler.reconcile("张三", 25, 5, listOf(pkg(30, 5)), "2026-09-06")
+        assertThat(r.setTotals).isEmpty()
+        assertThat(r.skipped).isNotEmpty()
     }
 
     @Test

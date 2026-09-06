@@ -191,15 +191,18 @@ class SportsCoachApp : Application() {
                 //         "历史排课修正失败：${e.message}", e)
                 // }
             }
-            // v23.9：订阅 PC 数据变更广播 → 防抖 15s 后自动双向同步
-            //（PC 端改学员/课时/收费后，手机同一 Wi-Fi 下自动跟上，无需手动同步）
+            // v23.9：订阅 PC 数据变更广播 → 真防抖（取消前一个延迟任务）后自动双向同步
+            //（PC 端改学员/课时/收费后，手机同一 Wi-Fi 下自动跟上；连续广播合并成一次
+            //  全量同步，syncMutex 再兜底防并发）
             runCatching {
                 val lanSync = GlobalContext.get()
                     .get<com.shangmentiyu.sportscoach.app.framework.LanSyncManager>()
+                var pendingSync: kotlinx.coroutines.Job? = null
                 launch {
                     com.shangmentiyu.sportscoach.app.framework.UdpDesktopDiscoveryService
-                        .dataChangedEvents.collect {
-                            launch {
+                        .dataChangedEvents.collect { _ ->
+                            pendingSync?.cancel()
+                            pendingSync = launch {
                                 kotlinx.coroutines.delay(15_000)
                                 runCatching { lanSync.syncNow() }
                             }

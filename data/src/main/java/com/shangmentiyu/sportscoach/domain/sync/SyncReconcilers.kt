@@ -69,7 +69,12 @@ object PackageReconciler {
                 return Result(skipped = listOf(
                     "$studentName：PC 总课时($pcTotal)低于手机已用(${pkg.usedLessons})，安全锁拒绝覆盖"))
             }
-            // 单包：PC 值可增可减（教练在 PC 的修正与加购都能落到唯一包上）
+            // 锁 3（v23.9.1）：单包总量同样单调不减——PC 汇总被误改小/换电脑清空时，
+            // 同步不得把手机真实包削掉；与多包负差值拒绝同语义，缩减走人工（退款不传播）
+            if (pcTotal < pkg.totalLessons) {
+                return Result(skipped = listOf(
+                    "$studentName：PC 总课时($pcTotal)低于手机现值(${pkg.totalLessons})，安全锁拒绝缩减"))
+            }
             return Result(setTotals = listOf(SetTotal(pkg, pcTotal)))
         }
 
