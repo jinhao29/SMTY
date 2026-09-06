@@ -145,27 +145,44 @@ class LanSyncManager(
         }
     }
 
+    @Volatile
+    private var lastOnlineProbeAt = 0L
+
     private suspend fun detectOnline(): DesktopLink? {
         // 1) Wi-Fi 心跳（PC 每秒级广播，收到即在线）
         val found = UdpDesktopDiscoveryService.getDiscoveredDesktop(context)
         if (found != null && System.currentTimeMillis() - found.lastSeenAtMs < 60_000L) {
+            lastOnlineProbeAt = System.currentTimeMillis()
             return DesktopLink(viaUsb = false, pcName = found.pcName.ifBlank { "电脑端" },
                                host = found.host, port = found.port.toString())
         }
-        // 2) 历史发现 IP 的 /health 探测兜底（v23.6.1）：部分路由器丢弃 UDP 广播
+        // 2) USB 回环探测（v23.9.1）：插着 USB（adb reverse 在位）就如实识别为 USB，
+        //    且优先于 Wi-Fi——USB 更快更稳，不依赖跨网段路由；拔掉 USB 自动回落 Wi-Fi。
+        //    此前配置了 Wi-Fi 地址后回环永不参与，USB 插入也无法被识别。
+        val configuredPort = settings.syncPort.first().trim()
+            .ifBlank { SettingsRepository.DEFAULT_SYNC_PORT }
+        if (pingHealth("127.0.0.1", configuredPort)) {
+            lastOnlineProbeAt = System.currentTimeMillis()
+            return DesktopLink(viaUsb = true, pcName = "电脑端（USB）",
+                               host = "127.0.0.1", port = configuredPort)
+        }
+        // 3) 历史发现 IP 的 /health 探测兜底（v23.6.1）：部分路由器丢弃 UDP 广播
         //    导致心跳收不到，但 PC 的 IP 很少变 —— 对最近一次发现的地址直连探测
         if (found != null && found.host.isNotBlank() &&
             isLocalNetworkHost(found.host) &&
             pingHealth(found.host, found.port.toString())) {
+            lastOnlineProbeAt = System.currentTimeMillis()
             return DesktopLink(viaUsb = false, pcName = found.pcName.ifBlank { "电脑端" },
                                host = found.host, port = found.port.toString())
         }
-        // 3) /health 探测配置地址（覆盖 USB 回环与手动填写的场景）
+        // 4) /health 探测配置地址（覆盖 USB 回环与手动填写的场景）
         val (host, port, _) = readEndpoint() ?: return null
-        return if (pingHealth(host, port)) {
-            DesktopLink(viaUsb = host.startsWith("127."), pcName = "电脑端",
-                        host = host, port = port)
-        } else null
+        if (pingHealth(host, port)) {
+            lastOnlineProbeAt = System.currentTimeMillis()
+            return DesktopLink(viaUsb = host.startsWith("127."), pcName = "电脑端",
+                               host = host, port = port)
+        }
+        return null
     }
 
     /**
@@ -557,6 +574,13 @@ class LanSyncManager(
 
     /** 读取并校验 PC 端连接配置；无效时返回 null（调用方返回错误结果） */
     private suspend fun readEndpoint(): Triple<String, String, String>? {
+        // v23.9.1：优先采用在线探测维护的当前链路（10s 轮询，30s 新鲜期）——
+        // USB 插入时自动走回环，拔掉自动回落 Wi-Fi 地址；探测未就绪时走下方既有逻辑
+        val link = _desktopOnline.value
+        if (link != null && System.currentTimeMillis() - lastOnlineProbeAt < 30_000L) {
+            val token = settings.syncToken.first().trim()
+            return Triple(link.host, link.port, token)
+        }
         val host = settings.syncHost.first().trim()
         val port = settings.syncPort.first().trim()
             .ifBlank { SettingsRepository.DEFAULT_SYNC_PORT }
