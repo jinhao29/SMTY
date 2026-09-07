@@ -122,6 +122,33 @@ class LanSyncManager(
     private var watchJob: Job? = null
 
     /**
+     * v23.11：配置地址临时拉黑（连接失败后的 USB 回退记忆）。
+     *
+     * 场景：PC 换网后配置的 Wi-Fi IP 已失效（手机无 Wi-Fi 时 connect 要等满 5s 超时），
+     * 而同一时刻 USB 回环（adb reverse）是通的。连接失败把该 host 拉黑 10 分钟，
+     * 期间 readEndpoint 直接回退 127.0.0.1，避免每轮同步都白等超时。
+     */
+    @Volatile
+    private var staleHost: String? = null
+
+    @Volatile
+    private var staleHostUntil = 0L
+
+    /** v23.11：本机主动完成一次双向同步的时间戳（吸收自身推送引发的 PC version 跳变） */
+    @Volatile
+    private var lastOwnSyncAt = 0L
+
+    private fun markHostStale(host: String) {
+        if (!host.startsWith("127.")) {
+            staleHost = host
+            staleHostUntil = System.currentTimeMillis() + 10 * 60_000L
+        }
+    }
+
+    private fun isHostStale(host: String): Boolean =
+        staleHost == host && System.currentTimeMillis() < staleHostUntil
+
+    /**
      * 启动 PC 在线状态轮询（App 启动时调用，进程生命周期常驻）。
      *
      * 判定优先级：
@@ -132,6 +159,7 @@ class LanSyncManager(
     fun startOnlineWatch() {
         if (watchJob?.isActive == true) return
         watchJob = watchScope.launch {
+            var lastPcVersion = 0L
             while (true) {
                 val link = runCatching { detectOnline() }.getOrNull()
                 _desktopOnline.value = link
@@ -139,6 +167,26 @@ class LanSyncManager(
                 if (link != null) {
                     UdpDesktopDiscoveryService.sendDeviceHello(
                         context, link.host, link.port.toIntOrNull() ?: 8765)
+                    // v23.10：PC 主动同步信号——在线时轻量轮询 /sync/version，
+                    // version 跳变（PC 编辑数据或点「同步手机」）→ 双向同步 + Toast 反馈。
+                    // 广播只覆盖 Wi-Fi；此轮询让 USB / 蜂窝场景同样生效（连接即同步）。
+                    runCatching {
+                        val token = settings.syncToken.first().trim()
+                        fetchPcVersion(link.host, link.port, token)?.let { v ->
+                            if (v > lastPcVersion) {
+                                // v23.11：60s 内自己刚完成双向同步 → 该跳变是自身推送
+                                // 引发的，只更新基线，不再触发一轮完整同步（消除
+                                // "推送→PC version 跳变→再同步"的风暴循环）
+                                if (System.currentTimeMillis() - lastOwnSyncAt < 60_000L) {
+                                    lastPcVersion = v
+                                } else {
+                                    val r = syncNow(silent = false)
+                                    // 互斥跳过（同步进行中）时保留旧基线，下轮重试
+                                    if (!r.message.contains("同步进行中")) lastPcVersion = v
+                                }
+                            }
+                        }
+                    }
                 }
                 delay(10_000L)
             }
@@ -202,6 +250,35 @@ class LanSyncManager(
     }
 
     /** GET /health 探测（免鉴权），2.5s 超时。 */
+    /**
+     * v23.10：轻量拉取 PC 数据版本号（/sync/version，几百字节）。
+     * 在线探测循环每 10s 调用一次；version 跳变 = PC 端编辑数据或点了「同步手机」。
+     * 返回 null = 网络失败（不计入基线）。
+     */
+    private suspend fun fetchPcVersion(host: String, port: String, token: String): Long? =
+        withContext(NonCancellable + Dispatchers.IO) {
+            var conn: HttpURLConnection? = null
+            try {
+                conn = (URL("http://$host:$port/sync/version").openConnection()
+                        as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 2_500
+                    readTimeout = 2_500
+                    if (token.isNotEmpty()) setRequestProperty("X-Sync-Token", token)
+                    setRequestProperty("X-Device-Name", DEVICE_NAME)
+                    setRequestProperty("Connection", "close")
+                }
+                if (conn.responseCode != 200) return@withContext null
+                val json = org.json.JSONObject(
+                    conn.inputStream.bufferedReader().use { it.readText() })
+                json.optLong("version", 0L)
+            } catch (_: Exception) {
+                null
+            } finally {
+                conn?.disconnect()
+            }
+        }
+
     private fun pingHealth(host: String, port: String): Boolean {
         var conn: HttpURLConnection? = null
         return try {
@@ -306,6 +383,7 @@ class LanSyncManager(
                 doOutput = true
                 useCaches = false
                 if (token.isNotEmpty()) setRequestProperty("X-Sync-Token", token)
+                setRequestProperty("X-Device-Name", DEVICE_NAME)
                 // v23.6.1：禁用 keep-alive 复用（adb reverse 隧道对连接复用不稳定，
                 // POST 后立即 GET 曾 100% unexpected end of stream）
                 setRequestProperty("Connection", "close")
@@ -335,9 +413,11 @@ class LanSyncManager(
             return SyncResult(false, "PC 端响应异常 (HTTP $code)：$body", code)
         } catch (e: java.net.ConnectException) {
             Log.w(TAG, "连接失败：${e.message}")
+            markHostStale(host)  // v23.11：连不上 → 拉黑 10 分钟，readEndpoint 回退 USB
             return SyncResult(false, "无法连接 PC 端，请确认已启动同步服务", 0)
         } catch (e: Exception) {
             Log.w(TAG, "推送异常：${e.message}")
+            if (e is java.net.SocketTimeoutException) markHostStale(host)
             return SyncResult(false, "推送异常：${e.message ?: "未知错误"}", 0)
         } finally {
             conn?.disconnect()
@@ -374,6 +454,7 @@ class LanSyncManager(
                 connectTimeout = CONNECT_TIMEOUT_MS
                 readTimeout = READ_TIMEOUT_MS
                 if (token.isNotEmpty()) setRequestProperty("X-Sync-Token", token)
+                setRequestProperty("X-Device-Name", DEVICE_NAME)
                 // v23.6.1：禁用 keep-alive 复用（adb reverse 隧道对连接复用不稳定，
                 // POST 后立即 GET 曾 100% unexpected end of stream）
                 setRequestProperty("Connection", "close")
@@ -427,6 +508,7 @@ class LanSyncManager(
             SyncResult(true, "PC 端数据已同步：${result.toUserMessage()}", code)
         } catch (e: java.net.ConnectException) {
             Log.w(TAG, "连接失败：${e.message}")
+            markHostStale(host)  // v23.11：连不上 → 拉黑 10 分钟，readEndpoint 回退 USB
             SyncResult(false, "无法连接 PC 端，请确认已启动同步服务", 0)
         } catch (e: Exception) {
             // v23.6.1 诊断：vivo 屏蔽 logcat，堆栈写文件（cache/smty_debug.log）
@@ -447,19 +529,43 @@ class LanSyncManager(
      * 一键双向同步：先推备份（手机→PC），再拉学员数据（PC→手机）。
      * 两个方向独立成败，消息聚合返回；任一方向成功即 success=true。
      */
-    suspend fun syncNow(): SyncResult {
+    suspend fun syncNow(silent: Boolean = true): SyncResult {
         // v23.9：互斥防重入（周期同步 / PC 变更触发 / 手动可能并发）
         if (!syncMutex.tryLock()) {
             return SyncResult(false, "同步进行中，已跳过本次触发")
         }
         try {
-            return syncNowInternal()
+            val result = syncNowInternal()
+            // v23.11：任一方向成功 = 双向同步完成，记录时间戳（吸收自身推送引发的
+            // PC version 跳变，防止轮询在下一轮再触发一次冗余全量同步）
+            if (result.success) lastOwnSyncAt = System.currentTimeMillis()
+            // v23.10：非静默路径（PC「同步手机」按钮触发的广播）→ Toast 结果反馈；
+            // 周期/上线自动路径保持静默
+            if (!silent) {
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    android.widget.Toast.makeText(
+                        context,
+                        result.message.ifBlank { "同步完成，两端数据已对齐" },
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+            return result
         } finally {
             syncMutex.unlock()
         }
     }
 
     private val syncMutex = kotlinx.coroutines.sync.Mutex()
+
+        /** v23.10：机型名（随同步请求上报，PC 端在线指示显示用） */
+        private val DEVICE_NAME = buildString {
+            android.os.Build.MANUFACTURER.replaceFirstChar { it.uppercase() }.let { if (it.isNotBlank()) append(it) }
+            if (android.os.Build.MODEL.isNotBlank()) {
+                if (isNotEmpty()) append(' ')
+                append(android.os.Build.MODEL)
+            }
+        }.ifBlank { "手机" }
 
     private suspend fun syncNowInternal(): SyncResult {
         val push = pushBackup()
@@ -498,6 +604,7 @@ class LanSyncManager(
                 connectTimeout = CONNECT_TIMEOUT_MS
                 readTimeout = 15_000
                 if (token.isNotEmpty()) setRequestProperty("X-Sync-Token", token)
+                setRequestProperty("X-Device-Name", DEVICE_NAME)
                 setRequestProperty("Connection", "close")
             }
             val code = conn.responseCode
@@ -575,9 +682,11 @@ class LanSyncManager(
     /** 读取并校验 PC 端连接配置；无效时返回 null（调用方返回错误结果） */
     private suspend fun readEndpoint(): Triple<String, String, String>? {
         // v23.9.1：优先采用在线探测维护的当前链路（10s 轮询，30s 新鲜期）——
-        // USB 插入时自动走回环，拔掉自动回落 Wi-Fi 地址；探测未就绪时走下方既有逻辑
+        // USB 插入时自动走回环，拔掉自动回落 Wi-Fi 地址；探测未就绪时走下方既有逻辑。
+        // v23.11：link.host 同样受拉黑约束（心跳可能在 HTTP 层不可达，如 PC 换网后旧缓存）
         val link = _desktopOnline.value
-        if (link != null && System.currentTimeMillis() - lastOnlineProbeAt < 30_000L) {
+        if (link != null && !isHostStale(link.host) &&
+            System.currentTimeMillis() - lastOnlineProbeAt < 30_000L) {
             val token = settings.syncToken.first().trim()
             return Triple(link.host, link.port, token)
         }
@@ -586,13 +695,18 @@ class LanSyncManager(
             .ifBlank { SettingsRepository.DEFAULT_SYNC_PORT }
         val token = settings.syncToken.first().trim()
         return when {
-            // 已配置局域网地址
-            host.isNotBlank() && isLocalNetworkHost(host) -> Triple(host, port, token)
+            // 已配置局域网地址（v23.11：近期连接失败被拉黑的地址回退 USB 回环，
+            // 避免 PC 换网/手机无 Wi-Fi 时每轮同步都白等 5s connect 超时）
+            host.isNotBlank() && isLocalNetworkHost(host) && !isHostStale(host) ->
+                Triple(host, port, token)
+            // 已配置但已拉黑 → USB 回环兜底（127.0.0.1 + adb reverse）
+            host.isNotBlank() && isHostStale(host) -> Triple("127.0.0.1", port, token)
             // v23.6.1：未配置地址时优先用最近一次发现的历史 PC IP（UDP 广播被路由器
             // 拦截时 Wi-Fi 仍可直连；PC 的 IP 很少变），否则回退 127.0.0.1（USB）
             host.isBlank() -> {
                 val lastFound = UdpDesktopDiscoveryService.getDiscoveredDesktop(context)
-                if (lastFound != null && isLocalNetworkHost(lastFound.host)) {
+                if (lastFound != null && isLocalNetworkHost(lastFound.host) &&
+                    !isHostStale(lastFound.host)) {
                     Triple(lastFound.host, lastFound.port.toString(),
                            lastFound.token.ifBlank { token })
                 } else {

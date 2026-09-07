@@ -204,7 +204,7 @@ class SportsCoachApp : Application() {
                             pendingSync?.cancel()
                             pendingSync = launch {
                                 kotlinx.coroutines.delay(15_000)
-                                runCatching { lanSync.syncNow() }
+                                runCatching { lanSync.syncNow(silent = false) }
                             }
                         }
                 }

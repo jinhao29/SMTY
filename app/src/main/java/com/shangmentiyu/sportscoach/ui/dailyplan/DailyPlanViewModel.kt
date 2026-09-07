@@ -92,6 +92,16 @@ class DailyPlanViewModel(
                     _loaded.value = true
                 }
         }
+        // v23.11：骨架屏 3s 兜底——Room 流理论上毫秒级首帧，但实机出现过热启动后
+        // 流永不发射（进程内数据层被同步风暴拖死）导致骨架屏无限转圈。
+        // 3 秒仍未 loaded → 按"已加载（空列表）"放行，宁可短暂显示空状态也不卡死。
+        viewModelScope.launch(appExceptionHandler) {
+            kotlinx.coroutines.delay(3_000L)
+            if (!_loaded.value) {
+                android.util.Log.w("ScheduleDataFlow", "Room 流 3s 未发射，骨架屏兜底放行")
+                _loaded.value = true
+            }
+        }
         viewModelScope.launch(appExceptionHandler) {
             _selectedDate.collect { date ->
                 _dayOfWeek.value = parseDayOfWeek(date)
