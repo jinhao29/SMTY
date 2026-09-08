@@ -59,22 +59,27 @@ val BrandGradientStart = Color(0xFFFF6B47)
 val BrandGradientEnd = Color(0xFFFF9E7A)
 
 // === 2. 暗色主题（Night，跟随系统）===
-val NightBackground = Color(0xFF000000)
-val NightSurface = Color(0xFF2C2C2E)
-val NightSurfaceVariant = Color(0xFF3A3A3C)
+// v65：按李哥提供的深色参考稿（深色结账页）重定风格——
+// 「近黑多层底」：页面底近黑（#101114）→ 卡片微亮一档（#1B1C21）→ 输入框再亮一档
+// （#25272D），层与层之间靠亮度差 + 低对比描边（#2F3237）分层，不用阴影。
+// 大面积纯黑（旧 #000000）夜间刺眼，近黑底更接近参考稿的柔和质感。
+// 主强调仍为珊瑚橙亮色版（参考稿的蓝是其品牌色，不照搬）。
+val NightBackground = Color(0xFF101114)              // 页面主底（参考稿面板近黑档）
+val NightSurface = Color(0xFF1B1C21)                 // 卡片表面（比底亮一档）
+val NightSurfaceVariant = Color(0xFF25272D)          // 输入框/分组底（再亮一档）
 val NightPrimary = Color(0xFFFF8A65)                // 暗色珊瑚橙（更亮保证对比度）
-val NightOnPrimary = Color(0xFFFFFFFF)
-val NightPrimaryContainer = Color(0xFF5C2E1A)
+val NightOnPrimary = Color(0xFF1A1208)
+val NightPrimaryContainer = Color(0xFF3A241A)
 val NightOnPrimaryContainer = Color(0xFFFFD4C2)
 val NightSecondary = Color(0xFFFFAB91)
-val NightOnSecondary = Color(0xFFFFFFFF)
+val NightOnSecondary = Color(0xFF1A1208)
 val NightTertiary = Color(0xFFFFCC80)
-val NightOnBackground = Color(0xFFFFFFFF)
-val NightOnSurface = Color(0xFFEBEBF5)
-val NightOnSurfaceVariant = Color(0xFF9E9E9E)
-val NightOutline = Color(0xFF38383A)
-val NightDivider = Color(0x33FFFFFF)                 // White 20%
-val NightGlassSurface = Color(0xFF1C1C1E)
+val NightOnBackground = Color(0xFFF5F5F7)            // 主文字（参考稿近纯白）
+val NightOnSurface = Color(0xFFF5F5F7)
+val NightOnSurfaceVariant = Color(0xFF9A9BA1)        // 次级文字（参考稿灰）
+val NightOutline = Color(0xFF2F3237)                 // 低对比描边（参考稿 #2A2D31 档）
+val NightDivider = Color(0x17FFFFFF)                 // White 9%（参考稿低对比分隔）
+val NightGlassSurface = Color(0xFF1E1F24)            // 毛玻璃/悬浮层底
 
 // === 2. 语义色令牌（v48 补充：信息横幅/状态提示，M3 无对应字段）===
 val LightSuccessContainer = Color(0xFFE8F5E9)        // 成功/健康建议容器（浅绿）
@@ -219,11 +224,11 @@ fun appOutline(): Color = MaterialTheme.colorScheme.outline
 /**
  * 分段控件（AppSegmentedTabs）选中滑块底色。
  * 亮色：纯白 #FFFFFF，浮于浅灰轨道之上（微缩的白卡片）。
- * 暗色：抬升灰 #5A5A5F，比轨道 #3A3A3C 亮一档（iOS 暗色分段控件的惯用处理，
+ * 暗色：#34373D，比轨道 #25272D 亮一档（v65 参考稿分段选中 #33363B 档的处理，
  * M3 无对应字段，material3 darkColorScheme 的 surface 反而比 surfaceVariant 深）。
  */
 @Composable
-fun appSegmentThumb(): Color = if (isDarkScheme()) Color(0xFF5A5A5F) else Color(0xFFFFFFFF)
+fun appSegmentThumb(): Color = if (isDarkScheme()) Color(0xFF34373D) else Color(0xFFFFFFFF)
 
 // === 7. 语义色访问器（v48：信息横幅/状态提示，随主题切换）===
 // M3 1.3.1 无 success/warning 字段，按当前生效色板（三态开关已收敛到
