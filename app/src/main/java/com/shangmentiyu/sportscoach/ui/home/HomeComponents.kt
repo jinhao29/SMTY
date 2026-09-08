@@ -1,5 +1,8 @@
 package com.shangmentiyu.sportscoach.ui.home
 
+import com.shangmentiyu.sportscoach.ui.theme.appPrimaryContainer
+import com.shangmentiyu.sportscoach.ui.theme.appSecondary
+import com.shangmentiyu.sportscoach.ui.theme.appTertiary
 import com.shangmentiyu.sportscoach.ui.theme.ShadowTokens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -28,9 +31,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
-import com.shangmentiyu.sportscoach.ui.theme.LightSecondary
-import com.shangmentiyu.sportscoach.ui.theme.LightTertiary
 import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
 import com.shangmentiyu.sportscoach.ui.theme.ScoreFail
 import com.shangmentiyu.sportscoach.ui.theme.ScorePass
@@ -174,9 +174,9 @@ internal fun RemainingBadge(remaining: Int) {
 @Composable
 internal fun avatarColorFor(name: String): Color {
     val colors = listOf(
-        LightPrimary,            // 主珊瑚橙 #FF6B47
-        LightSecondary,           // 浅橙 #FF9E7A
-        LightTertiary,           // 暖金黄 #FFB74D
+        appPrimary(),            // 主珊瑚橙 #FF6B47
+        appSecondary(),           // 浅橙 #FF9E7A
+        appTertiary(),           // 暖金黄 #FFB74D
         MaterialTheme.colorScheme.onSurfaceVariant    // 中灰，暗色模式自动变浅
     )
     val idx = name.firstOrNull()?.code?.rem(4) ?: 0
@@ -211,7 +211,8 @@ internal fun TodayOverviewHeader(scheduleCount: Int) {
             .clip(RoundedCornerShape(24.dp))
             .background(
                 brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
-                    colors = listOf(LightPrimary, LightSecondary)
+                    // v66：主题感知渐变（浅珊瑚橙 / 深色参考稿蓝）
+                    colors = listOf(appPrimary(), appSecondary())
                 )
             )
             .padding(horizontal = 24.dp, vertical = 28.dp)
@@ -417,12 +418,12 @@ private fun WeeklyDayDot(
     // 其他：浅灰
     val circleColor = when {
         isCurrentSelected -> MaterialTheme.colorScheme.inverseSurface
-        hasSchedule || isCompleted -> LightPrimary
+        hasSchedule || isCompleted -> appPrimary()
         else -> appDividerColor()
     }
     val textColor = when {
         isCurrentSelected -> MaterialTheme.colorScheme.inverseOnSurface
-        isToday -> LightPrimary
+        isToday -> appPrimary()
         else -> appOnSurfaceVariant()
     }
     Column(
@@ -455,7 +456,7 @@ private fun WeeklyDayDot(
                 modifier = Modifier
                     .size(4.dp)
                     .clip(CircleShape)
-                    .background(LightPrimary)
+                    .background(appPrimary())
             )
         } else {
             Spacer(Modifier.size(4.dp))

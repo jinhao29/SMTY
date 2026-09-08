@@ -59,7 +59,7 @@ fun GlassCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column {
-            // 顶部 4dp 珊瑚橙渐变装饰条（BrandGradientStart→End）
+            // 顶部 4dp 品牌渐变装饰条（v66 主题感知：浅珊瑚橙 / 深色蓝）
             if (accentGradient) {
                 Box(
                     modifier = Modifier
@@ -67,7 +67,7 @@ fun GlassCard(
                         .height(4.dp)
                         .background(
                             brush = Brush.linearGradient(
-                                colors = listOf(BrandGradientStart, BrandGradientEnd)
+                                colors = listOf(appBrandGradientStart(), appBrandGradientEnd())
                             )
                         )
                 )

@@ -1,5 +1,11 @@
 package com.shangmentiyu.sportscoach.ui.score
 
+import com.shangmentiyu.sportscoach.ui.theme.appPrimary
+import com.shangmentiyu.sportscoach.ui.theme.appPrimaryContainer
+import com.shangmentiyu.sportscoach.ui.theme.appSecondary
+import com.shangmentiyu.sportscoach.ui.theme.appTertiary
+import com.shangmentiyu.sportscoach.ui.theme.appBrandGradientEnd
+import com.shangmentiyu.sportscoach.ui.theme.appBrandGradientStart
 import com.shangmentiyu.sportscoach.ui.theme.ShadowTokens
 import android.util.Log
 
@@ -55,9 +61,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.analytics.AnalyticsViewModel
-import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
-import com.shangmentiyu.sportscoach.ui.theme.BrandGradientEnd
-import com.shangmentiyu.sportscoach.ui.theme.BrandGradientStart
 import com.shangmentiyu.sportscoach.ui.theme.ScoreExcellent
 import com.shangmentiyu.sportscoach.ui.theme.ScoreFail
 import com.shangmentiyu.sportscoach.ui.theme.ScoreGood
@@ -199,10 +202,10 @@ private fun StudentPicker(
                 .padding(horizontal = Spacing.cardPadding, vertical = Spacing.md),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 珊瑚橙渐变圆底头像（BrandGradientStart → BrandGradientEnd）
+            // 珊瑚橙渐变圆底头像（appBrandGradientStart() → appBrandGradientEnd()）
             Box(
                 modifier = Modifier.size(44.dp).background(
-                    Brush.linearGradient(colors = listOf(BrandGradientStart, BrandGradientEnd)),
+                    Brush.linearGradient(colors = listOf(appBrandGradientStart(), appBrandGradientEnd())),
                     CircleShape
                 ),
                 contentAlignment = Alignment.Center
@@ -296,11 +299,11 @@ private fun StatCell(
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         // 珊瑚橙线框图标（浅橙圆底衬托，非实色块）
         Box(
-            modifier = Modifier.size(32.dp).background(LightPrimary.copy(alpha = 0.12f), RoundedCornerShape(9.dp)),
+            modifier = Modifier.size(32.dp).background(appPrimary().copy(alpha = 0.12f), RoundedCornerShape(9.dp)),
             contentAlignment = Alignment.Center
         ) {
             Icon(Icons.Outlined.Assessment, contentDescription = null,
-                tint = LightPrimary, modifier = Modifier.size(18.dp))
+                tint = appPrimary(), modifier = Modifier.size(18.dp))
         }
         Spacer(Modifier.height(6.dp))
         Text(
@@ -370,7 +373,7 @@ private fun ProjectSection(
         ) {
             Box(
                 modifier = Modifier.fillMaxWidth().height(4.dp).background(
-                    Brush.linearGradient(colors = listOf(BrandGradientStart, BrandGradientEnd))
+                    Brush.linearGradient(colors = listOf(appBrandGradientStart(), appBrandGradientEnd()))
                 )
             )
             records.forEachIndexed { index, record ->
@@ -405,7 +408,7 @@ private fun ScoreCompareCard(records: List<AnalyticsViewModel.ScoreRecord>) {
     val last = records.first()   // 最近一次
     val delta = last.score - first.score
     val (trendIcon, trendColor, trendText) = when {
-        delta > 0.5 -> Triple(Icons.AutoMirrored.Outlined.TrendingUp, LightPrimary, "进步")
+        delta > 0.5 -> Triple(Icons.AutoMirrored.Outlined.TrendingUp, appPrimary(), "进步")
         delta < -0.5 -> Triple(Icons.AutoMirrored.Outlined.TrendingDown, MaterialTheme.colorScheme.onSurfaceVariant, "退步")
         else -> Triple(Icons.AutoMirrored.Outlined.TrendingFlat, MaterialTheme.colorScheme.outline, "持平")
     }
@@ -493,7 +496,7 @@ private fun ScoreRecordRow(
             if (prevRecord != null) {
                 val delta = record.score - prevRecord.score
                 val (trendIcon, trendColor, trendText) = when {
-                    delta > 0.5 -> Triple(Icons.AutoMirrored.Outlined.TrendingUp, LightPrimary,
+                    delta > 0.5 -> Triple(Icons.AutoMirrored.Outlined.TrendingUp, appPrimary(),
                         "↑ ${"%.1f".format(delta)} 较上次")
                     delta < -0.5 -> Triple(Icons.AutoMirrored.Outlined.TrendingDown, MaterialTheme.colorScheme.onSurfaceVariant,
                         "↓ ${"%.1f".format(kotlin.math.abs(delta))} 较上次")
@@ -582,12 +585,12 @@ private fun EmptyHint(
         ) {
             Box(
                 modifier = Modifier.size(56.dp).background(
-                    LightPrimary.copy(alpha = 0.12f), RoundedCornerShape(14.dp)
+                    appPrimary().copy(alpha = 0.12f), RoundedCornerShape(14.dp)
                 ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(icon, contentDescription = null,
-                    tint = LightPrimary, modifier = Modifier.size(28.dp))
+                    tint = appPrimary(), modifier = Modifier.size(28.dp))
             }
             Spacer(Modifier.height(Spacing.md))
             Text(title, style = MaterialTheme.typography.titleMedium,

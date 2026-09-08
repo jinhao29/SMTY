@@ -60,9 +60,10 @@ fun <T> StyledDropdown(
 ) {
     var expanded by remember { mutableStateOf(false) }
 
-    val selectedCoral = Color(0xFFFF6B47)
+    // v66：主题感知（深色模式随色板变蓝/变深底，不再硬编码浅色值）
+    val selectedCoral = MaterialTheme.colorScheme.primary
     val unselectedGray = MaterialTheme.colorScheme.onSurfaceVariant
-    val emptyCircle = Color(0xFFD1D5DB)
+    val emptyCircle = MaterialTheme.colorScheme.outline
 
     Box(modifier = modifier) {
         Row(
@@ -75,7 +76,7 @@ fun <T> StyledDropdown(
                     spotColor = ShadowTokens.softSpot
                 )
                 .clip(RoundedCornerShape(16.dp))
-                .background(Color.White)
+                .background(MaterialTheme.colorScheme.surface)
                 .clickable(enabled = enabled) { expanded = true }
                 .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically

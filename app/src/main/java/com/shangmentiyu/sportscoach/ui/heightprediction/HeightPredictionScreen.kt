@@ -34,6 +34,8 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
+import com.shangmentiyu.sportscoach.ui.theme.appBrandGradientEnd
+import com.shangmentiyu.sportscoach.ui.theme.appBrandGradientStart
 import com.shangmentiyu.sportscoach.ui.theme.AppTopBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -56,7 +58,6 @@ import com.shangmentiyu.sportscoach.core.HeightPredictionResult
 import com.shangmentiyu.sportscoach.ui.theme.AppTextField
 import org.koin.androidx.compose.koinViewModel
 import com.shangmentiyu.sportscoach.ui.theme.FloatingSnackbarHost
-import com.shangmentiyu.sportscoach.ui.theme.BrandGradientStart
 import com.shangmentiyu.sportscoach.ui.theme.IOSCard
 import com.shangmentiyu.sportscoach.ui.theme.PrimaryButton
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
@@ -222,7 +223,7 @@ private fun StudentInfoCard(student: Student?) {
                     modifier = Modifier
                         .size(44.dp)
                         .clip(CircleShape)
-                        .background(BrandGradientStart),
+                        .background(appBrandGradientStart()),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(

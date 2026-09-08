@@ -1,5 +1,11 @@
 package com.shangmentiyu.sportscoach.ui.growth
 
+import com.shangmentiyu.sportscoach.ui.theme.appPrimary
+import com.shangmentiyu.sportscoach.ui.theme.appPrimaryContainer
+import com.shangmentiyu.sportscoach.ui.theme.appSecondary
+import com.shangmentiyu.sportscoach.ui.theme.appTertiary
+import com.shangmentiyu.sportscoach.ui.theme.appBrandGradientEnd
+import com.shangmentiyu.sportscoach.ui.theme.appBrandGradientStart
 import com.shangmentiyu.sportscoach.ui.theme.ShadowTokens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -31,9 +37,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.shangmentiyu.sportscoach.data.internal.AbilityAnalyzer
-import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
-import com.shangmentiyu.sportscoach.ui.theme.BrandGradientEnd
-import com.shangmentiyu.sportscoach.ui.theme.BrandGradientStart
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appBackground
 import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
@@ -59,7 +62,7 @@ import kotlin.math.sin
  * 设计原则：
  * - 纯白卡片 + 10dp 圆角 + 柔和阴影（与 IosGroupedListCard 风格一致）
  * - 5 维雷达：速度 / 力量 / 耐力 / 柔韧 / 灵敏
- * - 珊瑚橙渐变填充（BrandGradientStart → BrandGradientEnd），与头部卡片视觉呼应
+ * - 珊瑚橙渐变填充（appBrandGradientStart() → appBrandGradientEnd()），与头部卡片视觉呼应
  * - 5 个同心五边形作为标尺（20/40/60/80/100）
  * - 数据空状态：显示"暂无足够成绩数据"，避免 0 分雷达误导
  *
@@ -158,9 +161,11 @@ private fun RadarCanvasWithLabels(values: List<Float>) {
     val dimensions = AbilityAnalyzer.DIMENSIONS
     val gridColor = appDividerColor()
     val axisColor = appOutline()
-    val polygonStroke = LightPrimary
+    val polygonStroke = appPrimary()
     val labelColor = appOnSurfaceVariant()
-    val scoreColor = LightPrimary
+    val scoreColor = appPrimary()
+    // v66：渐变色在 Composable 上下文读取（DrawScope 内不能调用 @Composable 访问器）
+    val gradientColors = listOf(appBrandGradientStart(), appBrandGradientEnd())
 
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val maxW = maxWidth
@@ -212,7 +217,7 @@ private fun RadarCanvasWithLabels(values: List<Float>) {
             drawPath(
                 path = dataPath,
                 brush = Brush.radialGradient(
-                    colors = listOf(BrandGradientStart, BrandGradientEnd),
+                    colors = gradientColors,
                     center = Offset(cx, cy),
                     radius = radius
                 ),
@@ -340,9 +345,9 @@ private fun DimensionChipsRow(values: List<Float>) {
 private fun DimChip(name: String, score: Float, modifier: Modifier = Modifier) {
     val scoreInt = score.toInt()
     val progressColor = when {
-        score >= 85 -> BrandGradientStart
-        score >= 70 -> LightPrimary
-        score >= 60 -> BrandGradientEnd
+        score >= 85 -> appBrandGradientStart()
+        score >= 70 -> appPrimary()
+        score >= 60 -> appBrandGradientEnd()
         score > 0 -> appPrimaryContainer()
         else -> appDividerColor()
     }

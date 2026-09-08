@@ -36,6 +36,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
+import com.shangmentiyu.sportscoach.ui.theme.appPrimary
+import com.shangmentiyu.sportscoach.ui.theme.appPrimaryContainer
+import com.shangmentiyu.sportscoach.ui.theme.appSecondary
+import com.shangmentiyu.sportscoach.ui.theme.appTertiary
 import com.shangmentiyu.sportscoach.ui.theme.AppTopBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -79,13 +83,6 @@ import com.shangmentiyu.sportscoach.ui.theme.ScoreFail
 import com.shangmentiyu.sportscoach.ui.theme.ScoreGood
 import com.shangmentiyu.sportscoach.ui.theme.ScorePass
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
-import com.shangmentiyu.sportscoach.ui.theme.LightSecondary
-import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
-import com.shangmentiyu.sportscoach.ui.theme.LightTertiary
-import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
-import com.shangmentiyu.sportscoach.ui.theme.LightSecondary
-import com.shangmentiyu.sportscoach.ui.theme.LightPrimaryContainer
-import com.shangmentiyu.sportscoach.ui.theme.LightTertiary
 import com.shangmentiyu.sportscoach.ui.theme.BrandGradientEnd
 import com.shangmentiyu.sportscoach.ui.theme.BrandGradientStart
 import com.shangmentiyu.sportscoach.ui.theme.BrandGradientEnd
@@ -711,8 +708,8 @@ private fun VitalMetricsGrid(student: com.shangmentiyu.sportscoach.data.model.St
                 value = if (student.heightCm > 0) "${student.heightCm}" else "—",
                 unit = if (student.heightCm > 0) "cm" else "",
                 icon = Icons.Outlined.Height,
-                BrandGradientStart = LightSecondary,
-                BrandGradientEnd = LightPrimary,
+                BrandGradientStart = appSecondary(),
+                BrandGradientEnd = appPrimary(),
                 modifier = Modifier.weight(1f)
             )
         }
@@ -735,8 +732,8 @@ private fun VitalMetricsGrid(student: com.shangmentiyu.sportscoach.data.model.St
                 value = if (displayBmi > 0f) String.format("%.1f", displayBmi) else "—",
                 unit = if (displayBmi > 0f) BmiProcessor.classify(displayBmi).label else "",
                 icon = Icons.Outlined.Analytics,
-                BrandGradientStart = LightTertiary,
-                BrandGradientEnd = LightPrimaryContainer,
+                BrandGradientStart = appTertiary(),
+                BrandGradientEnd = appPrimaryContainer(),
                 modifier = Modifier.weight(1f)
             )
         }
@@ -831,21 +828,21 @@ private fun StatsCard(stats: GrowthStats) {
             StatItem(
                 label = "累计课时",
                 value = stats.totalLessons.toString(),
-                valueColor = LightPrimary,
+                valueColor = appPrimary(),
                 modifier = Modifier.weight(1f)
             )
             StatDivider()
             StatItem(
                 label = "训练时长",
                 value = "${String.format("%.1f", stats.totalHours)}h",
-                valueColor = LightSecondary,
+                valueColor = appSecondary(),
                 modifier = Modifier.weight(1f)
             )
             StatDivider()
             StatItem(
                 label = "准时率",
                 value = "${(stats.onTimeRate * 100).toInt()}%",
-                valueColor = LightTertiary,
+                valueColor = appTertiary(),
                 modifier = Modifier.weight(1f)
             )
         }
@@ -1008,7 +1005,7 @@ private fun PersonalBestRow(
         1 -> MedalGoldStart to MedalGoldEnd
         2 -> MedalSilverStart to MedalSilverEnd
         3 -> MedalBronzeStart to MedalBronzeEnd
-        else -> LightSecondary to LightPrimary
+        else -> appSecondary() to appPrimary()
     }
     Column {
         if (showTopDivider) {
