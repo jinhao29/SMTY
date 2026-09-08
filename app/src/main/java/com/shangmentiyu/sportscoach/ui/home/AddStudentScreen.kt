@@ -99,17 +99,19 @@ import com.shangmentiyu.sportscoach.ui.theme.StyledDropdown
 fun AddStudentScreen(
     onBack: () -> Unit,
     student: Student? = null,
-    // === v46 修复：传入 Activity 级 HomeViewModel（写入协程不被页面 pop 取消）===
+    // v46 修复：传入 Activity 级 HomeViewModel（写入协程不被页面 pop 取消）===
     // 原实现内部 koinViewModel() 绑定 NavBackStackEntry：保存后 onBack() 即销毁
     // entry → viewModelScope 取消 → addStudent 的 insert 可能未提交 → 学员丢失
-    vm: HomeViewModel
+    vm: HomeViewModel,
+    /** 俱乐部模式：学员均为初中及以上——年级选项去掉学龄前/小学，默认初一 */
+    clubMode: Boolean = false
 ) {
 
     val isEdit = student != null
     // 用 student 作为 key：进入编辑模式时状态会随传入的学员对象重新初始化
     var name by remember(student) { mutableStateOf(student?.name ?: "") }
     var gender by remember(student) { mutableStateOf(student?.gender ?: "男") }
-    var grade by remember(student) { mutableStateOf(student?.grade ?: "1") }
+    var grade by remember(student) { mutableStateOf(student?.grade?.takeIf { it.isNotBlank() && it != "0" } ?: if (clubMode) "7" else "1") }
     var school by remember(student) { mutableStateOf(student?.school ?: "") }
     var phone by remember(student) { mutableStateOf(student?.phone ?: "") }
     var age by remember(student) { mutableStateOf(student?.age?.toString() ?: "") }
@@ -125,8 +127,9 @@ fun AddStudentScreen(
 
     // 学龄前判定：年龄 1-7 岁隐藏年级字段（3-7岁幼儿不要求年级）
     // 年龄为空或 0 时显示年级（默认状态），年龄 >7 时显示年级（学龄期）
+    // 俱乐部模式无学龄前（学员均初中及以上），年级字段恒显示
     val ageInt = age.toIntOrNull() ?: 0
-    val isPreschool = ageInt in 1..7
+    val isPreschool = !clubMode && ageInt in 1..7
     // 实际保存的年级：学龄前自动设为 "0"（学龄前编码）
     val effectiveGrade = if (isPreschool) "0" else grade
 
@@ -301,11 +304,14 @@ fun AddStudentScreen(
                         unit = "岁"
                     )
                     // 年级（下拉）—— 仅学龄期（年龄>7 或未填）显示，3-7岁自动归为"学龄前"
+                    // 俱乐部模式：选项只剩初中及以上（7-13），不含学龄前/小学
                     if (!isPreschool) {
                         IosFormDropdownRow(
                             label = "年级",
                             displayValue = Standards.gradeFullLabel(grade),
-                            options = Standards.GRADE_OPTIONS.filter { it.first != "0" }.map { (code, label) -> code to label },
+                            options = Standards.GRADE_OPTIONS
+                                .filter { it.first != "0" && (!clubMode || it.first.toIntOrNull() in 7..13) }
+                                .map { (code, label) -> code to label },
                             onSelect = { grade = it },
                             showDivider = false
                         )

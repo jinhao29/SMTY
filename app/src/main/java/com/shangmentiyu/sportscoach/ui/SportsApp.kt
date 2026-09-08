@@ -582,7 +582,7 @@ fun SportsApp() {
             // === 学员管理 ===
             composable(Routes.ADD_STUDENT) {
                 // v46：传 Activity 级 homeVm，保证 addStudent 写入协程不被 pop 取消
-                AddStudentScreen(onBack = { navController.popBackStack() }, vm = homeVm)
+                AddStudentScreen(onBack = { navController.popBackStack() }, vm = homeVm, clubMode = isClubMode)
             }
             composable(
                 route = Routes.EDIT_STUDENT,
@@ -596,7 +596,8 @@ fun SportsApp() {
                     target != null -> AddStudentScreen(
                         onBack = { navController.popBackStack() },
                         student = target,
-                        vm = homeVm
+                        vm = homeVm,
+                        clubMode = isClubMode
                     )
                     students.isEmpty() -> {
                         Box(

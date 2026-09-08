@@ -57,7 +57,7 @@ import com.shangmentiyu.sportscoach.ui.theme.appSurface
  *
  * 数据源复用 [HomeViewModel] / [OperationViewModel]（俱乐部库自动隔离）：
  * - 搜索：姓名 / 手机号 / 课程包名称（课程包名命中即显示对应学员）
- * - 筛选：按年级组（U8 / U10 / U12 / U15+，由 grade 编码推导，展示层纯计算）
+ * - 筛选：按学段（初中 / 高中，由 grade 编码推导，展示层纯计算；俱乐部学员均为初中及以上）
  * - 卡片：姓名 / 年级组 / 剩余课时 / 课时包到期日，点击弹出学员详情
  * - 详情：基本信息 + 课时概览 + 最近课时记录 + 编辑/成长报告入口
  *
@@ -154,7 +154,7 @@ fun ClubStudentListScreen(
                 .padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            listOf("全部", "U8", "U10", "U12", "U15+").forEach { g ->
+            listOf("全部", "初中", "高中").forEach { g ->
                 FilterChip(
                     selected = uGroup == g,
                     onClick = { uGroup = g },
@@ -232,23 +232,22 @@ fun ClubStudentListScreen(
     }
 }
 
-/** 年级编码 → 俱乐部年级组标签（U8/U10/U12/U15+，展示层纯推导） */
+/**
+ * 年级编码 → 俱乐部年级组标签（初中/高中，展示层纯推导）。
+ * 俱乐部学员均为初中及以上：初一~初三/中考归"初中"，高一~高三归"高中"；
+ * 学龄前/小学编码（0-6）与未填均为异常数据，归入"初中"兜底。
+ */
 internal fun uGroupOf(grade: String): String {
-    val num = grade.trim().toIntOrNull() ?: return "U15+"
-    return when {
-        num <= 2 -> "U8"
-        num <= 4 -> "U10"
-        num <= 6 -> "U12"
-        else -> "U15+"
-    }
+    val num = grade.trim().toIntOrNull() ?: return "初中"
+    return if (num in 10..12) "高中" else "初中"
 }
 
+/** 年级编码 → 显示名（俱乐部只出现初中及以上；异常编码显示"年级未填"） */
 internal fun gradeLabel(grade: String): String {
     return when (grade.trim().toIntOrNull()) {
-        1 -> "一年级"; 2 -> "二年级"; 3 -> "三年级"; 4 -> "四年级"
-        5 -> "五年级"; 6 -> "六年级"; 7 -> "初一"; 8 -> "初二"; 9 -> "初三"
+        7 -> "初一"; 8 -> "初二"; 9 -> "初三"
         10 -> "高一"; 11 -> "高二"; 12 -> "高三"; 13 -> "中考"
-        else -> if (grade.isBlank()) "年级未填" else grade
+        else -> "年级未填"
     }
 }
 
