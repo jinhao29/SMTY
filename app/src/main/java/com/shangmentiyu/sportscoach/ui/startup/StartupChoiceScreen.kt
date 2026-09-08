@@ -34,11 +34,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+import com.shangmentiyu.sportscoach.data.internal.ModeManager
 import com.shangmentiyu.sportscoach.ui.theme.appBackground
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
@@ -51,15 +53,25 @@ import com.shangmentiyu.sportscoach.ui.theme.appSurface
  * App 从单一「教练工具」扩展为多板块（教练工作台 / 体育俱乐部），
  * 冷启动先进入本页选择要进入的板块；后续俱乐部模块在此入口下生长。
  * 布局参考李哥给的 onboarding 参考图：欢迎语 → 插画/选择区 → 品牌名 + slogan。
+ *
+ * v23.13：板块选择接入工作模式（ModeManager，多租户物理隔离）——
+ * - 点击与当前模式一致的板块：直接进入；
+ * - 点击另一板块：写偏好（commit 落盘）+ 重启 App，Application 重新初始化
+ *   时挂载对应模式的独立数据库（sports_coach_db / sports_coach_club_db），
+ *   重启后回到本页再点一次即进入（与设置页 ModeSection 同一套语义）。
+ * - 当前生效板块卡片右上角显示「当前数据空间」角标。
  */
 
-private val BrandCoral = Color(0xFFFF6B47)
+// v66：不再硬编码珊瑚橙——深色模式下主强调随主题变蓝，统一走 appPrimary()
+private val BrandCoral @Composable get() = appPrimary()
 
 @Composable
 fun StartupChoiceScreen(
     onEnterCoach: () -> Unit,
     onEnterClub: () -> Unit
 ) {
+    val context = LocalContext.current
+    val activeMode = ModeManager.activeMode
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -89,8 +101,14 @@ fun StartupChoiceScreen(
             title = "教练工作台",
             subtitle = "学员管理 · 课时排课 · 双端同步",
             icon = { Icon(Icons.Outlined.Home, null, tint = BrandCoral, modifier = Modifier.size(30.dp)) },
-            badge = null,
-            onClick = onEnterCoach
+            badge = if (activeMode == ModeManager.MODE_COACHING) "当前数据空间" else null,
+            onClick = {
+                if (activeMode == ModeManager.MODE_COACHING) {
+                    onEnterCoach()
+                } else {
+                    switchMode(context, ModeManager.MODE_COACHING)
+                }
+            }
         )
 
         Spacer(Modifier.height(20.dp))
@@ -100,8 +118,14 @@ fun StartupChoiceScreen(
             title = "体育俱乐部",
             subtitle = "EVOLVE · 会员 / 课程 / 教练团队",
             icon = { Icon(Icons.Outlined.EmojiEvents, null, tint = BrandCoral, modifier = Modifier.size(30.dp)) },
-            badge = "建设中",
-            onClick = onEnterClub
+            badge = if (activeMode == ModeManager.MODE_CLUB) "当前数据空间" else "建设中",
+            onClick = {
+                if (activeMode == ModeManager.MODE_CLUB) {
+                    onEnterClub()
+                } else {
+                    switchMode(context, ModeManager.MODE_CLUB)
+                }
+            }
         )
 
         Spacer(Modifier.weight(1f))
@@ -123,6 +147,16 @@ fun StartupChoiceScreen(
         )
         Spacer(Modifier.height(40.dp))
     }
+}
+
+/** 切换工作模式：落盘 + 重启（重启后回到本页，再点对应卡片即进入新数据空间） */
+private fun switchMode(context: android.content.Context, mode: String) {
+    ModeManager.setMode(context, mode)
+    val pm = context.packageManager
+    val intent = pm.getLaunchIntentForPackage(context.packageName)
+    intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+    context.startActivity(intent)
+    android.os.Process.killProcess(android.os.Process.myPid())
 }
 
 @Composable

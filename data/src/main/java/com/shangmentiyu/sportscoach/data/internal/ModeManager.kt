@@ -55,8 +55,10 @@ object ModeManager {
      */
     fun setMode(context: Context, newMode: String): String {
         val m = normalize(newMode)
+        // commit 同步落盘：调用方（设置页/启动页）紧随其后 killProcess 重启，
+        // apply 异步写有丢偏好风险（重启后模式回退）
         context.applicationContext.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
-            .edit().putString(KEY_MODE, m).apply()
+            .edit().putString(KEY_MODE, m).commit()
         if (m != activeMode) {
             // 先关旧实例（WAL 刷盘），再翻转选库依据——之后的 getDatabase 挂新库
             AppDatabase.closeAndResetInstance(context.applicationContext)
