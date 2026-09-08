@@ -188,10 +188,12 @@ object BackupManager {
 
             ZipOutputStream(outputStream).use { zos ->
                 // 2. 写入数据库文件
+                // v23.12：按当前工作模式选库（俱乐部模式备份俱乐部库，物理隔离闭环）
+                val dbName = AppDatabase.activeDatabaseName()
                 val dbFiles = listOf(
-                    ZIP_ENTRY_DB to File(context.getDatabasePath(AppDatabase.DATABASE_NAME).absolutePath),
-                    ZIP_ENTRY_DB_WAL to File(context.getDatabasePath(AppDatabase.DATABASE_NAME + "-wal").absolutePath),
-                    ZIP_ENTRY_DB_SHM to File(context.getDatabasePath(AppDatabase.DATABASE_NAME + "-shm").absolutePath)
+                    ZIP_ENTRY_DB to File(context.getDatabasePath(dbName).absolutePath),
+                    ZIP_ENTRY_DB_WAL to File(context.getDatabasePath(dbName + "-wal").absolutePath),
+                    ZIP_ENTRY_DB_SHM to File(context.getDatabasePath(dbName + "-shm").absolutePath)
                 )
                 val dbTotal = dbFiles.count { it.second.exists() }
                 var dbDone = 0
@@ -288,6 +290,8 @@ object BackupManager {
             .put("generatedAt", LocalDateTime.now()
                 .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.getDefault())))
             .put("appPackage", context.packageName)
+            // v23.12：工作模式随备份上报，桌面端合并时校验（防俱乐部/上门体育串库）
+            .put("mode", ModeManager.activeMode)
             .put("counts", JSONObject()
                 .put("students", students.size)
                 .put("lessons", lessons.size)
@@ -535,7 +539,7 @@ object BackupManager {
         onProgress: OnProgress?
     ): RestoreResult {
         migrateLegacySignPhotosDir(context.filesDir)
-        val hasExistingData = context.getDatabasePath(AppDatabase.DATABASE_NAME).exists() ||
+        val hasExistingData = context.getDatabasePath(AppDatabase.activeDatabaseName()).exists() ||
             File(context.filesDir, PHOTOS_DIR_NAME).listFiles()?.isNotEmpty() == true
         val safetyFile = if (hasExistingData) {
             onProgress?.onProgress("safety", 0, 0, "正在创建恢复前安全备份…")
@@ -630,7 +634,7 @@ object BackupManager {
             // 2. 清空当前数据库文件（避免恢复后残留旧数据）
             onProgress?.onProgress("cleanup", 0, 0, "正在清理旧数据…")
             listOf("", "-wal", "-shm").forEach { suffix ->
-                val file = context.getDatabasePath(AppDatabase.DATABASE_NAME + suffix)
+                val file = context.getDatabasePath(AppDatabase.activeDatabaseName() + suffix)
                 if (file.exists()) {
                     file.delete()
                 }
@@ -652,7 +656,7 @@ object BackupManager {
                     when {
                         // 数据库文件
                         entry.name == ZIP_ENTRY_DB -> {
-                            val target = context.getDatabasePath(AppDatabase.DATABASE_NAME)
+                            val target = context.getDatabasePath(AppDatabase.activeDatabaseName())
                             target.parentFile?.mkdirs()
                             extractFile(zis, target)
                             dbExtracted = true
@@ -660,13 +664,13 @@ object BackupManager {
                         }
                         // WAL 日志
                         entry.name == ZIP_ENTRY_DB_WAL -> {
-                            val target = context.getDatabasePath(AppDatabase.DATABASE_NAME + "-wal")
+                            val target = context.getDatabasePath(AppDatabase.activeDatabaseName() + "-wal")
                             extractFile(zis, target)
                             onProgress?.onProgress("extract", entryIdx, 0, "已恢复 WAL 日志")
                         }
                         // 共享内存
                         entry.name == ZIP_ENTRY_DB_SHM -> {
-                            val target = context.getDatabasePath(AppDatabase.DATABASE_NAME + "-shm")
+                            val target = context.getDatabasePath(AppDatabase.activeDatabaseName() + "-shm")
                             extractFile(zis, target)
                             onProgress?.onProgress("extract", entryIdx, 0, "已恢复 SHM 内存")
                         }
@@ -733,7 +737,7 @@ object BackupManager {
                     // 校验失败：删除已解压的损坏 db 文件，避免下次启动加载损坏数据
                     Log.e(TAG, "数据库完整性校验失败：\n$report")
                     listOf("", "-wal", "-shm").forEach { suffix ->
-                        val f = context.getDatabasePath(AppDatabase.DATABASE_NAME + suffix)
+                        val f = context.getDatabasePath(AppDatabase.activeDatabaseName() + suffix)
                         if (f.exists()) f.delete()
                     }
                     onProgress?.onProgress(
@@ -766,7 +770,7 @@ object BackupManager {
             // 异常时清理半成品 db 文件
             if (dbExtracted) {
                 listOf("", "-wal", "-shm").forEach { suffix ->
-                    val f = context.getDatabasePath(AppDatabase.DATABASE_NAME + suffix)
+                    val f = context.getDatabasePath(AppDatabase.activeDatabaseName() + suffix)
                     if (f.exists()) f.delete()
                 }
             }
@@ -802,7 +806,7 @@ object BackupManager {
      * @return 校验结果（"ok" 或多行错误描述）
      */
     private fun verifyIntegrity(context: Context): String {
-        val dbFile = context.getDatabasePath(AppDatabase.DATABASE_NAME)
+        val dbFile = context.getDatabasePath(AppDatabase.activeDatabaseName())
         if (!dbFile.exists()) return "db file not exists"
 
         var report = ""
@@ -831,7 +835,7 @@ object BackupManager {
     }
 
     private fun rebuildFtsIndex(context: Context) {
-        val dbFile = context.getDatabasePath(AppDatabase.DATABASE_NAME)
+        val dbFile = context.getDatabasePath(AppDatabase.activeDatabaseName())
         if (!dbFile.exists()) return
         try {
             val sqliteDb = android.database.sqlite.SQLiteDatabase.openDatabase(

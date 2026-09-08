@@ -49,6 +49,15 @@ class SportsCoachApp : Application() {
     override fun onCreate() {
         super.onCreate()
 
+        // === v23.12 多租户：工作模式最早期初始化（同步读 SharedPreferences）===
+        // 必须在一切数据库访问（含避风港备份）之前——AppDatabase.getDatabase
+        // 按 activeMode 选库文件（上门体育/俱乐部物理隔离）。
+        runCatching {
+            com.shangmentiyu.sportscoach.data.internal.ModeManager.init(this)
+        }
+        android.util.Log.i("SportsCoachApp",
+            "工作模式：${com.shangmentiyu.sportscoach.data.internal.ModeManager.activeMode}")
+
         // === 终极防丢机制：启动前避风港备份 ===
         // 必须在所有其他初始化之前执行（包括 CrashHandler）。
         // 即使后续 CrashHandler install 失败、Room 打开数据库失败、App 闪退，

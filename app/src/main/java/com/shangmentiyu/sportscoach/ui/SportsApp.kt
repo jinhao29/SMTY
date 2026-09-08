@@ -460,9 +460,33 @@ fun SportsApp() {
         ) { innerPadding ->
             NavHost(
                 navController = navController,
-                startDestination = Routes.HOME,
+                startDestination = Routes.STARTUP,
                 modifier = Modifier.padding(innerPadding)
             ) {
+            // === 启动板块选择（v60） ===
+            composable(Routes.STARTUP) {
+                com.shangmentiyu.sportscoach.ui.startup.StartupChoiceScreen(
+                    onEnterCoach = {
+                        navController.navigate(Routes.HOME) {
+                            popUpTo(Routes.STARTUP) { inclusive = true }
+                        }
+                    },
+                    onEnterClub = {
+                        navController.navigate(Routes.CLUB) {
+                            popUpTo(Routes.STARTUP) { inclusive = true }
+                        }
+                    }
+                )
+            }
+            composable(Routes.CLUB) {
+                com.shangmentiyu.sportscoach.ui.startup.ClubPlaceholderScreen(
+                    onBack = {
+                        navController.navigate(Routes.STARTUP) {
+                            popUpTo(Routes.CLUB) { inclusive = true }
+                        }
+                    }
+                )
+            }
             // === 底部 Tab ===
             composable(Routes.HOME) {
                 HomeScreen(

@@ -5,6 +5,7 @@ import android.util.Log
 import com.shangmentiyu.sportscoach.data.repo.BackupRepository
 import com.shangmentiyu.sportscoach.data.repo.SettingsRepository
 import com.shangmentiyu.sportscoach.data.repo.StudentRepository
+import com.shangmentiyu.sportscoach.data.internal.ModeManager
 import com.shangmentiyu.sportscoach.excel.ExcelSync
 import com.shangmentiyu.sportscoach.excel.ImportStrategy
 import kotlinx.coroutines.CoroutineScope
@@ -461,6 +462,16 @@ class LanSyncManager(
             }
             val code = conn.responseCode
             dbg("pull http code=$code")
+            // v23.12 多租户防串库：PC 报告的工作模式必须与本机一致才合并
+            val pcMode = conn.getHeaderField("X-Workspace-Mode")
+            if (pcMode != null && pcMode != ModeManager.activeMode) {
+                dbg("pull mode mismatch pc=$pcMode local=${ModeManager.activeMode}")
+                return@withContext SyncResult(
+                    false,
+                    "模式不一致：PC 端在${if (pcMode == "club") "俱乐部" else "上门体育"}模式，" +
+                        "手机在${if (ModeManager.activeMode == "club") "俱乐部" else "上门体育"}模式，已拒绝拉取（防串库）",
+                    code)
+            }
             if (code != 200) {
                 val body = (conn.errorStream ?: conn.inputStream)?.bufferedReader()
                     ?.use { it.readText() } ?: ""
@@ -615,6 +626,11 @@ class LanSyncManager(
             val json = JSONObject(body)
             if (json.optInt("code", 1) != 0) {
                 return@withContext SyncResult(false, "", code)
+            }
+            // v23.12 多租户防串库：PC 数据包的工作模式必须与本机一致
+            val pcMode = json.optString("workspaceMode", "")
+            if (pcMode.isNotEmpty() && pcMode != ModeManager.activeMode) {
+                return@withContext SyncResult(false, "", code)  // 静默拒绝，防串库
             }
             val packages = mutableListOf<com.shangmentiyu.sportscoach.data.repo.PcPackage>()
             json.optJSONArray("packages")?.let { arr ->

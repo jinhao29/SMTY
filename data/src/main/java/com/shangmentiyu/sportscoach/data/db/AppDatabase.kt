@@ -87,7 +87,7 @@ abstract class AppDatabase : RoomDatabase() {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    DATABASE_NAME
+                    activeDatabaseName()
                 )
                     .addMigrations(*AppDatabaseMigrations.ALL)
                     .addCallback(AppDatabaseMigrations.DB_CALLBACK)
@@ -103,6 +103,22 @@ abstract class AppDatabase : RoomDatabase() {
                 instance
             }
         }
+
+        /**
+         * 当前模式对应的数据库文件名（v23.12 多租户·物理隔离）。
+         *
+         * 上门体育 = sports_coach_db（既有库）；俱乐部 = sports_coach_club_db（独立库）。
+         * 两个库共用同一套 Entity/DAO/Migration（schema 相同，version 一起走）。
+         * 选库依据 [ModeManager.activeMode] 必须在首次 getDatabase 前由
+         * Application.onCreate 同步初始化。
+         */
+        fun activeDatabaseName(): String =
+            if (com.shangmentiyu.sportscoach.data.internal.ModeManager.activeMode ==
+                com.shangmentiyu.sportscoach.data.internal.ModeManager.MODE_CLUB) {
+                CLUB_DATABASE_NAME
+            } else {
+                DATABASE_NAME
+            }
 
         /**
          * 关闭并重置数据库单例（仅用于整库备份/恢复流程）。
@@ -142,6 +158,9 @@ abstract class AppDatabase : RoomDatabase() {
          * Room 默认会在 databasePath 下生成 <dbName>、<dbName>-wal、<dbName>-shm 三个文件。
          */
         const val DATABASE_NAME = "sports_coach_db"
+
+        /** 俱乐部模式专用库（v23.12 物理隔离；schema 与主库完全一致） */
+        const val CLUB_DATABASE_NAME = "sports_coach_club_db"
 
         /**
          * 当前代码声明的数据库版本（与 @Database version 保持一致）。

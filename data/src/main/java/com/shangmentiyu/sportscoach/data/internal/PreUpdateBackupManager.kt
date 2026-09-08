@@ -52,7 +52,7 @@ object PreUpdateBackupManager {
      */
     fun backupIfDbExists(context: Context) {
         try {
-            val dbFile = context.getDatabasePath(AppDatabase.DATABASE_NAME)
+            val dbFile = context.getDatabasePath(AppDatabase.activeDatabaseName())
             if (!dbFile.exists() || dbFile.length() == 0L) {
                 Log.d(TAG, "数据库文件不存在或为空，跳过启动前备份")
                 return
@@ -99,7 +99,7 @@ object PreUpdateBackupManager {
      */
     fun checkVersionAndEmergencyBackup(context: Context, codeVersion: Int) {
         try {
-            val dbFile = context.getDatabasePath(AppDatabase.DATABASE_NAME)
+            val dbFile = context.getDatabasePath(AppDatabase.activeDatabaseName())
             if (!dbFile.exists() || dbFile.length() == 0L) {
                 Log.d(TAG, "数据库文件不存在或为空，跳过版本检查")
                 return

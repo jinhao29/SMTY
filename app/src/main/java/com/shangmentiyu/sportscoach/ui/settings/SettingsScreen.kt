@@ -226,6 +226,9 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
                     color = appOnSurfaceVariant()
                 )
 
+                // v23.12 多租户：工作模式切换（上门体育 / 俱乐部，独立数据库）
+                ModeSection()
+
                 ProfileSection(vm)
 
                 // 工具 / 教练管理 / 家长沟通（紧随"统计信息"下方）

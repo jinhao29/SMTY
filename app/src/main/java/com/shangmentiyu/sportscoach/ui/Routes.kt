@@ -7,6 +7,10 @@ package com.shangmentiyu.sportscoach.ui
  * 其余均为二级页面路由，通过 NavController.navigate 跳转。
  */
 object Routes {
+    // === 启动板块选择（v60：多板块入口） ===
+    const val STARTUP = "startup"
+    const val CLUB = "club"
+
     // === 底部 Tab ===
     const val HOME = "home"
     const val SCORE = "score"
