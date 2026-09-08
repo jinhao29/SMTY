@@ -448,9 +448,24 @@ fun SportsApp() {
     // 在系统导航栏区域露出 containerColor，导致胶囊两侧出现灰白方块。
     // 现在把悬浮导航作为独立元素摆在外层 Box 底部，完全脱离 Scaffold，
     // 胶囊两侧直接透出主页面底色（appBackground #FAFAFA），真正"无影悬浮"。
+    // === v63：俱乐部页系统栏区去白 ===
+    // API 35+ 强制 edge-to-edge，statusBarColor 已失效；系统栏区域露出的是
+    // Scaffold 的 containerColor。俱乐部页（黑底）时把容器色切黑、insets 置 0，
+    // 让页面背景铺满全屏，系统栏区域不再露白；颜色带 220ms 过渡避免切换突兀。
+    val isClubRoute = currentRoute == Routes.CLUB
+    val scaffoldContainer by androidx.compose.animation.animateColorAsState(
+        targetValue = if (isClubRoute) Color(0xFF111111) else appBackground(),
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = 220),
+        label = "scaffoldContainer"
+    )
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
-            containerColor = appBackground(),
+            containerColor = scaffoldContainer,
+            contentWindowInsets = if (isClubRoute) {
+                androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0)
+            } else {
+                androidx.compose.material3.ScaffoldDefaults.contentWindowInsets
+            },
             topBar = {
                 // v32 优化3：桌面端连接状态栏（仅在线时显示绿色指示灯）
                 DesktopConnectionBanner(desktopConnection)
