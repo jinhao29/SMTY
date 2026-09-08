@@ -1,11 +1,8 @@
 package com.shangmentiyu.sportscoach.ui.startup
 
-import android.app.Activity
-import android.content.ContextWrapper
 import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,31 +12,23 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.EmojiEvents
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.view.WindowCompat
 import com.shangmentiyu.sportscoach.data.internal.ModeManager
 import com.shangmentiyu.sportscoach.ui.theme.appBackground
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
@@ -113,12 +102,12 @@ fun StartupChoiceScreen(
 
         Spacer(Modifier.height(20.dp))
 
-        // 板块选择卡片 2：体育俱乐部（新板块，建设中）
+        // 板块选择卡片 2：体育俱乐部（v24 真实 UI 已上线）
         ModuleCard(
             title = "体育俱乐部",
             subtitle = "EVOLVE · 会员 / 课程 / 教练团队",
             icon = { Icon(Icons.Outlined.EmojiEvents, null, tint = BrandCoral, modifier = Modifier.size(30.dp)) },
-            badge = if (activeMode == ModeManager.MODE_CLUB) "当前数据空间" else "建设中",
+            badge = if (activeMode == ModeManager.MODE_CLUB) "当前数据空间" else null,
             onClick = {
                 if (activeMode == ModeManager.MODE_CLUB) {
                     onEnterClub()
@@ -224,119 +213,5 @@ private fun ModuleCard(
                 )
             }
         }
-    }
-}
-
-/**
- * 体育俱乐部板块占位页（v60）：EVOLVE 黑白极简基调，
- * 后续俱乐部功能（会员 / 课程顾问 / 教练团队）在此模块下生长。
- *
- * v63：系统栏背景由 SportsApp 的 Scaffold 按路由切黑（API 35+ 强制 edge-to-edge，
- * statusBarColor 已失效）；本页只负责在进/出时切换状态栏与手势条图标明暗。
- */
-@Composable
-fun ClubPlaceholderScreen(
-    onBack: () -> Unit
-) {
-    // 黑底页面需要浅色系统栏图标；离开时恢复浅底深图标
-    val view = LocalView.current
-    DisposableEffect(Unit) {
-        var ctx = view.context
-        while (ctx is ContextWrapper && ctx !is Activity) ctx = ctx.baseContext
-        val window = (ctx as? Activity)?.window
-        val controller = window?.let { WindowCompat.getInsetsController(it, view) }
-        controller?.isAppearanceLightStatusBars = false
-        controller?.isAppearanceLightNavigationBars = false
-        onDispose {
-            controller?.isAppearanceLightStatusBars = true
-            controller?.isAppearanceLightNavigationBars = true
-        }
-    }
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF111111))
-            .systemBarsPadding(),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(
-                    Icons.AutoMirrored.Outlined.ArrowBack,
-                    contentDescription = "返回",
-                    tint = Color(0xFFEDEDED)
-                )
-            }
-        }
-        Spacer(Modifier.weight(1f))
-
-        // EVOLVE 黑白极简占位标识（手工几何，非位图）
-        Box(
-            modifier = Modifier
-                .size(96.dp)
-                .background(Color.Transparent, CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
-                Modifier
-                    .size(96.dp)
-                    .background(Color.Transparent)
-            ) {
-                // 三道斜切白条构成的抽象 "E"
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    repeat(3) { i ->
-                        Box(
-                            Modifier
-                                .size(width = if (i == 2) 56.dp else 84.dp, height = 10.dp)
-                                .background(Color(0xFFEDEDED))
-                        )
-                    }
-                }
-            }
-        }
-        Spacer(Modifier.height(28.dp))
-        Text(
-            text = "EVOLVE",
-            fontSize = 26.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 8.sp,
-            color = Color(0xFFEDEDED)
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = "进化体育 · 俱乐部",
-            fontSize = 14.sp,
-            letterSpacing = 2.sp,
-            color = Color(0xFF9A9A9A)
-        )
-        Spacer(Modifier.height(36.dp))
-        Surface(
-            shape = RoundedCornerShape(20.dp),
-            color = Color.Transparent,
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF3A3A3A))
-        ) {
-            Text(
-                text = "俱乐部模块建设中\n会员 / 课程顾问 / 教练团队 即将上线",
-                fontSize = 13.sp,
-                lineHeight = 20.sp,
-                color = Color(0xFFB9B9B9),
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 14.dp),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-            )
-        }
-        Spacer(Modifier.weight(1f))
-        Text(
-            text = "返回可重新选择板块",
-            fontSize = 12.sp,
-            color = Color(0xFF6E6E6E),
-            modifier = Modifier
-                .clickable(onClick = onBack)
-                .padding(bottom = 32.dp)
-        )
     }
 }

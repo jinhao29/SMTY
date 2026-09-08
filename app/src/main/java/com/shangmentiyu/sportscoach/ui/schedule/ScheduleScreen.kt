@@ -70,7 +70,9 @@ import java.time.LocalDate
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScheduleScreen(
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    /** false = 作为底部 Tab 使用（俱乐部模式），隐藏返回箭头 */
+    showBack: Boolean = true
 ) {
     val vm: OperationViewModel = koinViewModel()
 
@@ -222,6 +224,7 @@ fun ScheduleScreen(
                 } else {
                     ScheduleTopBar(
                         onBack = onBack,
+                        showBack = showBack,
                         hasSchedules = schedules.isNotEmpty(),
                         onAutoSchedule = { showAutoScheduleDialog = true },
                         onDeleteByStudent = { showDeleteByStudentDialog = true },

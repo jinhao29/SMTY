@@ -9,7 +9,15 @@ package com.shangmentiyu.sportscoach.ui
 object Routes {
     // === 启动板块选择（v60：多板块入口） ===
     const val STARTUP = "startup"
-    const val CLUB = "club"
+
+    // === EVOLVE 俱乐部板块（v24 俱乐部真实 UI） ===
+    // 排课 Tab 直接复用 Routes.SCHEDULE、教练管理复用 COACH_MANAGE、签到复用
+    // LESSON_CHECKIN——这些页面全部经 AppDatabase.getDatabase() 取数，
+    // 俱乐部模式下自动落到 sports_coach_club_db，无需 Club 前缀副本。
+    const val CLUB_HOME = "club_home"
+    const val CLUB_STUDENTS = "club_students"
+    const val CLUB_LESSONS = "club_lessons"
+    const val CLUB_SETTINGS = "club_settings"
 
     // === 底部 Tab ===
     const val HOME = "home"

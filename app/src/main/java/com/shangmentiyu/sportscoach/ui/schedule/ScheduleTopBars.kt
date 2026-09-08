@@ -69,6 +69,7 @@ import com.shangmentiyu.sportscoach.ui.theme.glassTopAppBarColors
 @Composable
 internal fun ScheduleTopBar(
     onBack: () -> Unit,
+    showBack: Boolean = true,
     hasSchedules: Boolean,
     onAutoSchedule: () -> Unit,
     onDeleteByStudent: () -> Unit,
@@ -79,8 +80,11 @@ internal fun ScheduleTopBar(
         title = { Text("课表", fontWeight = FontWeight.Bold) },
         colors = glassTopAppBarColors(),
         navigationIcon = {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
+            // 俱乐部模式作为底部 Tab 时隐藏返回箭头（showBack=false），避免"点了没反应"
+            if (showBack) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
+                }
             }
         },
         shareLabel = "课表",

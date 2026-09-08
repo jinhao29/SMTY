@@ -23,8 +23,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Analytics
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Computer
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.SupervisorAccount
@@ -61,6 +63,11 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.shangmentiyu.sportscoach.app.framework.ScheduleReminderWorker
+import com.shangmentiyu.sportscoach.data.internal.ModeManager
+import com.shangmentiyu.sportscoach.ui.club.ClubHomeScreen
+import com.shangmentiyu.sportscoach.ui.club.ClubLessonManageScreen
+import com.shangmentiyu.sportscoach.ui.club.ClubSettingsScreen
+import com.shangmentiyu.sportscoach.ui.club.ClubStudentListScreen
 import com.shangmentiyu.sportscoach.ui.growth.GrowthScreen
 import com.shangmentiyu.sportscoach.ui.home.AddStudentScreen
 import com.shangmentiyu.sportscoach.ui.home.HomeScreen
@@ -308,13 +315,27 @@ private fun DesktopConnectionBanner(
 @Composable
 fun SportsApp() {
     val navController = rememberNavController()
-    // v34：教练管理升级为底部导航主 Tab；中考体育整合进"成绩查看"页 Tab
-    val bottomItems = listOf(
-        BottomItem(Routes.HOME, "主页", Icons.Outlined.Home),
-        BottomItem(Routes.SCORE, "成绩查看", Icons.Outlined.Analytics),
-        BottomItem(Routes.COACH_MANAGE, "教练管理", Icons.Outlined.SupervisorAccount),
-        BottomItem(Routes.SETTINGS, "设置", Icons.Outlined.Settings),
-    )
+    // === v24 俱乐部真实 UI：底部导航按工作模式切换 ===
+    // 模式切换 = 写偏好 + 进程重启（ModeManager.setMode），运行期内模式恒定，
+    // 因此按 activeMode 二选一即可，无运行时竞态。
+    // 俱乐部排课 Tab 直接复用 Routes.SCHEDULE（数据库已按模式隔离，页面零改动）。
+    val isClubMode = ModeManager.activeMode == ModeManager.MODE_CLUB
+    val bottomItems = if (isClubMode) {
+        listOf(
+            BottomItem(Routes.CLUB_HOME, "首页", Icons.Outlined.Home),
+            BottomItem(Routes.CLUB_STUDENTS, "学员", Icons.Outlined.Group),
+            BottomItem(Routes.SCHEDULE, "排课", Icons.Outlined.CalendarMonth),
+            BottomItem(Routes.CLUB_SETTINGS, "我的", Icons.Outlined.Settings),
+        )
+    } else {
+        // v34：教练管理升级为底部导航主 Tab；中考体育整合进"成绩查看"页 Tab
+        listOf(
+            BottomItem(Routes.HOME, "主页", Icons.Outlined.Home),
+            BottomItem(Routes.SCORE, "成绩查看", Icons.Outlined.Analytics),
+            BottomItem(Routes.COACH_MANAGE, "教练管理", Icons.Outlined.SupervisorAccount),
+            BottomItem(Routes.SETTINGS, "设置", Icons.Outlined.Settings),
+        )
+    }
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
@@ -325,10 +346,15 @@ fun SportsApp() {
     val currentRoute by remember(currentDestination) {
         derivedStateOf { currentDestination?.route }
     }
-    val showBottomBar by remember(currentRoute) {
-        derivedStateOf {
-            currentRoute in setOf(Routes.HOME, Routes.SCORE, Routes.COACH_MANAGE, Routes.SETTINGS)
+    val tabRoutes = remember(isClubMode) {
+        if (isClubMode) {
+            setOf(Routes.CLUB_HOME, Routes.CLUB_STUDENTS, Routes.SCHEDULE, Routes.CLUB_SETTINGS)
+        } else {
+            setOf(Routes.HOME, Routes.SCORE, Routes.COACH_MANAGE, Routes.SETTINGS)
         }
+    }
+    val showBottomBar by remember(currentRoute, isClubMode) {
+        derivedStateOf { currentRoute in tabRoutes }
     }
 
     // === 性能优化 H1：移除顶层 updateProgress 订阅 ===
@@ -356,6 +382,8 @@ fun SportsApp() {
     // === v28 优化6：订阅首页未签到数与今日排课红点状态 ===
     // 用于底部导航栏主页 Tab 显示数字角标（未签到数）或红点（仅有排课）
     val homeVm: HomeViewModel = koinViewModel()
+    // v24 俱乐部板块：排课/课时数据 ViewModel（Activity 级，与排课页共享同一实例）
+    val operationVm: com.shangmentiyu.sportscoach.ui.operation.OperationViewModel = koinViewModel()
     val unsignedTodayCount by homeVm.unsignedTodayCount.collectAsStateWithLifecycle()
     val hasTodayScheduleBadge by homeVm.hasTodayScheduleBadge.collectAsStateWithLifecycle()
 
@@ -448,24 +476,11 @@ fun SportsApp() {
     // 在系统导航栏区域露出 containerColor，导致胶囊两侧出现灰白方块。
     // 现在把悬浮导航作为独立元素摆在外层 Box 底部，完全脱离 Scaffold，
     // 胶囊两侧直接透出主页面底色（appBackground #FAFAFA），真正"无影悬浮"。
-    // === v63：俱乐部页系统栏区去白 ===
-    // API 35+ 强制 edge-to-edge，statusBarColor 已失效；系统栏区域露出的是
-    // Scaffold 的 containerColor。俱乐部页（黑底）时把容器色切黑、insets 置 0，
-    // 让页面背景铺满全屏，系统栏区域不再露白；颜色带 220ms 过渡避免切换突兀。
-    val isClubRoute = currentRoute == Routes.CLUB
-    val scaffoldContainer by androidx.compose.animation.animateColorAsState(
-        targetValue = if (isClubRoute) Color(0xFF111111) else appBackground(),
-        animationSpec = androidx.compose.animation.core.tween(durationMillis = 220),
-        label = "scaffoldContainer"
-    )
+    // === v24：俱乐部占位页（黑底）已下线，俱乐部板块改用标准浅色页面 ===
+    // 原按 Routes.CLUB 切黑容器/清零 insets 的逻辑随占位页一并移除。
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
-            containerColor = scaffoldContainer,
-            contentWindowInsets = if (isClubRoute) {
-                androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0)
-            } else {
-                androidx.compose.material3.ScaffoldDefaults.contentWindowInsets
-            },
+            containerColor = appBackground(),
             topBar = {
                 // v32 优化3：桌面端连接状态栏（仅在线时显示绿色指示灯）
                 DesktopConnectionBanner(desktopConnection)
@@ -487,17 +502,46 @@ fun SportsApp() {
                         }
                     },
                     onEnterClub = {
-                        navController.navigate(Routes.CLUB) {
+                        navController.navigate(Routes.CLUB_HOME) {
                             popUpTo(Routes.STARTUP) { inclusive = true }
                         }
                     }
                 )
             }
-            composable(Routes.CLUB) {
-                com.shangmentiyu.sportscoach.ui.startup.ClubPlaceholderScreen(
-                    onBack = {
+            // === EVOLVE 俱乐部板块（v24 真实 UI，数据自动落 sports_coach_club_db） ===
+            composable(Routes.CLUB_HOME) {
+                ClubHomeScreen(
+                    vm = homeVm,
+                    opVm = operationVm,
+                    onCheckIn = { navController.navigate(Routes.LESSON_CHECKIN) },
+                    onSchedule = { navController.navigate(Routes.SCHEDULE) { launchSingleTop = true } },
+                    onStudents = { navController.navigate(Routes.CLUB_STUDENTS) { launchSingleTop = true } },
+                    onCoaches = { navController.navigate(Routes.COACH_MANAGE) },
+                    onLessons = { navController.navigate(Routes.CLUB_LESSONS) }
+                )
+            }
+            composable(Routes.CLUB_STUDENTS) {
+                ClubStudentListScreen(
+                    vm = homeVm,
+                    opVm = operationVm,
+                    onAddStudent = { navController.navigate(Routes.ADD_STUDENT) },
+                    onEditStudent = { name -> navController.navigate(Routes.editStudent(name)) },
+                    onGrowth = { name -> navController.navigate(Routes.growth(name)) }
+                )
+            }
+            composable(Routes.CLUB_LESSONS) {
+                ClubLessonManageScreen(
+                    vm = homeVm,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable(Routes.CLUB_SETTINGS) {
+                ClubSettingsScreen(
+                    onOpenFullSettings = { navController.navigate(Routes.SETTINGS) },
+                    onOpenLessons = { navController.navigate(Routes.CLUB_LESSONS) },
+                    onSwitchModule = {
                         navController.navigate(Routes.STARTUP) {
-                            popUpTo(Routes.CLUB) { inclusive = true }
+                            popUpTo(0) { inclusive = true }
                         }
                     }
                 )
@@ -661,7 +705,9 @@ fun SportsApp() {
             }
             composable(Routes.SCHEDULE) {
                 ScheduleScreen(
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    // 俱乐部模式：排课是底部 Tab，隐藏返回箭头避免"点了没反应"
+                    showBack = !isClubMode
                 )
             }
 
@@ -695,10 +741,15 @@ fun SportsApp() {
 
             // === 教练管理（档案 / 学员排课 / 排班·工作量 / 团队 / 薪资） ===
             // v34：升级为底部导航主 Tab，无返回箭头（设置页二级入口共用此路由）
+            // v24：俱乐部模式下作为首页快捷入口的二级页，显示返回箭头
             composable(Routes.COACH_MANAGE) {
                 com.shangmentiyu.sportscoach.ui.coach.CoachManageScreen(
                     viewModel = koinViewModel(),
-                    onBack = null
+                    onBack = if (isClubMode) {
+                        { navController.popBackStack() }
+                    } else {
+                        null
+                    }
                 )
             }
 
@@ -772,9 +823,9 @@ fun SportsApp() {
                         // FAB 触发核心操作：添加学员
                         navController.navigate(Routes.ADD_STUDENT)
                     },
-                    // 主页 Tab 动态角标（珊瑚橙 #FF6B47）
+                    // 主页 Tab 动态角标（珊瑚橙 #FF6B47）——上门体育 HOME 与俱乐部 CLUB_HOME 共用未签到数
                     badgeForRoute = { route ->
-                        if (route == Routes.HOME) {
+                        if (route == Routes.HOME || route == Routes.CLUB_HOME) {
                             when {
                                 unsignedTodayCount > 0 -> {
                                     Box(
