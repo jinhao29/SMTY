@@ -2,6 +2,7 @@ package com.shangmentiyu.sportscoach.ui.startup
 
 import android.app.Activity
 import android.content.ContextWrapper
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -80,7 +81,8 @@ fun StartupChoiceScreen(
             letterSpacing = 4.sp
         )
 
-        Spacer(Modifier.height(56.dp))
+        // v64：欢迎语与卡片组之间改为弹性间距，两张卡片在剩余空间垂直居中
+        Spacer(Modifier.weight(1f))
 
         // 板块选择卡片 1：教练工作台（现有全部功能）
         ModuleCard(
