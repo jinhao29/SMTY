@@ -47,12 +47,14 @@ val signingProps: Properties = Properties().apply {
     }
 }
 
-// === P0 修复：签名密码从环境变量注入，移除 keystore.properties 中的明文密码 ===
-// - 优先读环境变量 KEYSTORE_PASSWORD / KEY_PASSWORD（CI Secrets 注入）
-// - 本地开发 fallback 到 keystore.properties（该文件已被 .gitignore 忽略，不提交）
-val storePassword: String = System.getenv("KEYSTORE_PASSWORD")
+// === 签名密码注入：优先环境变量（CI Secrets），fallback keystore.properties（本地） ===
+// ⚠️ 命名注意：signingConfigs.create("release") { } 的 receiver 是 SigningConfig 自身，
+// 在块内写 storePassword = storePassword 会把右侧解析成 receiver 的 getter（null），
+// 导致 packageRelease 报 "SigningConfig release is missing required property storePassword"
+//（9/4 与 9/9 两次发版失败的真根因）。变量必须带 release 前缀避开遮蔽。
+val releaseStorePassword: String = System.getenv("KEYSTORE_PASSWORD")
     ?: signingProps.getProperty("storePassword", "")
-val keyPassword: String = System.getenv("KEY_PASSWORD")
+val releaseKeyPassword: String = System.getenv("KEY_PASSWORD")
     ?: signingProps.getProperty("keyPassword", "")
 
 android {
@@ -87,9 +89,9 @@ android {
         if (hasSigningProps) {
             create("release") {
                 storeFile = file(signingProps.getProperty("storeFile", "keystore.jks"))
-                storePassword = storePassword
+                storePassword = releaseStorePassword
                 keyAlias = signingProps.getProperty("keyAlias")
-                keyPassword = keyPassword
+                keyPassword = releaseKeyPassword
                 // 启用全签名方案，兼容 Android 5.0+ 至最新版本
                 enableV1Signing = true   // JAR signing（Android 7.0 以下兼容）
                 enableV2Signing = true   // APK Signature Scheme v2（Android 7.0+）
