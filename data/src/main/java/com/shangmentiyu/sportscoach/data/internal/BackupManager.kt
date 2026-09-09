@@ -811,10 +811,15 @@ object BackupManager {
 
         var report = ""
         try {
+            // v1.0.1 修复：必须用 OPEN_READWRITE 打开。
+            // 应用数据库为 WAL 模式（header write/read version = 2），OPEN_READONLY
+            // 连接无法创建 -shm/-wal sidecar 文件，会抛 "unable to open database file"，
+            // 导致所有恢复被误判为"数据库损坏"并删库回滚（应用自己生成的备份也恢复不了）。
+            // integrity_check 本身是只读操作，可写连接无副作用。
             val sqliteDb = android.database.sqlite.SQLiteDatabase.openDatabase(
                 dbFile.absolutePath,
                 null,
-                android.database.sqlite.SQLiteDatabase.OPEN_READONLY
+                android.database.sqlite.SQLiteDatabase.OPEN_READWRITE
             )
             sqliteDb.use { db ->
                 db.rawQuery("PRAGMA integrity_check;", null).use { cursor ->
@@ -883,10 +888,12 @@ object BackupManager {
                                     len = zis.read(buffer)
                                 }
                             }
+                            // v1.0.1：同 verifyIntegrity，WAL 库只读连接打不开（无法建 -shm）。
+                            // 此处失败会静默返回 0，导致 v48 跨版本防闪退保护失效。
                             android.database.sqlite.SQLiteDatabase.openDatabase(
                                 tmp.absolutePath,
                                 null,
-                                android.database.sqlite.SQLiteDatabase.OPEN_READONLY
+                                android.database.sqlite.SQLiteDatabase.OPEN_READWRITE
                             ).use { db ->
                                 db.rawQuery("PRAGMA user_version;", null).use { cursor ->
                                     if (cursor.moveToFirst()) cursor.getInt(0) else 0
