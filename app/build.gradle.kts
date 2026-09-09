@@ -11,19 +11,25 @@ plugins {
 
 // === v46 架构层五 Phase 2：依赖 :core 纯逻辑模块（算法/计算/分析） ===
 
-// === 版本号自动化（CI 注入环境变量 / 本地 fallback） ===
-// 策略：
-// 1. CI 环境（GitHub Actions）：workflow 通过 GITHUB_ENV 注入 VERSION_CODE 和 VERSION_NAME
-//    - VERSION_CODE = github.run_number（严格递增，每次 push +1）
-//    - VERSION_NAME = 0.<github.run_number>（从 0.1 开始递增）
-// 2. 本地环境（Android Studio 直接打包）：环境变量不存在时回退到极低版本
-//    - versionCode = 1
-//    - versionName = "0.0.1-local"
-// v46 修正：原回退值 99999 / 9.9.9-local 永远高于云端版本，导致本地调试版
-// 无法触发更新弹窗，无法完整测试自动更新链路。改为极低版本后：
-// - 本地版 versionCode=1 永远低于云端 run_number，配合 UpdateChecker 的
-//   "-local" 防呆拦截，本地每次检查更新都会弹出云端新版本
-// - 云端 Release tag 统一为 v0.<run_number>，与 versionName 0.<run_number> 对齐
+// === 版本号自动化（单一真源：version_code.txt，SemVer 格式 "MAJOR.MINOR.PATCH"） ===
+// 策略（2026-09-09 自动更新审查后修正，废弃原 run_number 方案）：
+// 1. version_code.txt 是唯一真源，发版时人工把版本号 +1（如 1.0.0 → 1.0.1）
+// 2. versionCode = MAJOR*10000 + MINOR*100 + PATCH（整数，单调递增，不依赖 CI 计数器）
+//    versionName = "MAJOR.MINOR.PATCH"
+// 3. CI（tag 推送 v*）校验 tag 与该文件一致后注入 VERSION_NAME / VERSION_CODE 环境变量，
+//    环境变量优先于文件解析（双保险，防文件被误改）
+// 4. 本地直接打包（无环境变量、文件缺失/格式错误）回退 0.0.1-local / versionCode=1，
+//    配合 UpdateChecker 的 "-local" 防呆拦截，本地版每次检查更新都能弹出云端新版本
+val versionFile = rootDir.resolve("version_code.txt")
+val semverRegex = Regex("^(\\d+)\\.(\\d+)\\.(\\d+)$")
+val parsedSemver = versionFile.takeIf { it.exists() }
+    ?.readText()?.trim()?.let { semverRegex.matchEntire(it) }
+val defaultVersionName: String = parsedSemver?.let {
+    "${it.groupValues[1]}.${it.groupValues[2]}.${it.groupValues[3]}"
+} ?: "0.0.1-local"
+val defaultVersionCode: Int = parsedSemver?.let {
+    it.groupValues[1].toInt() * 10000 + it.groupValues[2].toInt() * 100 + it.groupValues[3].toInt()
+} ?: 1
 
 // === Release 签名配置（CI 通过 Secrets 注入 / 本地可选 keystore.properties） ===
 // 设计要点（v46 修正）：
@@ -58,15 +64,15 @@ android {
         minSdk = 26
         targetSdk = 35
 
-        // 版本号策略（v46 修正）：
-        // - 本地调试（无环境变量）：versionCode=1, versionName=0.0.1-local
+        // 版本号策略（2026-09-09 起，真源 version_code.txt）：
+        // - 本地调试（无环境变量、文件解析失败）：versionCode=1, versionName=0.0.1-local
         //   极低版本，永远低于云端版本，配合 UpdateChecker 的"-local"防呆拦截
-        //   本地每次检查更新都能触发云端新版本弹窗，便于测试完整更新链路
-        // - GitHub Actions 云端打包：通过 GITHUB_ENV 注入 VERSION_CODE / VERSION_NAME
-        //   versionCode = github.run_number（1, 2, 3...）
-        //   versionName = 0.${github.run_number}（0.1, 0.2, 0.33...）
-        versionCode = (System.getenv("VERSION_CODE")?.toIntOrNull() ?: 1)
-        versionName = (System.getenv("VERSION_NAME") ?: "0.0.1-local")
+        // - GitHub Actions tag 发布：VERSION_CODE / VERSION_NAME 由 workflow 从
+        //   version_code.txt 计算并注入（tag 必须与文件一致，否则 CI 直接失败）
+        //   versionCode = MAJOR*10000 + MINOR*100 + PATCH
+        //   versionName = MAJOR.MINOR.PATCH
+        versionCode = (System.getenv("VERSION_CODE")?.toIntOrNull() ?: defaultVersionCode)
+        versionName = (System.getenv("VERSION_NAME") ?: defaultVersionName)
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

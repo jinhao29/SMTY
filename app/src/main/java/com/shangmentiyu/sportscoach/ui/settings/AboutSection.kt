@@ -76,7 +76,8 @@ internal fun AboutSection(
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
-                        "v1.0",
+                        // 显示真实版本号（此前写死 "v1.0" 与实际 versionName 不符）
+                        "v${BuildConfig.VERSION_NAME}",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
                     )

@@ -1,10 +1,14 @@
 name: Build APK
 
-# === 触发条件 ===
-# 1. 推送到 main / master 分支 —— 自动构建并发布 v0.N 预览版（N = run_number）
-# 2. 推送 v* 形式的 tag —— 自动构建并发布正式版（tag 名即版本号）
-# 3. 手动触发 workflow_dispatch
-# 限制：仅 push 到主分支才触发，避免 feature 分支频繁触发无意义 Release
+# === 触发条件（2026-09-09 版本体系修正） ===
+# 1. 推送到 main / master 分支 —— 只跑单元测试 + 上传构建产物（不创建 Release）
+#    避免 WIP 提交污染版本线、失败 run 留版本空洞
+# 2. 推送 v* 形式的 tag —— 正式发版：校验 tag 与 version_code.txt 一致后打包发布
+# 3. 手动触发 workflow_dispatch —— 等同分支推送（只测试）
+#
+# 版本号真源：version_code.txt（"MAJOR.MINOR.PATCH"）
+#   versionCode = MAJOR*10000 + MINOR*100 + PATCH（App 端 extractRemoteVersionCode 同公式）
+#   发版流程：改 version_code.txt → 提交 → 打同名 tag（v1.0.1）→ push
 on:
   push:
     branches: [ "main", "master" ]
@@ -23,7 +27,6 @@ jobs:
         uses: actions/checkout@v4
 
       - name: 设置 JDK 17
-        # 关闭内置 cache: gradle，改用下方显式 actions/cache@v4 做更细粒度的缓存
         uses: actions/setup-java@v4
         with:
           java-version: '17'
@@ -42,24 +45,37 @@ jobs:
       - name: 授予 gradlew 执行权限
         run: chmod +x ./gradlew
 
-      # === 架构一/二：注入云端版本号（与 UpdateChecker 的整型比对对齐） ===
-      # VERSION_CODE = github.run_number（严格递增 1, 2, 3...）
-      # VERSION_NAME = 0.<run_number>（0.1, 0.2, 0.33...）
-      # Release tag 统一为 v0.<run_number>，App 端通过
-      #   extractRemoteVersionCode 提取整型 run_number 与本地 versionCode 比对
-      - name: 注入云端版本号
+      # === 版本号：从 version_code.txt 计算并注入 ===
+      # - VERSION_NAME = 文件内容（SemVer）
+      # - VERSION_CODE = MAJOR*10000 + MINOR*100 + PATCH
+      # - tag 推送时必须满足 tag == "v<文件内容>"，否则直接失败（防版本错乱）
+      - name: 解析版本号并校验 tag 一致性
         run: |
-          echo "VERSION_CODE=${{ github.run_number }}" >> $GITHUB_ENV
-          echo "VERSION_NAME=0.${{ github.run_number }}" >> $GITHUB_ENV
+          VER=$(tr -d ' \r\n' < version_code.txt)
+          if ! [[ "$VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::version_code.txt 内容非法：'$VER'（应为 MAJOR.MINOR.PATCH）"
+            exit 1
+          fi
+          MAJOR=$(echo "$VER" | cut -d. -f1)
+          MINOR=$(echo "$VER" | cut -d. -f2)
+          PATCH=$(echo "$VER" | cut -d. -f3)
+          CODE=$((MAJOR * 10000 + MINOR * 100 + PATCH))
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+            if [ "v$VER" != "$TAG" ]; then
+              echo "::error::tag ($TAG) 与 version_code.txt (v$VER) 不一致！请先修改 version_code.txt 并提交，再打同名 tag"
+              exit 1
+            fi
+          fi
+          echo "版本：$VER（versionCode=$CODE）"
+          echo "VERSION_NAME=$VER" >> $GITHUB_ENV
+          echo "VERSION_CODE=$CODE" >> $GITHUB_ENV
+          echo "IS_RELEASE=$([[ "$GITHUB_REF" == refs/tags/v* ]] && echo true || echo false)" >> $GITHUB_ENV
 
-      # === 架构二/四：解密并注入 Keystore 到 app/ 目录（防签名冲突） ===
+      # === 解密并注入 Keystore 到 app/ 目录（防签名冲突） ===
       # build.gradle.kts 的 signingConfigs 通过 app/keystore.properties 读取，
       # storeFile 默认为 app/keystore.jks（file() 相对 app 模块解析）。
-      # ⚠️ 必须配置 4 个 Secrets：
-      #    - KEYSTORE_BASE64：base64 编码的 .jks / .keystore 文件
-      #    - KEYSTORE_PASSWORD：keystore 文件密码
-      #    - KEY_ALIAS：key alias
-      #    - KEY_PASSWORD：key 密码
+      # ⚠️ 必须配置 4 个 Secrets：KEYSTORE_BASE64 / KEYSTORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD
       # 未配置时 fallback 到 debug 签名（仅本地开发，发布会导致无法覆盖安装）
       - name: 解密并注入 Keystore
         shell: bash
@@ -74,8 +90,6 @@ jobs:
             exit 0
           fi
           echo "$KEYSTORE_BASE64" | base64 -d > app/keystore.jks
-          # 使用 printf 逐行写入避免 heredoc 缩进污染 properties 文件
-          # storeFile=keystore.jks 相对 app 模块目录解析 = app/keystore.jks
           printf 'storeFile=keystore.jks\n' > app/keystore.properties
           printf 'storePassword=%s\n' "$KEYSTORE_PASSWORD" >> app/keystore.properties
           printf 'keyAlias=%s\n' "$KEY_ALIAS" >> app/keystore.properties
@@ -85,7 +99,6 @@ jobs:
           file app/keystore.jks
 
       - name: 切换 Gradle wrapper 为官方源（CI 环境）
-        # CI 环境在海外，使用官方源下载 Gradle 最稳定
         run: |
           cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
           distributionBase=GRADLE_USER_HOME
@@ -99,11 +112,12 @@ jobs:
           echo "已切换 Gradle wrapper 为官方源（gradle-8.13-all.zip）"
 
       - name: 执行单元测试
-        # v47：发布前先跑全部单元测试，防止算法回归（版本比对/消课/身高预测等）流入 Release
+        # 发布前先跑全部单元测试，防止算法回归（版本比对/消课/身高预测等）流入 Release
         run: ./gradlew testDebugUnitTest --no-daemon --stacktrace --no-configuration-cache
 
       - name: 执行 Release 打包
-        # 通过 GITHUB_ENV 注入的 VERSION_CODE / VERSION_NAME 会被 build.gradle.kts 自动读取
+        # 仅 tag 推送才打包 Release；分支推送只验证测试，不产出可安装包
+        if: env.IS_RELEASE == 'true'
         run: ./gradlew assembleRelease --no-daemon --stacktrace --no-configuration-cache --build-cache
 
       - name: 清理 Gradle 缓存中的临时文件
@@ -116,33 +130,31 @@ jobs:
           echo "已清理 Gradle 缓存锁文件"
 
       - name: 上传 APK 构建产物
+        if: env.IS_RELEASE == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: smty-apk
           path: app/build/outputs/apk/release/*.apk
           retention-days: 30
 
-      # === 架构二：自动发布 Release 并上传 APK ===
-      # tag_name = v0.<run_number>，与 VERSION_CODE（github.run_number）一一对应
-      # App 端 UpdateChecker 提取 v0.33 → 33，与本地 versionCode 整型比对
+      # === 正式发布：tag_name = 推送的 tag 本身（vMAJOR.MINOR.PATCH），与 APK 版本一致 ===
       - name: 自动发布 Release 并上传 APK
+        if: env.IS_RELEASE == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.${{ github.run_number }}
-          name: v0.${{ github.run_number }}
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
           body: |
-            # 自动构建版本 v0.${{ github.run_number }}
+            # 正式版本 ${{ github.ref_name }}
 
-            由 GitHub Actions 自动构建并发布。
+            由 GitHub Actions 自动构建并发布（tag 与 version_code.txt 校验一致）。
 
-            **触发方式:** ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && 'Tag 推送（正式版）' || '分支推送/手动触发（预览版）' }}
             **提交信息:** ${{ github.event.head_commit.message }}
-            **提交时间:** ${{ github.event.head_commit.timestamp }}
-            **APK versionCode:** ${{ github.run_number }}
-            **APK versionName:** 0.${{ github.run_number }}
+            **APK versionCode:** ${{ env.VERSION_CODE }}
+            **APK versionName:** ${{ env.VERSION_NAME }}
 
             ## 安装方式
-            下载下方 APK 文件，直接点击安装即可覆盖更新。
+            下载 universal APK 文件，直接点击安装即可覆盖更新。
 
             ## 签名说明
             ${{ secrets.KEYSTORE_BASE64 != '' && '✅ 已使用正式 release 签名，可覆盖安装到已安装 release 版本的设备' || '⚠️ 未配置 release 签名 Secret，使用 debug 签名，无法覆盖安装到已安装 release 版本的设备' }}

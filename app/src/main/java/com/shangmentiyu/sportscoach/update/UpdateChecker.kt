@@ -32,11 +32,12 @@ import java.util.concurrent.TimeUnit
  *   4. 上传 app/build/outputs/apk/release/app-release.apk 到 GitHub Release 附件
  *   5. 务必保持签名文件不变，避免与历史版本签名冲突导致无法升级
  *
- * === v47 修正（版本号比对对齐） ===
- * 1. 版本比对从"浮点数 versionName"改为"整型 versionCode（run_number）"：
- *    - 云端 tag 统一为 v0.<run_number>（如 v0.33），extractRemoteVersionCode 提取整型 33
- *    - 本地 BuildConfig.VERSION_CODE = CI 注入的 github.run_number，整型直接大小比较
- *    - 规避 Float 精度缺陷：0.10f == 0.1f 导致 run_number 9→10 / 99→100 时漏更新
+ * === 2026-09-09 版本比对对齐（SemVer） ===
+ * 1. 版本比对从"浮点数 versionName"→"整型 run_number"→"SemVer 编码公式"三次演进：
+ *    - 云端 tag 统一为 vMAJOR.MINOR.PATCH（如 v1.0.0），extractRemoteVersionCode
+ *      按 MAJOR*10000+MINOR*100+PATCH 编码为整型
+ *    - 本地 BuildConfig.VERSION_CODE = CI 从 version_code.txt 计算注入，整型直接比较
+ *    - 兼容旧 run_number 时代 tag "v0.62" → 6200，老设备可平滑收到升级提示
  * 2. 本地调试版防呆拦截：versionName 含 "-local" 或 versionCode >= 99999 时直接强制更新
  *
  * 异常兜底策略：
@@ -108,23 +109,26 @@ object UpdateChecker {
     ) : Exception(userMessage, cause)
 
     /**
-     * 从 GitHub Release tag_name 提取远端 versionCode（整型 run_number）。
+     * 从 GitHub Release tag_name 提取远端 versionCode。
      *
-     * === v47 修正 ===
-     * 原实现 tagName.replace("v","").toFloatOrNull() 存在浮点精度缺陷：
-     * "v0.10".toFloat() == 0.1f，导致 run_number 从 9 → 10 时 0.9 设备
-     * 永远看不到 v0.10 更新（0.1 > 0.9 为 false），0.99 → 0.100 同理。
-     * 现改为提取整型 run_number，与本地 BuildConfig.VERSION_CODE 直接比较：
-     * - "v0.33" → 33
-     * - "v33"（旧格式）→ 33（兼容历史 tag）
-     * - "v0.33-beta" / "v1.0.5" 等非标准格式 → null（不触发更新）
+     * === 2026-09-09 版本体系切换：SemVer 编码公式 ===
+     * versionCode = MAJOR*10000 + MINOR*100 + PATCH（与 version_code.txt / CI 注入一致）
+     * - "v1.0.0" → 10000，"v1.2.3" → 10203
+     * - "v0.62"（旧 run_number 时代的 tag）→ 6200 > 62，老设备（versionCode=run_number）
+     *   也能正确收到升级提示，平滑迁移到新体系
+     * - "v33"（无 minor 段的历史 tag）→ null：按新公式会算成 330000 造成误判，直接拒绝
+     * - "v0.33-beta" / 其他非标格式 → null（不触发更新）
      *
-     * @param tagName GitHub Release tag_name（如 "v0.33"）
-     * @return 提取出的整型 versionCode；无法解析返回 null
+     * @param tagName GitHub Release tag_name（如 "v1.0.0"）
+     * @return 编码后的整型 versionCode；无法解析返回 null
      */
     internal fun extractRemoteVersionCode(tagName: String): Int? {
-        val match = Regex("^v(?:0\\.)?(\\d+)$").find(tagName) ?: return null
-        return match.groupValues[1].toIntOrNull()
+        val match = Regex("^v(\\d+)\\.(\\d+)(?:\\.(\\d+))?$").find(tagName) ?: return null
+        val major = match.groupValues[1].toIntOrNull() ?: return null
+        val minor = match.groupValues[2].toIntOrNull() ?: return null
+        val patch = match.groupValues[3].toIntOrNull() ?: 0
+        if (major < 0 || minor !in 0..99 || patch !in 0..99) return null
+        return major * 10000 + minor * 100 + patch
     }
 
     /**
@@ -235,10 +239,10 @@ object UpdateChecker {
                 }
                 Log.d(TAG, "✅ APK 下载链接: $apkUrl")
 
-                // === v47 修正：tag_name 整型 run_number 比对 ===
-                // 云端 tag 形如 "v0.33" → remoteCode = 33
-                // 本地 BuildConfig.VERSION_CODE = CI 注入的 github.run_number
-                // 整型大小比较，规避 Float 精度导致的 9→10 / 99→100 漏更新
+                // === SemVer 编码比对（2026-09-09 起） ===
+                // 云端 tag 形如 "v1.0.0" → remoteVersionCode = 10000
+                // 本地 BuildConfig.VERSION_CODE = CI 从 version_code.txt 计算注入
+                // 整型大小比较，兼容旧 run_number 设备（v0.62 → 6200 > 62）
                 val remoteVersionCode = extractRemoteVersionCode(release.tagName)
                 val localVersionCode = BuildConfig.VERSION_CODE
                 Log.d(
