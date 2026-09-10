@@ -40,9 +40,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import com.shangmentiyu.sportscoach.ui.theme.AppSegmentedTabs
 import com.shangmentiyu.sportscoach.ui.theme.AppTopBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -55,7 +54,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -112,35 +110,17 @@ fun CoachManageScreen(
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
-            // === TabRow 美化（v51）：
-            // 1. containerColor = Transparent 去掉 M3 1.3 surfaceContainer 浅灰底，让顶部与背景一致
-            // 2. divider = {} 去掉默认顶部 HorizontalDivider（顶栏已用 surface 衬底分隔，无需重复线条）
-            // 3. 未选中 Tab 显式用 onSurfaceVariant（灰）替换默认 primary，避免"5 个全橙"过度强调
-            // 4. 字号 13sp / Medium 字重，确保 5 个 tab 平分时"工作量"不被 truncate
-            TabRow(
-                selectedTabIndex = tabIndex,
-                containerColor = Color.Transparent,
-                contentColor = MaterialTheme.colorScheme.onBackground,
-                divider = {}
-            ) {
-                tabs.forEachIndexed { index, title ->
-                    Tab(
-                        selected = tabIndex == index,
-                        onClick = { tabIndex = index },
-                        selectedContentColor = MaterialTheme.colorScheme.primary,
-                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        text = {
-                            Text(
-                                title,
-                                fontSize = 14.sp,
-                                fontWeight = if (tabIndex == index) FontWeight.SemiBold else FontWeight.Medium,
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        }
-                    )
-                }
-            }
+            // === Tab 导航（v1.0.2+）：换 AppSegmentedTabs 灰轨道胶囊分段控件，
+            // 与成绩页「录入成绩/查看成绩/中考体育」同一组件（theme/SegmentedTabs.kt），
+            // 替换原 M3 TabRow 下划线式，全 App 导航风格统一。
+            // 14sp：5 个 Tab 平分屏宽时「工作量」不 truncate。
+            AppSegmentedTabs(
+                labels = tabs,
+                selectedIndex = tabIndex,
+                onSelect = { tabIndex = it },
+                fontSize = 14.sp,
+                modifier = Modifier.padding(horizontal = Spacing.screenH, vertical = Spacing.sm)
+            )
             when (tabIndex) {
                 0 -> CoachRosterTab(viewModel)
                 1 -> CoachLessonGridTab(viewModel)
