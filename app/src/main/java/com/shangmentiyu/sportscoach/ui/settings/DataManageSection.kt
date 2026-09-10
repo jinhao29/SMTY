@@ -43,10 +43,13 @@ import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
+import com.shangmentiyu.sportscoach.ui.theme.appPrimary
 
 /**
- * 数据备份与恢复分组：整包二进制备份 + 自动备份开关 + 悬浮窗开关。
+ * 数据备份与恢复分组：固定文件夹一键备份 + 自动恢复最新备份 + 自动备份开关 + 悬浮窗开关。
  *
+ * v1.0.2+ 联动：固定文件夹（SAF 选一次持久化）→ 手动备份直存、恢复自动取最新、
+ * 自动备份同步写入同一文件夹（卸载应用备份不丢）。
  * 恢复二次确认与恢复成功重启确认框均在本区块内部。
  */
 @Composable
@@ -61,7 +64,18 @@ internal fun DataManageSection(
     val autoBackupEnabled = uiState.autoBackupEnabled
     val floatingWindowEnabled = uiState.floatingWindowEnabled
     val needRestart = uiState.needRestart
+    val backupFolderLabel by vm.backupFolderLabel.collectAsStateWithLifecycle()
+    val latestBackup by vm.latestBackup.collectAsStateWithLifecycle()
+    val folderSet = backupFolderLabel.isNotBlank()
     var showRestoreConfirm by remember { mutableStateOf(false) }
+
+    // 最新备份的展示时间（文件夹内最新一份；无备份时提示首次备份）
+    val latestText = latestBackup?.let { (name, ms) ->
+        val time = java.time.Instant.ofEpochMilli(ms)
+            .atZone(java.time.ZoneId.systemDefault())
+            .format(java.time.format.DateTimeFormatter.ofPattern("MM-dd HH:mm"))
+        "$name（$time）"
+    }
 
     IosSectionWrapper(text = "数据备份与恢复") {
         IosGroupedListCard {
@@ -70,12 +84,15 @@ internal fun DataManageSection(
                 iconBgColor = LightPrimary,
                 iconContentDescription = "备份数据",
                 title = "一键备份所有数据",
-                subtitle = "将学员/课时/签到/照片打包备份到手机或网盘",
+                subtitle = if (folderSet)
+                    "备份到「$backupFolderLabel」，固定文件夹卸载不丢"
+                else
+                    "首次使用：选择固定备份文件夹（建议「下载/Download」）",
                 showTopDivider = false,
                 onClick = {
                     // 备份进行中时禁用，避免重复点击
                     if (!backupInProgress) {
-                        onRequestBackup()
+                        if (folderSet) vm.backupToDefaultFolder() else onRequestBackup()
                     }
                 }
             )
@@ -83,13 +100,17 @@ internal fun DataManageSection(
                 icon = Icons.Outlined.Restore,
                 iconBgColor = LightPrimary,
                 iconContentDescription = "恢复数据",
-                title = "从备份文件恢复",
-                subtitle = "覆盖当前所有数据，恢复前请先备份",
+                title = "恢复最新备份",
+                subtitle = if (folderSet)
+                    latestText?.let { "自动选取最新：$it" } ?: "文件夹里还没有备份，先备份一次"
+                else
+                    "未设置备份文件夹，点击手动选择备份文件",
                 showTopDivider = true,
                 onClick = {
                     // 恢复会覆盖当前数据，弹出二次确认对话框
                     if (!backupInProgress) {
-                        showRestoreConfirm = true
+                        if (folderSet && latestText != null) showRestoreConfirm = true
+                        else onRequestRestore()
                     }
                 }
             )
@@ -155,7 +176,10 @@ internal fun DataManageSection(
                     Spacer(Modifier.height(2.dp))
                     Text(
                         if (autoBackupEnabled)
-                            "数据变更后 10 分钟静默备份，保留最近 5 份"
+                            if (folderSet)
+                                "数据变更后 10 分钟静默备份到「$backupFolderLabel」，保留最近 5 份"
+                            else
+                                "数据变更后 10 分钟静默备份，保留最近 5 份（设置备份文件夹后卸载不丢）"
                         else
                             "已关闭，仅手动备份生效",
                         style = MaterialTheme.typography.labelSmall,
@@ -227,31 +251,30 @@ internal fun DataManageSection(
             content = {
                 Column {
                     Text(
-                        "恢复操作将覆盖当前所有学员、课时包、排课、签到记录与照片。",
+                        "将从「$backupFolderLabel」恢复最新备份：",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    Spacer(Modifier.height(Spacing.sm))
+                    Spacer(Modifier.height(Spacing.xs))
                     Text(
-                        "建议：恢复前请先点击\"一键备份所有数据\"创建当前数据的备份，以防万一。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
+                        latestText ?: "",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = appPrimary()
                     )
                     Spacer(Modifier.height(Spacing.sm))
                     Text(
-                        "恢复成功后应用将自动重启以加载新数据。",
+                        "恢复操作将覆盖当前所有学员、课时包、排课、签到记录与照片。恢复成功后应用将自动重启。",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        color = MaterialTheme.colorScheme.error
                     )
                 }
             },
             confirmButton = {
                 Button(onClick = {
                     showRestoreConfirm = false
-                    // 用户确认后弹出文件选择器
-                    // 使用 arrayOf("*/*") 让用户可选择任意位置（网盘/本地）的备份文件
-                    onRequestRestore()
-                }) { Text("我已知晓，选择备份文件") }
+                    vm.restoreLatestFromFolder()
+                }) { Text("确认恢复") }
             },
             dismissButton = {
                 TextButton(onClick = { showRestoreConfirm = false }) { Text("取消") }

@@ -86,6 +86,8 @@ dependencies {
 
     // 安全加密（签到照片加密存储，稳定版 1.1.0）
     implementation(libs.androidx.security.crypto)
+    // 固定备份文件夹：SAF 目录树操作（v1.0.2+ 手动/自动/恢复联动）
+    implementation(libs.androidx.documentfile)
 
     // JSON 解析（Repository 解析 _meta 工作表 JSON）
     implementation(libs.gson)

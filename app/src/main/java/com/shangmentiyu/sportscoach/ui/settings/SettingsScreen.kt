@@ -149,19 +149,19 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
         }
     }
 
-    // 备份文件创建器：使用 SAF CreateDocument 让用户选择保存位置与文件名
-    // 默认文件名带时间戳，避免覆盖旧备份
-    val backupFileLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/zip")
+    // 备份：改为固定文件夹模式（v1.0.2+）。首次点备份时弹 SAF 目录选择器选一次，
+    // 持久化授权后存 DataStore；此后备份直存该文件夹、恢复自动取最新、自动备份同步写入。
+    val backupFolderLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
         try {
             if (uri == null) return@rememberLauncherForActivityResult
-            vm.backupData(uri)
+            vm.onBackupFolderPicked(uri)
         } catch (e: Exception) {
-            CrashDumper.dumpBoth(context, "SettingsScreen.backupFileLauncher", e)
+            CrashDumper.dumpBoth(context, "SettingsScreen.backupFolderLauncher", e)
             Toast.makeText(
                 context,
-                "备份失败，请检查存储空间是否充足",
+                "设置备份文件夹失败，请重试",
                 Toast.LENGTH_LONG
             ).show()
         }
@@ -245,10 +245,10 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
                     }
                 )
 
-                // 分组 4：数据备份与恢复（整库二进制备份，纯本地，不依赖网络）
+                // 分组 4：数据备份与恢复（固定文件夹：手动/自动/恢复联动，自动取最新）
                 DataManageSection(
                     vm = vm,
-                    onRequestBackup = { backupFileLauncher.launch(vm.generateBackupFileName()) },
+                    onRequestBackup = { backupFolderLauncher.launch(null) },
                     onRequestRestore = { restoreFileLauncher.launch(arrayOf("*/*")) }
                 )
 

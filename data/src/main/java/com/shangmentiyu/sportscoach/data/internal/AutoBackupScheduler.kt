@@ -255,9 +255,12 @@ object AutoBackupScheduler {
                 if (result.success) {
                     lastBackupAtMs = System.currentTimeMillis()
                     Log.i(TAG, "自动备份成功：${backupFile.name}（${backupFile.length() / 1024} KB）")
-                    // 3.3 清理旧备份
+                    // 3.3 清理旧备份（内部目录）
                     cleanupOldBackups(backupDir)
-                    // 3.4 v23 双端同步：通知外层（如自动推送到 PC），失败不影响备份状态
+                    // 3.4 v1.0.2+ 联动：已设置固定备份文件夹时，把 zip 复制过去（卸载不丢），
+                    //     并在该文件夹内滚动清理 AutoBackup_*；无文件夹时保持内部目录现状
+                    copyToBackupFolderIfSet(context, backupFile)
+                    // 3.5 v23 双端同步：通知外层（如自动推送到 PC），失败不影响备份状态
                     runCatching { onBackupCompleted?.invoke(backupFile) }
                 } else {
                     // 备份失败：删除可能生成的不完整文件
@@ -324,6 +327,44 @@ object AutoBackupScheduler {
         } catch (e: Exception) {
             Log.w(TAG, "读取自动备份设置失败，默认按关闭处理：${e.message}")
             false
+        }
+    }
+
+    /**
+     * v1.0.2+ 手动/自动/恢复联动：已设置固定备份文件夹（公共目录，卸载不丢）时，
+     * 把本次自动备份 zip 复制进去（命名保持 AutoBackup_ 前缀），并在该文件夹内
+     * 滚动清理 AutoBackup_*（保留 [MAX_BACKUPS] 份，与内部目录策略一致）。
+     *
+     * 复制成功后删除内部缓存副本，避免双份占空间；
+     * 文件夹未设置/已失效/复制失败一律静默降级为仅保留内部目录副本。
+     */
+    private suspend fun copyToBackupFolderIfSet(context: Context, backupFile: File) {
+        val treeUri = runCatching {
+            SettingsRepository(context).getBackupDirUri()
+        }.getOrNull()
+        if (treeUri.isNullOrBlank()) return
+
+        val folder = BackupFolderStore.resolveFolder(context, treeUri) ?: return
+        val targetUri = BackupFolderStore.createZipFile(context, folder, backupFile.name)
+        if (targetUri == null) {
+            Log.w(TAG, "自动备份写入固定文件夹失败（创建文件），仅保留内部副本")
+            return
+        }
+        val output = BackupManager.openBackupOutputStream(context, targetUri)
+        if (output == null) {
+            Log.w(TAG, "自动备份写入固定文件夹失败（打开输出流），仅保留内部副本")
+            return
+        }
+        runCatching {
+            backupFile.inputStream().use { input ->
+                output.use { outs -> input.copyTo(outs) }
+            }
+        }.onSuccess {
+            backupFile.delete()
+            BackupFolderStore.pruneOldBackups(context, treeUri, MAX_BACKUPS)
+            Log.i(TAG, "自动备份已同步到固定文件夹：${backupFile.name}")
+        }.onFailure { e ->
+            Log.w(TAG, "自动备份同步固定文件夹异常：${e.message}")
         }
     }
 }

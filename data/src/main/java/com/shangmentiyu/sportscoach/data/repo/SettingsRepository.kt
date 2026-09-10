@@ -60,6 +60,12 @@ class SettingsRepository(private val context: Context) {
         private const val DARK_THEME_DARK = "dark"
         private const val DARK_THEME_LIGHT = "light"
 
+        // === 固定备份文件夹（v1.0.2+ 手动/自动/恢复联动） ===
+        // SAF 目录树 Uri（OpenDocumentTree 选一次，持久化授权）。
+        // 手动备份直存此文件夹；恢复自动取其中最新备份；自动备份同步写入。
+        // 选卸载不丢的公共目录（如 Download），避免应用私有目录备份随卸载蒸发。
+        private val KEY_BACKUP_DIR_URI = stringPreferencesKey("backup_dir_uri")
+
     }
 
     val coach: Flow<String> = context.dataStore.data.map { it[KEY_COACH] ?: "" }
@@ -157,6 +163,21 @@ class SettingsRepository(private val context: Context) {
      */
     suspend fun setAutoBackupEnabled(value: Boolean) {
         context.dataStore.edit { it[KEY_AUTO_BACKUP_ENABLED] = value }
+    }
+
+    // === 固定备份文件夹（SAF 目录树 Uri，未设置时为 null） ===
+
+    val backupDirUri: Flow<String?> =
+        context.dataStore.data.map { it[KEY_BACKUP_DIR_URI] }
+
+    suspend fun getBackupDirUri(): String? =
+        context.dataStore.data.map { it[KEY_BACKUP_DIR_URI] }.first()
+
+    suspend fun setBackupDirUri(value: String?) {
+        context.dataStore.edit {
+            if (value == null) it.remove(KEY_BACKUP_DIR_URI)
+            else it[KEY_BACKUP_DIR_URI] = value
+        }
     }
 
     // === 悬浮窗开关 ===

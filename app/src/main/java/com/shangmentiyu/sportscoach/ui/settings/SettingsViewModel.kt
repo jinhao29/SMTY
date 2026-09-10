@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.room.withTransaction
 import com.shangmentiyu.sportscoach.data.internal.AutoBackupScheduler
+import com.shangmentiyu.sportscoach.data.internal.BackupFolderStore
 import com.shangmentiyu.sportscoach.data.internal.BackupManager
 import com.shangmentiyu.sportscoach.core.ProgressState
 import com.shangmentiyu.sportscoach.data.repo.BackupRepository
@@ -32,6 +33,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -178,6 +180,90 @@ class SettingsViewModel(
             settingsRepo.setAutoBackupEnabled(enabled)
             AutoBackupScheduler.reloadSettings()
             _statusMessage.value = if (enabled) "已开启自动备份" else "已关闭自动备份"
+        }
+    }
+
+    // === v1.0.2+ 固定备份文件夹（手动/自动/恢复联动） ===
+    // SAF 目录树 Uri 选一次持久化；手动备份直存、恢复自动取最新、自动备份同步写入。
+    // 选公共目录（如 Download）→ 卸载应用备份不丢（此前私有目录备份随卸载蒸发）。
+
+    /** 固定备份文件夹 Uri（未设置 null） */
+    val backupDirUri: StateFlow<String?> = settingsRepo.backupDirUri
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /** 文件夹展示名（"content://…/primary:Download" → "Download"） */
+    val backupFolderLabel: StateFlow<String> = settingsRepo.backupDirUri
+        .map { uri ->
+            uri?.let { Uri.parse(it).lastPathSegment?.substringAfter(':', "") } ?: ""
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+
+    /** 刷新计数：备份完成/文件夹变更后 +1，驱动 latestBackup 重新扫描文件夹 */
+    private val backupRefreshTick = MutableStateFlow(0)
+
+    /** 文件夹内最新备份（文件名, 最后修改时间 ms）；null = 暂无备份 */
+    val latestBackup: StateFlow<Pair<String, Long>?> = combine(
+        settingsRepo.backupDirUri, backupRefreshTick
+    ) { uri, _ -> uri }
+        .map { uri ->
+            withContext(Dispatchers.IO) {
+                BackupFolderStore.listBackups(app, uri).firstOrNull()
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /** 用户通过 SAF 选定固定备份文件夹后调用：持久化授权 + 保存 + 立即执行首次备份 */
+    fun onBackupFolderPicked(uri: Uri) {
+        viewModelScope.launch {
+            runCatching {
+                app.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            }
+            settingsRepo.setBackupDirUri(uri.toString())
+            _statusMessage.value = "备份文件夹已设置，开始备份…"
+            backupToDefaultFolder()
+        }
+    }
+
+    /** 手动备份到固定文件夹：自动命名 → 复用 [backupData]（含桌面端推送联动） */
+    fun backupToDefaultFolder() {
+        viewModelScope.launch {
+            val treeUri = backupDirUri.value ?: return@launch
+            val fileUri = withContext(Dispatchers.IO) {
+                val folder = BackupFolderStore.resolveFolder(app, treeUri)
+                    ?: return@withContext null
+                BackupFolderStore.createZipFile(app, folder, generateBackupFileName())
+            }
+            if (fileUri == null) {
+                _statusMessage.value = "备份文件夹不可用，请在设置中重新选择"
+                return@launch
+            }
+            backupData(fileUri)
+        }
+    }
+
+    /** 从固定文件夹自动恢复最新一份备份（无需手动选文件） */
+    fun restoreLatestFromFolder() {
+        viewModelScope.launch {
+            val treeUri = backupDirUri.value
+            val latestName = withContext(Dispatchers.IO) {
+                BackupFolderStore.listBackups(app, treeUri).firstOrNull()?.first
+            }
+            if (latestName == null) {
+                _statusMessage.value = "备份文件夹里还没有备份文件"
+                return@launch
+            }
+            val fileUri = withContext(Dispatchers.IO) {
+                BackupFolderStore.resolveFolder(app, treeUri)
+                    ?.findFile(latestName)?.uri
+            }
+            if (fileUri == null) {
+                _statusMessage.value = "找不到备份文件，请重新选择文件夹"
+                return@launch
+            }
+            restoreData(fileUri)
         }
     }
 
@@ -809,6 +895,7 @@ class SettingsViewModel(
                 }
             } finally {
                 _backupInProgress.value = false
+                backupRefreshTick.value++  // 刷新固定文件夹内"最新备份"展示
             }
         }
     }
