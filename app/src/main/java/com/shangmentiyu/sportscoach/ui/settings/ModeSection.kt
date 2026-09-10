@@ -1,7 +1,10 @@
 package com.shangmentiyu.sportscoach.ui.settings
 
 import android.content.Intent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,13 +12,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.FitnessCenter
+import androidx.compose.material.icons.outlined.Workspaces
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -28,11 +30,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.shangmentiyu.sportscoach.data.internal.ModeManager
-import com.shangmentiyu.sportscoach.ui.home.IosCard
+import com.shangmentiyu.sportscoach.ui.settings.components.IosGroupedListCard
+import com.shangmentiyu.sportscoach.ui.settings.components.IosIconBadge
+import com.shangmentiyu.sportscoach.ui.settings.components.IosSectionWrapper
+import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
+import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
@@ -43,6 +48,10 @@ import kotlinx.coroutines.launch
  *
  * 上门体育 / 俱乐部 各自独立数据库（sports_coach_db / sports_coach_club_db），
  * 切换后重启 App 生效（已创建的 ViewModel 持有旧库 DAO，热切不安全）。
+ *
+ * 视觉：与设置页其余区块统一 —— IosSectionWrapper（珊瑚橙小节标题）
+ * + IosGroupedListCard（iOS 表单分组卡）+ IosIconBadge 图标行，
+ * 选中态用 iOS 风格右侧对勾（替代 Material RadioButton）。
  */
 @Composable
 fun ModeSection() {
@@ -51,19 +60,15 @@ fun ModeSection() {
     val current by ModeManager.mode.collectAsStateWithLifecycle()
     var pending by remember { mutableStateOf<String?>(null) }
 
-    Column {
-        Text(
-            text = "工作模式",
-            modifier = Modifier.padding(horizontal = Spacing.screenH),
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-            color = appOnSurface()
-        )
-        Spacer(Modifier.height(8.dp))
-        IosCard {
+    IosSectionWrapper(text = "工作模式") {
+        IosGroupedListCard {
             ModeOption(
+                icon = Icons.Outlined.FitnessCenter,
+                iconContentDescription = "上门体育",
                 title = "上门体育",
                 desc = "现有学员 / 课时 / 财务数据（sports_coach_db）",
                 selected = (pending ?: current) == ModeManager.MODE_COACHING,
+                showTopDivider = false,
                 onClick = {
                     if (current != ModeManager.MODE_COACHING) {
                         pending = ModeManager.MODE_COACHING
@@ -75,9 +80,12 @@ fun ModeSection() {
                 }
             )
             ModeOption(
+                icon = Icons.Outlined.Workspaces,
+                iconContentDescription = "俱乐部",
                 title = "俱乐部",
                 desc = "EVOLVE 独立数据空间，与上门体育完全隔离（club_db）",
                 selected = (pending ?: current) == ModeManager.MODE_CLUB,
+                showTopDivider = true,
                 onClick = {
                     if (current != ModeManager.MODE_CLUB) {
                         pending = ModeManager.MODE_CLUB
@@ -89,35 +97,75 @@ fun ModeSection() {
                 }
             )
         }
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(Spacing.xs))
         Text(
             text = "切换模式后数据完全独立；同步时只会连接对应模式的数据。",
-            modifier = Modifier.padding(horizontal = Spacing.screenH),
-            style = MaterialTheme.typography.bodySmall,
-            color = appOnSurfaceVariant()
+            style = MaterialTheme.typography.labelSmall,
+            color = appOnSurfaceVariant(),
+            modifier = Modifier.padding(horizontal = 4.dp)
         )
     }
 }
 
+/**
+ * 工作模式单行：图标徽章 + 标题/说明 + 右侧选中对勾（iOS Settings 选择行风格）。
+ */
 @Composable
-private fun ModeOption(title: String, desc: String, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, fontSize = 16.sp, color = appOnSurface())
-            Spacer(Modifier.height(2.dp))
-            Text(desc, fontSize = 12.sp, color = appOnSurfaceVariant())
+private fun ModeOption(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconContentDescription: String,
+    title: String,
+    desc: String,
+    selected: Boolean,
+    showTopDivider: Boolean,
+    onClick: () -> Unit
+) {
+    Column {
+        if (showTopDivider) {
+            Box(
+                modifier = Modifier
+                    .padding(start = 60.dp)
+                    .fillMaxWidth()
+                    .height(0.5.dp)
+                    .background(appDividerColor())
+            )
         }
-        RadioButton(
-            selected = selected,
-            onClick = onClick,
-            colors = RadioButtonDefaults.colors(selectedColor = appPrimary())
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(horizontal = Spacing.md, vertical = Spacing.sm + 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.md)
+        ) {
+            IosIconBadge(
+                icon = icon,
+                iconBgColor = LightPrimary,
+                contentDescription = iconContentDescription
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = appOnSurface()
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    desc,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = appOnSurfaceVariant()
+                )
+            }
+            if (selected) {
+                Icon(
+                    Icons.Outlined.Check,
+                    contentDescription = "已选中",
+                    tint = appPrimary(),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
     }
 }
 
@@ -129,4 +177,3 @@ private fun restartApp(context: android.content.Context) {
     context.startActivity(intent)
     android.os.Process.killProcess(android.os.Process.myPid())
 }
-
