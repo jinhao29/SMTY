@@ -802,7 +802,7 @@ class HomeViewModel(
         safeLaunch {
             try {
                 studentRepo.deleteStudent(name)
-                toast("已删除学员 $name（历史数据已保留）")
+                toast("已彻底删除学员 $name")
                 onDone(true, "删除成功")
             } catch (e: Exception) {
                 val msg = e.message ?: "删除失败"

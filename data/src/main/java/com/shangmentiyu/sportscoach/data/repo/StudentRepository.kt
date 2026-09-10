@@ -5,6 +5,7 @@ import com.shangmentiyu.sportscoach.data.internal.AutoBackupScheduler
 import com.shangmentiyu.sportscoach.data.db.AppDatabase
 import com.shangmentiyu.sportscoach.data.db.StudentDao
 import com.shangmentiyu.sportscoach.data.db.StudentFtsDao
+import com.shangmentiyu.sportscoach.data.model.PcSyncState
 import com.shangmentiyu.sportscoach.data.model.Student
 import com.shangmentiyu.sportscoach.excel.ImportStrategy
 import kotlinx.coroutines.flow.Flow
@@ -17,7 +18,8 @@ import kotlinx.coroutines.flow.first
  * - 子表（Lesson / Schedule / LessonPackage / TrainingCycle / BodyMetricHistory /
  *   ParentReport / StudentDietRecord）保留 studentName 字段用于显示，
  *   同时新增 studentId 软关联字段（NULL=旧数据，由业务层回填）。
- * - 删除学员使用软删除（isActive = 0），保留行用于历史报表关联。
+ * - 删除学员为物理删除（2026-09-10 定版）：students 行与业务子表级联清理，
+ *   并在 pc_sync_state 写删除墓碑防止 PC→手机同步复活；历史报表表保留。
  * - 改名通过 [renameStudentCascade] 在单事务内原子级联更新所有子表的 studentName。
  *
  * v21 引入 FTS 全文检索：
@@ -88,6 +90,8 @@ class StudentRepository(
                 studentId = generateUniqueStudentId()
             )
         )
+        // 重新添加同名学员：清除删除墓碑，恢复 PC→手机同步的档案导入
+        db?.pcSyncStateDao()?.deleteTombstoneBlocking(name)
         // v26 优化1：记录操作日志
         auditLog?.log(
             action = "新增学员",
@@ -177,6 +181,8 @@ class StudentRepository(
                     studentId = id
                 )
             )
+            // 重新添加同名学员：清除删除墓碑，恢复 PC→手机同步的档案导入
+            db?.pcSyncStateDao()?.deleteTombstoneBlocking(name)
         }
         // v26 优化1：记录操作日志（内部 try-catch，失败不阻断业务）
         auditLog?.log(
@@ -266,13 +272,14 @@ class StudentRepository(
     }
 
     /**
-     * 软删除学员：仅置 isActive=false，保留行用于历史报表关联。
+     * 删除学员（物理删除，2026-09-10 李哥定版：删除即彻底删除）。
      *
-     * 业务子表（Lesson / Schedule / LessonPackage / TrainingCycle / PlanImage）
-     * 在事务内级联物理清理，避免 UI 角标与统计残留"幽灵数据"；
-     * 历史报表表（BodyMetricHistory / ParentReport / StudentDietRecord / ArchivedLesson）
-     * 原样保留，通过 studentName 仍能查到该学员的历史记录。
-     * 日常 UI 通过 [StudentDao.getAll] 自动过滤 isActive=0 的行。
+     * students 主表行 + 业务子表（Lesson / Schedule / LessonPackage /
+     * TrainingCycle / PlanImage）在事务内级联物理清理；
+     * 历史报表表（BodyMetricHistory / ParentReport / StudentDietRecord /
+     * ArchivedLesson）原样保留，通过 studentName 仍能查到该学员的历史记录。
+     * studentFts 索引由 Room 自动同步触发器（AFTER_DELETE）维护，无需手动 rebuild。
+     * 保留 [softDeleteByName] DAO 方法供历史数据迁移场景使用。
      */
     suspend fun deleteStudent(name: String) {
         // v26 优化1：记录删除前数据用于日志
@@ -283,17 +290,20 @@ class StudentRepository(
         // v47：级联清单统一为 5 张业务子表（lessons/schedules/lesson_packages/
         // training_cycles/student_plan_images），与 softDeleteStudentById 保持一致
         db?.withTransaction {
-            // v48 双通道：先读 studentId，再软删除（软删后 getByName 过滤活跃行会返回 null）
+            // v48 双通道：先读 studentId（删除后 getByName 类查询将返回 null）
             val sid = dao.getByNameIncludeDeleted(name)?.studentId
-            dao.softDeleteByName(name)
+            // 2026-09-10：物理删除主表行（原软删除 isActive=0 会残留"幽灵行"）
+            dao.deleteByName(name)
             db.lessonDao().deleteByStudent(name)
             db.scheduleDao().deleteByStudent(name)
             db.lessonPackageDao().deleteByStudent(name)
             db.trainingCycleDao().deleteByStudent(name)
             // v48 双通道：studentId 优先，旧数据 NULL 回退姓名
             db.planImageDao().deleteByStudentIdDual(sid, name)
-        } ?: dao.softDeleteByName(name)
-        // v26 优化1：记录操作日志（软删除）
+            // 删除墓碑：挡住 PC→手机 students.xlsx 同步把仍有 PC 档案的学员复活
+            db.pcSyncStateDao().upsertBlocking(PcSyncState.tombstone(name))
+        } ?: dao.deleteByName(name)
+        // v26 优化1：记录操作日志（物理删除）
         auditLog?.log(
             action = "删除学员",
             targetStudent = name,
@@ -303,7 +313,7 @@ class StudentRepository(
                     "weightKg" to it.weightKg, "isActive" to it.isActive
                 )
             },
-            summary = "软删除学员「$name」（数据保留可恢复，业务子表已级联清理）"
+            summary = "彻底删除学员「$name」（主表行与业务子表已物理清理，历史报表保留）"
         )
         // v30：删除学员属于核心数据变更，触发自动备份防抖
         AutoBackupScheduler.notifyDataChange()
@@ -797,6 +807,15 @@ class StudentRepository(
                 validateStudentFields(s.name, s.gender, s.age, s.heightCm, s.weightKg, s.bmi)
                 val existing = dao.getByNameIncludeDeletedBlocking(s.name)
                 if (existing == null) {
+                    // 删除墓碑命中：该学员已被用户在手机端彻底删除，PC 端档案同步
+                    // 过来时不新增（否则已删除学员每次自动同步都会复活）。
+                    // 用户重新添加同名学员（addStudent*）会清除墓碑。
+                    val tombstoned = db?.pcSyncStateDao()?.getBlocking(s.name)
+                        ?.appliedPcLessons == PcSyncState.TOMBSTONE
+                    if (tombstoned) {
+                        skipped++
+                        continue
+                    }
                     // 新增：生成与现有 ID 不冲突的唯一 ID（同步算法）
                     var id: String
                     do { id = java.util.UUID.randomUUID().toString().take(12) } while (id in existingIds)

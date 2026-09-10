@@ -323,7 +323,7 @@ fun StudentListTab(
         GlassAlertDialog(
             onDismissRequest = { deleteTarget = null },
             title = "删除学员",
-            content = { Text("确认删除学员「${student.name}」及其所有课时记录？此操作不可撤销。") },
+            content = { Text("确认彻底删除学员「${student.name}」？其课时、排课、课时包等记录将一并删除，此操作不可撤销。") },
             confirmButton = {
                 TextButton(
                     onClick = {

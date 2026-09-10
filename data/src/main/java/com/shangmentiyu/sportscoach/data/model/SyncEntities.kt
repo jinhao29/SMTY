@@ -49,4 +49,20 @@ data class PcSyncState(
     @PrimaryKey val studentName: String,
     val appliedPcLessons: Int = 0,
     val updatedAt: Long = System.currentTimeMillis()
-)
+) {
+    companion object {
+        /**
+         * 删除墓碑标记（2026-09-10）：deleteStudent 物理删除学员行后，
+         * 在 pc_sync_state 写入 appliedPcLessons = TOMBSTONE 的行。
+         * PC→手机 students.xlsx 同步（importStudentsBlockingUpdatePart）
+         * 对墓碑命中的名字跳过新增，防止 PC 端仍有档案的学员被同步复活。
+         * 用户重新添加同名学员（addStudent*）时清除墓碑。
+         */
+        const val TOMBSTONE = -1
+
+        fun tombstone(studentName: String) = PcSyncState(
+            studentName = studentName,
+            appliedPcLessons = TOMBSTONE
+        )
+    }
+}

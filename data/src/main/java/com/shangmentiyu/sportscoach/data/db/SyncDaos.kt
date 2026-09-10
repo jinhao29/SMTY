@@ -35,4 +35,8 @@ interface PcSyncStateDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun upsertBlocking(state: PcSyncState)
+
+    /** 清除墓碑：用户重新添加同名学员时调用 */
+    @Query("DELETE FROM pc_sync_state WHERE studentName = :studentName AND appliedPcLessons = -1")
+    fun deleteTombstoneBlocking(studentName: String)
 }
