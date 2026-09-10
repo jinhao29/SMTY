@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import com.shangmentiyu.sportscoach.data.db.AppDatabase
+import com.shangmentiyu.sportscoach.data.repo.SettingsRepository
 import kotlinx.coroutines.flow.first
 import org.json.JSONArray
 import org.json.JSONObject
@@ -90,6 +91,17 @@ object BackupManager {
 
     /** v22 新增：桌面端 Python 程序读取的元数据 JSON 条目名 */
     private const val ZIP_ENTRY_META_JSON = "export_meta.json"
+
+    /**
+     * 备份清单条目（v1.0.3 新增，明文小文件）。
+     *
+     * 必须**首个写入** ZIP：ZIP 是流式的，恢复端需先读到盐/迭代次数才能解密后续条目。
+     * 内容不敏感——只含盐、迭代次数、加密标记，不含任何学员数据。
+     */
+    private const val ZIP_ENTRY_MANIFEST = "backup_manifest.json"
+
+    /** 备份清单格式版本 */
+    private const val MANIFEST_VERSION = 1
 
     /** export_meta.json 的结构版本号（供桌面端做兼容性判断） */
     private const val META_JSON_VERSION = 1
@@ -187,6 +199,30 @@ object BackupManager {
             AppDatabase.closeAndResetInstance(context)
 
             ZipOutputStream(outputStream).use { zos ->
+                // 1.9 备份清单（必须首个写入：恢复端需先取得盐/迭代次数才能解密后续条目）
+                //     口令来源 = 用户在设置中配置的私钥种子（与照片加密同一把）。
+                //     未配置口令时不写 manifest，整包保持旧格式（向后兼容）。
+                val backupPassphrase: String? = runCatching {
+                    SettingsRepository(context).getBackupPassphraseBlocking().takeIf { it.isNotBlank() }
+                }.getOrNull()
+                val saltHex: String? = if (backupPassphrase != null) BackupCrypto.generateSaltHex() else null
+                val manifestJson: JSONObject? = saltHex?.let { salt ->
+                    JSONObject()
+                        .put("version", MANIFEST_VERSION)
+                        .put("encrypted", true)
+                        .put("algorithm", "AES-256-GCM")
+                        .put("kdf", "PBKDF2WithHmacSHA256")
+                        .put("iterations", BackupCrypto.PBKDF2_ITERATIONS)
+                        .put("salt", salt)
+                }
+                manifestJson?.let {
+                    putBytesEntry(zos, ZIP_ENTRY_MANIFEST, it.toString().toByteArray(Charsets.UTF_8))
+                    onProgress?.onProgress("manifest", 0, 0, "已启用备份加密")
+                }
+                val encKey = if (backupPassphrase != null && saltHex != null) {
+                    BackupCrypto.deriveKey(backupPassphrase, saltHex)
+                } else null
+
                 // 2. 写入数据库文件
                 // v23.12：按当前工作模式选库（俱乐部模式备份俱乐部库，物理隔离闭环）
                 val dbName = AppDatabase.activeDatabaseName()
@@ -199,7 +235,12 @@ object BackupManager {
                 var dbDone = 0
                 for ((entryName, file) in dbFiles) {
                     if (file.exists()) {
-                        putFileEntry(zos, entryName, file)
+                        if (encKey != null) {
+                            // 加密路径：读入内存加密后写入（数据库文件通常 <100MB，可接受）
+                            putEncryptedBytesEntry(zos, entryName, file.readBytes(), encKey)
+                        } else {
+                            putFileEntry(zos, entryName, file)
+                        }
                         dbDone++
                         onProgress?.onProgress(
                             "db", dbDone, dbTotal,
@@ -210,8 +251,14 @@ object BackupManager {
 
                 // 2.1 写入 export_meta.json（v22 新增）
                 //     失败时不阻塞主备份流程（metaJson=null 时跳过）
+                //     加密启用时同样加密——该文件含学员姓名/电话/住址，是隐私泄露主要面
                 metaJson?.let { json ->
-                    putBytesEntry(zos, ZIP_ENTRY_META_JSON, json.toByteArray(Charsets.UTF_8))
+                    val bytes = json.toByteArray(Charsets.UTF_8)
+                    if (encKey != null) {
+                        putEncryptedBytesEntry(zos, ZIP_ENTRY_META_JSON, bytes, encKey)
+                    } else {
+                        putBytesEntry(zos, ZIP_ENTRY_META_JSON, bytes)
+                    }
                     onProgress?.onProgress("meta", 1, 1, "已生成桌面端元数据 JSON")
                 }
 
@@ -425,6 +472,29 @@ object BackupManager {
             }
         }
         zos.closeEntry()
+    }
+
+    /**
+     * 将字节数组加密后写入 ZIP 条目（v1.0.3 备份加密）。
+     *
+     * 加密在内存中完成（[BackupCrypto.encrypt]），不落盘明文临时文件——
+     * 避免明文短暂残留于外部存储被其他应用扫描到。
+     *
+     * @param zos ZIP 输出流
+     * @param entryName 条目名（保持与未加密时一致，PC 端按名匹配）
+     * @param plain 明文内容
+     * @param key 备份密钥
+     */
+    private fun putEncryptedBytesEntry(
+        zos: ZipOutputStream,
+        entryName: String,
+        plain: ByteArray,
+        key: javax.crypto.SecretKey
+    ) {
+        val encrypted = BackupCrypto.encrypt(plain, key)
+        // 明文用后立即清零（降低内存中被 dump 的窗口）
+        plain.fill(0)
+        putBytesEntry(zos, entryName, encrypted)
     }
 
     /**
@@ -649,30 +719,74 @@ object BackupManager {
             // 4. 单次扫描 ZIP，按条目索引回报进度（total=0 表示未知）
             onProgress?.onProgress("extract", 0, 0, "正在恢复数据…")
             var entryIdx = 0
+            // v1.0.3 备份加密：密钥在读到 manifest 后派生，供后续条目解密
+            var zipKey: javax.crypto.SecretKey? = null
+            var zipEncrypted = false
             ZipInputStream(inputStream).use { zis ->
                 var entry = zis.nextEntry
                 while (entry != null) {
                     entryIdx++
                     when {
+                        // 备份清单（加密备份的首个条目）：解析盐与迭代次数派生密钥
+                        entry.name == ZIP_ENTRY_MANIFEST -> {
+                            val manifestBytes = zis.readBytes()
+                            val parsed: javax.crypto.SecretKey? = runCatching {
+                                val obj = JSONObject(String(manifestBytes, Charsets.UTF_8))
+                                if (!obj.optBoolean("encrypted", false)) return@runCatching null
+                                val salt: String = obj.optString("salt", "")
+                                if (salt.isBlank()) return@runCatching null
+                                val iters: Int = obj.optInt("iterations", BackupCrypto.PBKDF2_ITERATIONS)
+                                val pass: String? = SettingsRepository(context)
+                                    .getBackupPassphraseBlocking().takeIf { p -> p.isNotBlank() }
+                                if (pass == null) {
+                                    // 备份已加密但本机未配置口令 —— 无法解密，明确报错而非静默产出垃圾
+                                    throw IllegalStateException(
+                                        "该备份已加密，请先在「设置 → 数据管理」中填入备份时使用的加密口令后再恢复")
+                                }
+                                zipEncrypted = true
+                                BackupCrypto.deriveKey(pass, salt, iters)
+                            }.getOrElse { e ->
+                                // 解密准备失败：清理已删的库文件由外层 catch 统一回滚
+                                throw IllegalStateException(
+                                    "解析备份清单失败：${e.message ?: "未知错误"}", e)
+                            }
+                            if (parsed == null) {
+                                onProgress?.onProgress("extract", entryIdx, 0, "备份未加密")
+                            } else {
+                                zipKey = parsed
+                                onProgress?.onProgress("extract", entryIdx, 0, "已识别加密备份，正在解密…")
+                            }
+                        }
                         // 数据库文件
                         entry.name == ZIP_ENTRY_DB -> {
                             val target = context.getDatabasePath(AppDatabase.activeDatabaseName())
                             target.parentFile?.mkdirs()
-                            extractFile(zis, target)
+                            extractFileSmart(zis, target, zipKey)
                             dbExtracted = true
                             onProgress?.onProgress("extract", entryIdx, 0, "已恢复数据库主文件")
                         }
                         // WAL 日志
                         entry.name == ZIP_ENTRY_DB_WAL -> {
                             val target = context.getDatabasePath(AppDatabase.activeDatabaseName() + "-wal")
-                            extractFile(zis, target)
+                            extractFileSmart(zis, target, zipKey)
                             onProgress?.onProgress("extract", entryIdx, 0, "已恢复 WAL 日志")
                         }
                         // 共享内存
                         entry.name == ZIP_ENTRY_DB_SHM -> {
                             val target = context.getDatabasePath(AppDatabase.activeDatabaseName() + "-shm")
-                            extractFile(zis, target)
+                            extractFileSmart(zis, target, zipKey)
                             onProgress?.onProgress("extract", entryIdx, 0, "已恢复 SHM 内存")
+                        }
+                        // export_meta.json（加密备份下需解密；恢复不依赖它，失败可忽略）
+                        entry.name == ZIP_ENTRY_META_JSON -> {
+                            if (zipKey != null) {
+                                // 加密备份：读取解密后丢弃即可（恢复以 db 为准），
+                                // 但必须消费掉条目流，否则后续条目解析错位
+                                val raw = zis.readBytes()
+                                if (BackupCrypto.decrypt(raw, zipKey!!) == null) {
+                                    Log.w(TAG, "export_meta.json 解密失败（不影响主库恢复）")
+                                }
+                            }
                         }
                         // 签到照片
                         entry.name.startsWith(ZIP_ENTRY_PHOTOS_DIR) -> {
@@ -949,6 +1063,37 @@ object BackupManager {
                 len = zis.read(buffer)
             }
         }
+    }
+
+    /**
+     * 智能解包（v1.0.3 备份加密）：按条目内容自动判定是否加密，加密则解密后写入。
+     *
+     * 为什么按内容而非按 manifest 标记判定：
+     * - 加密是**逐条目可选**的，且换版本时可能部分条目加密部分不加密
+     * - 魔数（SMTB）判定是自描述的，不依赖外部标记，容错性更好
+     * - 未加密的旧备份（无 manifest）走此路径时魔数不匹配，直接原样写出
+     *
+     * @param zis ZIP 输入流（已定位到条目）
+     * @param target 目标文件
+     * @param key 备份密钥；null 表示本次恢复未启用解密
+     * @throws IllegalStateException 条目已加密但无可用密钥时抛出（避免写入垃圾数据）
+     */
+    private fun extractFileSmart(zis: ZipInputStream, target: File, key: javax.crypto.SecretKey?) {
+        val raw = zis.readBytes()
+        if (!BackupCrypto.isEncrypted(raw)) {
+            // 未加密：保持旧行为原样写出
+            FileOutputStream(target).use { it.write(raw) }
+            return
+        }
+        if (key == null) {
+            // 检测到加密载荷却没拿到密钥 —— 绝不能把密文当数据库写出，
+            // 否则后续 integrity_check 会以"数据库损坏"误导用户。
+            throw IllegalStateException(
+                "备份内容已加密，但未找到可用的解密密钥。请确认「设置 → 用户私钥」与备份时一致")
+        }
+        val plain = BackupCrypto.decrypt(raw, key)
+            ?: throw IllegalStateException("备份解密失败：密钥不匹配或文件已损坏")
+        FileOutputStream(target).use { it.write(plain) }
     }
 
     /**

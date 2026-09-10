@@ -42,6 +42,9 @@ class SettingsRepository(private val context: Context) {
         // 用于派生 PhotoCrypto 的 AES 密钥，确保跨设备迁移后仍能解密老照片
         private val KEY_USER_PRIVATE_KEY = stringPreferencesKey("user_private_key")
 
+        /** 备份加密口令（v1.0.3）：非空时备份 ZIP 内的 db / meta.json 走 AES-GCM 加密 */
+        private val KEY_BACKUP_PASSPHRASE = stringPreferencesKey("backup_passphrase")
+
         /** 默认同步端口（与桌面端 backup_receiver.py 默认端口一致） */
         const val DEFAULT_SYNC_PORT = "8765"
 
@@ -103,6 +106,30 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setUserPrivateKey(value: String) {
         context.dataStore.edit { it[KEY_USER_PRIVATE_KEY] = value.trim() }
+    }
+
+    // === 备份加密口令（v1.0.3 新增） ===
+
+    /**
+     * 备份加密口令。
+     *
+     * 与 [userPrivateKey] 的区别：
+     * - [userPrivateKey] 服务于**照片**跨设备解密，但当前 App 无 UI 入口（历史遗留死接口）
+     * - 本字段服务于**备份 ZIP 加密**，在「数据管理」区块有独立输入框
+     *
+     * 为空时备份保持明文（向后兼容旧格式）；非空时 BackupManager 加密 db 与 meta.json。
+     * 口令遗失将导致加密备份无法恢复 —— UI 必须明确警示。
+     */
+    val backupPassphrase: Flow<String> =
+        context.dataStore.data.map { it[KEY_BACKUP_PASSPHRASE] ?: "" }
+
+    /** 同步读取备份口令（供 BackupManager 在非协程上下文中使用） */
+    fun getBackupPassphraseBlocking(): String = runBlocking {
+        context.dataStore.data.map { it[KEY_BACKUP_PASSPHRASE] ?: "" }.first()
+    }
+
+    suspend fun setBackupPassphrase(value: String) {
+        context.dataStore.edit { it[KEY_BACKUP_PASSPHRASE] = value.trim() }
     }
 
     // === 桌面同步配置（v21 新增） ===

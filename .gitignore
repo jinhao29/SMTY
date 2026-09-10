@@ -43,3 +43,6 @@ $RECYCLE.BIN/
 
 # 同步服务运行时备份目录
 backups/
+
+# 本地发版打包产物（CI 从 tag 触发时自行构建，不入库）
+dist_release/

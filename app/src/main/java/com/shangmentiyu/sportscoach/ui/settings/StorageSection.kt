@@ -12,9 +12,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.DeleteSweep
+import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -60,6 +62,9 @@ internal fun StorageSection(vm: SettingsViewModel) {
         }
     }
     var showCleanPhotosConfirm by remember { mutableStateOf(false) }
+    // v1.0.3 照片加密私钥
+    val userPrivateKey by vm.userPrivateKey.collectAsStateWithLifecycle()
+    var showPrivateKeyDialog by remember { mutableStateOf(false) }
 
     IosSectionWrapper(text = "存储空间") {
         IosGroupedListCard {
@@ -117,6 +122,28 @@ internal fun StorageSection(vm: SettingsViewModel) {
                     .height(0.5.dp)
                     .background(appDividerColor())
             )
+            // v1.0.3 照片加密私钥：激活此前无 UI 入口的死接口，
+            // 使签到照片可在换机后用同一私钥解密（否则绑 Keystore 不可迁移）。
+            SettingsActionRow(
+                icon = Icons.Outlined.Key,
+                iconBgColor = LightSecondary,
+                iconContentDescription = "照片加密私钥",
+                title = "照片加密私钥",
+                subtitle = if (userPrivateKey.isNotBlank())
+                    "已设置，换机后可用同一私钥解密历史照片"
+                else
+                    "未设置，照片绑定本机密钥；换手机后将无法查看旧照片",
+                showTopDivider = true,
+                onClick = { showPrivateKeyDialog = true }
+            )
+            // 分隔线
+            Box(
+                modifier = Modifier
+                    .padding(start = 60.dp)
+                    .fillMaxWidth()
+                    .height(0.5.dp)
+                    .background(appDividerColor())
+            )
             // 操作行：清理一年前签到照片（带二次确认）
             SettingsActionRow(
                 icon = Icons.Outlined.DeleteSweep,
@@ -137,6 +164,62 @@ internal fun StorageSection(vm: SettingsViewModel) {
                 }
             )
         }
+    }
+
+    // v1.0.3 照片加密私钥设置对话框
+    if (showPrivateKeyDialog) {
+        var draft by remember(userPrivateKey) { mutableStateOf(userPrivateKey) }
+        GlassAlertDialog(
+            onDismissRequest = { showPrivateKeyDialog = false },
+            title = "照片加密私钥",
+            content = {
+                Column {
+                    Text(
+                        "签到照片含学员人脸信息，始终加密存储。设置私钥后，" +
+                            "换新手机只需输入同一串私钥即可查看历史照片。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.height(Spacing.sm))
+                    OutlinedTextField(
+                        value = draft,
+                        onValueChange = { draft = it },
+                        singleLine = true,
+                        label = { Text("私钥（建议 8 位以上随机字符串）") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(Spacing.sm))
+                    Text(
+                        "⚠️ 仅对「设置之后新拍摄的照片」生效，已有照片不会被重新加密。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                    Spacer(Modifier.height(Spacing.xs))
+                    Text(
+                        "请务必自行留存这串私钥——遗失后新拍照片将无法在换机后打开。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    if (draft.isNotBlank() && draft.length < 8) {
+                        Spacer(Modifier.height(Spacing.xs))
+                        Text(
+                            "建议至少 8 位以保证强度",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    vm.setUserPrivateKey(draft)
+                    showPrivateKeyDialog = false
+                }) { Text(if (draft.isBlank()) "清除私钥" else "保存") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPrivateKeyDialog = false }) { Text("取消") }
+            }
+        )
     }
 
     // 清理一年前签到照片二次确认对话框：删除不可恢复，需用户明确确认

@@ -227,7 +227,9 @@ class UdpDesktopDiscoveryService : Service() {
         isRunning = false
         try {
             socket?.close()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            // 关闭失败不影响 Service 销毁流程，但必须留痕（此前静默吞掉，排障时无线索）
+            Log.w(TAG, "关闭 UDP socket 失败: ${e.message}", e)
         }
         receiveThread?.interrupt()
         Log.i(TAG, "UdpDesktopDiscoveryService onDestroy")

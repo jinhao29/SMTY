@@ -183,6 +183,25 @@ class SettingsViewModel(
         }
     }
 
+    // === v1.0.3 备份加密口令 ===
+    // 非空时 BackupManager 加密备份内的数据库与元数据（AES-256-GCM）。
+    // 口令存 DataStore（本机），不上传；遗失则已加密备份无法恢复，UI 已警示。
+
+    /** 备份加密口令（空 = 不加密，保持旧格式向后兼容） */
+    val backupPassphrase: StateFlow<String> = settingsRepo.backupPassphrase
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+
+    /** 设置备份加密口令（传空串表示关闭加密） */
+    fun setBackupPassphrase(value: String) {
+        safeLaunch {
+            settingsRepo.setBackupPassphrase(value)
+            _statusMessage.value = if (value.isBlank())
+                "已关闭备份加密，后续备份为明文"
+            else
+                "已启用备份加密，请牢记口令"
+        }
+    }
+
     // === v1.0.2+ 固定备份文件夹（手动/自动/恢复联动） ===
     // SAF 目录树 Uri 选一次持久化；手动备份直存、恢复自动取最新、自动备份同步写入。
     // 选公共目录（如 Download）→ 卸载应用备份不丢（此前私有目录备份随卸载蒸发）。
@@ -997,6 +1016,36 @@ class SettingsViewModel(
     private val _cleanableCount = MutableStateFlow(0)
     val cleanableCount: StateFlow<Int> = _cleanableCount.asStateFlow()
 
+    // === v1.0.3 照片加密私钥（激活此前无 UI 入口的 setUserPrivateKey） ===
+
+    /**
+     * 用户私钥种子。
+     *
+     * 用途：作为 [com.shangmentiyu.sportscoach.app.framework.PhotoCrypto] 派生 AES 密钥的种子，
+     * 使签到照片可在**换机后**用同一私钥解密。
+     *
+     * 未设置时照片走 EncryptedFile 方案（绑定本机 Android Keystore）——
+     * 该密钥不可跨设备迁移，换机后历史照片将无法打开。
+     */
+    val userPrivateKey: StateFlow<String> = settingsRepo.userPrivateKey
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+
+    /**
+     * 设置用户私钥。
+     *
+     * ⚠️ 只影响**此后新拍摄**的照片：已加密的旧照片仍用原密钥加密，
+     * 换私钥不会自动重加密（重加密需遍历解密再写入，成本高且有损坏风险）。
+     */
+    fun setUserPrivateKey(value: String) {
+        safeLaunch {
+            settingsRepo.setUserPrivateKey(value)
+            _statusMessage.value = if (value.isBlank())
+                "已清除私钥，新照片将改用本机密钥加密"
+            else
+                "已设置私钥，新照片可在换机后用同一私钥解密"
+        }
+    }
+
     /**
      * 扫描签到照片目录：统计目录大小、文件总数、可清理数（一年前）。
      *
@@ -1272,7 +1321,11 @@ class SettingsViewModel(
                                     val p = arr.optString(i, "")
                                     if (p.isNotBlank()) referencedSet.add(p)
                                 }
-                            } catch (_: Exception) { }
+                            } catch (e: Exception) {
+                                // 解析失败 => 该课时的 contentImages 无法计入引用集，
+                                // 其照片可能被下方清理逻辑误判为孤儿删除。必须留痕以便追查。
+                                android.util.Log.w("SettingsVM", "解析 contentImages 失败，照片引用集不完整, lessonId=${lesson.id}: ${e.message}", e)
+                            }
                         }
                     }
                     val normalizedReferenced = referencedSet.mapTo(HashSet()) { normalizePhotoPath(it) }

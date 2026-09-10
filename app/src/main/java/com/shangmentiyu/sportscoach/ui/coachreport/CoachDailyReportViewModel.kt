@@ -119,7 +119,11 @@ class CoachDailyReportViewModel(
                 for (i in 0 until arr.length()) {
                     if (arr.optJSONObject(i)?.optBoolean("done", false) == true) doneEx++
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                // content 解析失败时按"无训练内容"计（totalEx/doneEx 保持 0），
+                // 但必须留痕：此前静默吞掉导致完成度恒为 0 却查不出原因
+                android.util.Log.w(TAG, "解析课时 content JSON 失败, lessonId=${lesson.id}: ${e.message}", e)
+            }
         }
         val completionRate = if (totalEx > 0) doneEx.toFloat() / totalEx else 0f
         val perfScore = lesson.performance.toFloat() / 10f
@@ -164,16 +168,21 @@ class CoachDailyReportViewModel(
     )
 
     companion object {
+        private const val TAG = "CoachDailyReportVM"
+
         /** [DateTimeFormatter] 不可变且线程安全，作为单例共享 */
         private val dateFormatter: DateTimeFormatter =
             DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault())
 
         fun today(): String = LocalDate.now().format(dateFormatter)
 
-        /** 增减指定天数（线程安全：基于 [LocalDate] 不可变对象） */
+        /** 增减指定天数（线程安全：基于 [LocalDate] 不可变对象）；解析失败原样返回 */
         fun shiftDays(dateStr: String, days: Int): String = try {
             val date = LocalDate.parse(dateStr, dateFormatter)
             date.plusDays(days.toLong()).format(dateFormatter)
-        } catch (_: Exception) { dateStr }
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "shiftDays 解析日期失败, 原值返回: '$dateStr' - ${e.message}")
+            dateStr
+        }
     }
 }

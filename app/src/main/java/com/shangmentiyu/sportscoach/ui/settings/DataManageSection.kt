@@ -12,12 +12,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Apps
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.SaveAlt
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -68,6 +70,9 @@ internal fun DataManageSection(
     val latestBackup by vm.latestBackup.collectAsStateWithLifecycle()
     val folderSet = backupFolderLabel.isNotBlank()
     var showRestoreConfirm by remember { mutableStateOf(false) }
+    // v1.0.3 备份加密口令
+    val backupPassphrase by vm.backupPassphrase.collectAsStateWithLifecycle()
+    var showPassphraseDialog by remember { mutableStateOf(false) }
 
     // 最新备份的展示时间（文件夹内最新一份；无备份时提示首次备份）
     val latestText = latestBackup?.let { (name, ms) ->
@@ -142,6 +147,29 @@ internal fun DataManageSection(
                     )
                 }
             }
+            // 分隔线
+            Box(
+                modifier = Modifier
+                    .padding(start = 60.dp)
+                    .fillMaxWidth()
+                    .height(0.5.dp)
+                    .background(appDividerColor())
+            )
+            // === v1.0.3 备份加密口令 ===
+            // 设置后备份 ZIP 内的数据库与元数据走 AES-256-GCM 加密，
+            // 备份文件即使被导出（微信/网盘/U盘）也无法直接读出学员隐私。
+            SettingsActionRow(
+                icon = Icons.Outlined.Lock,
+                iconBgColor = LightSecondary,
+                iconContentDescription = "备份加密口令",
+                title = "备份加密口令",
+                subtitle = if (backupPassphrase.isNotBlank())
+                    "已启用，备份将加密存储（恢复时需输入同一口令）"
+                else
+                    "未设置，备份为明文；建议设置以避免学员隐私泄露",
+                showTopDivider = true,
+                onClick = { showPassphraseDialog = true }
+            )
             // 分隔线
             Box(
                 modifier = Modifier
@@ -244,6 +272,59 @@ internal fun DataManageSection(
     }
 
     // 恢复前二次确认对话框：恢复会覆盖当前所有学员/课时/签到数据
+    // v1.0.3 备份加密口令设置对话框
+    if (showPassphraseDialog) {
+        var draft by remember(backupPassphrase) { mutableStateOf(backupPassphrase) }
+        GlassAlertDialog(
+            onDismissRequest = { showPassphraseDialog = false },
+            title = "备份加密口令",
+            content = {
+                Column {
+                    Text(
+                        "设置后，备份文件中的数据库与学员数据将加密存储。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.height(Spacing.sm))
+                    OutlinedTextField(
+                        value = draft,
+                        onValueChange = { draft = it },
+                        singleLine = true,
+                        label = { Text("加密口令（至少 8 位）") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(Spacing.sm))
+                    Text(
+                        "⚠️ 口令不会上传到任何服务器。请务必自行记牢——" +
+                            "口令遗失后，已加密的备份将无法恢复。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    if (draft.isNotBlank() && draft.length < 8) {
+                        Spacer(Modifier.height(Spacing.xs))
+                        Text(
+                            "口令至少 8 位",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = draft.isBlank() || draft.length >= 8,
+                    onClick = {
+                        vm.setBackupPassphrase(draft)
+                        showPassphraseDialog = false
+                    }
+                ) { Text(if (draft.isBlank()) "清除口令" else "保存") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPassphraseDialog = false }) { Text("取消") }
+            }
+        )
+    }
+
     if (showRestoreConfirm) {
         GlassAlertDialog(
             onDismissRequest = { showRestoreConfirm = false },
