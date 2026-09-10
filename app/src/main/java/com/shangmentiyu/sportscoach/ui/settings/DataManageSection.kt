@@ -332,6 +332,14 @@ internal fun DataManageSection(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error
                     )
+                    Spacer(Modifier.height(Spacing.xs))
+                    Text(
+                        "数据库已加密（密钥由本机安全芯片保管，无法导出）。" +
+                            "换手机时，本地数据不会自动跟随，请先用备份功能导出" +
+                            "并牢记口令，在新设备上恢复。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     if (tooShort) {
                         Spacer(Modifier.height(Spacing.xs))
                         Text(

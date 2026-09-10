@@ -1,7 +1,6 @@
 package com.shangmentiyu.sportscoach.data.internal
 
 import android.content.Context
-import android.database.sqlite.SQLiteDatabase
 import android.util.Log
 import com.shangmentiyu.sportscoach.data.db.AppDatabase
 import java.io.File
@@ -106,7 +105,7 @@ object PreUpdateBackupManager {
             }
 
             // 用原生 SQLite 只读模式打开数据库文件，读取 user_version
-            val dbVersion = readDbVersionViaSqlite(dbFile)
+            val dbVersion = readDbVersionViaSqlite(context, dbFile)
             if (dbVersion <= 0) {
                 Log.d(TAG, "无法读取数据库版本（可能文件损坏），跳过版本检查")
                 return
@@ -152,19 +151,20 @@ object PreUpdateBackupManager {
     }
 
     /**
-     * 用原生 SQLite 只读模式打开数据库文件，读取 user_version。
+     * 打开数据库文件读取 user_version（含加密库支持，v1.0.5）。
      *
      * 不依赖 Room，避免触发 Room 的版本校验逻辑。
+     *
+     * v1.0.5：数据库已由 SQLCipher 加密，**必须用 [EncryptedDbOpener] 打开**。
+     * 若沿用原生 SQLite，加密库会报 "file is not a database" → 此处返回 -1 →
+     * 降级保护（dbVersion > codeVersion 的检测）直接失效。
+     *
      * 如果文件损坏或无法打开，返回 -1。
      */
-    private fun readDbVersionViaSqlite(dbFile: File): Int {
-        var db: SQLiteDatabase? = null
+    private fun readDbVersionViaSqlite(context: Context, dbFile: File): Int {
+        var db: EncryptedDbOpener.Handle? = null
         return try {
-            db = SQLiteDatabase.openDatabase(
-                dbFile.absolutePath,
-                null,
-                SQLiteDatabase.OPEN_READONLY
-            )
+            db = EncryptedDbOpener.openReadWrite(context, dbFile.absolutePath)
             db.version
         } catch (e: Exception) {
             Log.w(TAG, "读取数据库版本失败：${e.message}")

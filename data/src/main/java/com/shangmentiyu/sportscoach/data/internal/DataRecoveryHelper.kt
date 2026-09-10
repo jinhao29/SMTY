@@ -1,7 +1,6 @@
 package com.shangmentiyu.sportscoach.data.internal
 
 import android.content.Context
-import android.database.sqlite.SQLiteDatabase
 import android.util.Log
 import java.io.File
 import java.io.FileInputStream
@@ -78,7 +77,7 @@ object DataRecoveryHelper {
             return -1
         }
 
-        return verifyDataIntegrity(dbFile)
+        return verifyDataIntegrity(context, dbFile)
     }
 
     /**
@@ -125,22 +124,21 @@ object DataRecoveryHelper {
     }
 
     /**
-     * 用原生 SQLite 只读模式打开数据库文件，验证数据完整性并统计学员数量。
+     * 打开数据库文件（含加密库支持，v1.0.5），验证数据完整性并统计学员数量。
      *
      * 不依赖 Room 框架，避免触发 Room 的版本校验逻辑。
      * 执行 PRAGMA integrity_check 确保数据库文件未损坏。
      *
+     * v1.0.5：数据库已由 SQLCipher 加密，**必须用 [EncryptedDbOpener] 打开**，
+     * 否则急救备份里的加密库会被判为损坏，恢复流程永久失效。
+     *
      * @param dbFile 临时目录中的 .db 文件
      * @return 学员数量；若失败返回 -1
      */
-    private fun verifyDataIntegrity(dbFile: File): Int {
-        var db: SQLiteDatabase? = null
+    private fun verifyDataIntegrity(context: Context, dbFile: File): Int {
+        var db: EncryptedDbOpener.Handle? = null
         return try {
-            db = SQLiteDatabase.openDatabase(
-                dbFile.absolutePath,
-                null,
-                SQLiteDatabase.OPEN_READONLY
-            )
+            db = EncryptedDbOpener.openReadWrite(context, dbFile.absolutePath)
 
             // 1. 数据完整性校验
             val integrityCursor = db.rawQuery("PRAGMA integrity_check", null)

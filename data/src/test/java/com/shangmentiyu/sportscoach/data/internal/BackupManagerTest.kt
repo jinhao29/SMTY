@@ -43,12 +43,18 @@ class BackupManagerTest {
     @Before
     fun setUp() {
         context = RuntimeEnvironment.getApplication()
+        // v1.0.5：SQLCipher 的 native 库无法在 JVM（Robolectric）加载，
+        // 本测试关注的是备份/恢复业务逻辑而非加密本身，故测试期关闭数据库加密。
+        // 加密实效的真机验证清单见 docs/db_encryption_verification.md。
+        AppDatabase.devDisableEncryptionForTesting()
     }
 
     @After
     fun tearDown() {
         // 关闭真实单例，避免静态 INSTANCE 跨测试泄漏
         AppDatabase.closeAndResetInstance(context)
+        // 恢复默认（加密开启），避免静态开关跨测试类泄漏
+        AppDatabase.devResetEncryptionForTesting()
     }
 
     private fun zipEntryNames(bytes: ByteArray): List<String> =

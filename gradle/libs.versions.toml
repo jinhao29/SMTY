@@ -33,6 +33,14 @@ composeBom = "2025.08.01"              # Compose BOM（统一管理 Compose 各�
 # === Room 数据库 ===
 room = "2.7.1"                         # Room（原生支持 KSP2，解决 Kotlin 2.2.10 兼容性）
 
+# === SQLCipher（数据库文件加密，v1.0.5）===
+# ⚠️ 版本上限：4.18.0 起 AAR 元数据要求 minCompileSdk=37，本项目 compileSdk=35
+#    （AGP 8.13.0 推荐上限为 36）→ 只能用 4.17.0（minCompileSdk 无限制）。
+#    升级本项目 compileSdk 到 37+ 且换更高 AGP 后，才可再升 SQLCipher。
+# API 说明：4.x 系列入口为 net.zetetic.database.sqlcipher.SupportOpenHelperFactory，
+#    初始化用 System.loadLibrary("sqlcipher")（旧 SQLiteDatabase.loadLibs 已废弃）。
+sqlcipher = "4.17.0"
+
 # === Paging 3 ===
 paging = "3.3.5"                       # Paging (runtime-ktx / compose)
 
@@ -101,6 +109,8 @@ androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = 
 androidx-room-paging = { group = "androidx.room", name = "room-paging", version.ref = "room" }
 androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
 
+# === SQLCipher（数据库文件加密）===
+sqlcipher-android = { group = "net.zetetic", name = "sqlcipher-android", version.ref = "sqlcipher" }
 # === Paging 3 ===
 androidx-paging-runtime-ktx = { group = "androidx.paging", name = "paging-runtime-ktx", version.ref = "paging" }
 androidx-paging-compose = { group = "androidx.paging", name = "paging-compose", version.ref = "paging" }

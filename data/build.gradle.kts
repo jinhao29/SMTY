@@ -77,6 +77,9 @@ dependencies {
     implementation(libs.androidx.room.paging)
     ksp(libs.androidx.room.compiler)
 
+    // SQLCipher：数据库文件级加密（密钥由 Android Keystore 托管，见 DatabaseKeyManager）
+    implementation(libs.sqlcipher.android)
+
     // DataStore：设置项持久化
     implementation(libs.androidx.datastore.preferences)
 

@@ -257,22 +257,50 @@ object BackupManager {
                     ZIP_ENTRY_DB_WAL to File(context.getDatabasePath(dbName + "-wal").absolutePath),
                     ZIP_ENTRY_DB_SHM to File(context.getDatabasePath(dbName + "-shm").absolutePath)
                 )
-                val dbTotal = dbFiles.count { it.second.exists() }
-                var dbDone = 0
-                for ((entryName, file) in dbFiles) {
-                    if (file.exists()) {
-                        if (encKey != null) {
-                            // 加密路径：读入内存加密后写入（数据库文件通常 <100MB，可接受）
-                            putEncryptedBytesEntry(zos, entryName, file.readBytes(), encKey)
-                        } else {
-                            putFileEntry(zos, entryName, file)
+
+                // v1.0.5：设了备份口令时，把本机 Keystore 加密库导出为"以备份口令加密"的
+                // 单文件可迁移库。不这样做的话换机恢复必然失败（详见 exportPortableDb 注释）。
+                // 测试环境（加密被关闭）不做导出，走下面的原样打包路径。
+                val portableDb: File? = if (encKey != null &&
+                    !EncryptedDbOpener.useNativeForTesting
+                ) {
+                    val backupPass = DatabaseKeyManager.resolvePassphrase(
+                        context, DatabaseKeyManager.PassphraseCandidate.Backup
+                    )
+                    val srcDb = dbFiles.first().second
+                    if (backupPass != null && srcDb.exists()) {
+                        val out = File(context.cacheDir, "smty_portable_${System.currentTimeMillis()}.db")
+                        if (exportPortableDb(context, srcDb, out, backupPass)) out else null
+                    } else null
+                } else null
+
+                try {
+                    if (portableDb != null) {
+                        // 可迁移路径：单个自包含条目（无需 -wal / -shm）
+                        putEncryptedBytesEntry(zos, ZIP_ENTRY_DB, portableDb.readBytes(), encKey!!)
+                        onProgress?.onProgress("db", 1, 1, "正在备份数据库（跨设备可恢复）")
+                    } else {
+                        // 旧路径：逐文件原样打包（未设口令，或测试环境）
+                        val dbTotal = dbFiles.count { it.second.exists() }
+                        var dbDone = 0
+                        for ((entryName, file) in dbFiles) {
+                            if (file.exists()) {
+                                if (encKey != null) {
+                                    // 加密路径：读入内存加密后写入（数据库文件通常 <100MB，可接受）
+                                    putEncryptedBytesEntry(zos, entryName, file.readBytes(), encKey)
+                                } else {
+                                    putFileEntry(zos, entryName, file)
+                                }
+                                dbDone++
+                                onProgress?.onProgress(
+                                    "db", dbDone, dbTotal,
+                                    "正在备份数据库文件（$dbDone/$dbTotal）"
+                                )
+                            }
                         }
-                        dbDone++
-                        onProgress?.onProgress(
-                            "db", dbDone, dbTotal,
-                            "正在备份数据库文件（$dbDone/$dbTotal）"
-                        )
                     }
+                } finally {
+                    portableDb?.delete()
                 }
 
                 // 2.1 写入 export_meta.json（v22 新增）
@@ -629,7 +657,7 @@ object BackupManager {
         // 未知 schema 的数据库抛 IllegalStateException，导致 App 启动即闪退。
         // 此处读取的是缓冲文件的副本，不影响本地现有数据，检查通过前不触碰任何旧数据。
         onProgress?.onProgress("prepare", 0, 0, "正在检查备份版本兼容性…")
-        val backupVersion = readBackupUserVersion(buffered)
+        val backupVersion = readBackupUserVersion(context, buffered)
         if (backupVersion > AppDatabase.DATABASE_VERSION) {
             Log.w(
                 TAG,
@@ -814,7 +842,11 @@ object BackupManager {
                         entry.name == ZIP_ENTRY_DB -> {
                             val target = context.getDatabasePath(AppDatabase.activeDatabaseName())
                             target.parentFile?.mkdirs()
-                            extractFileSmart(zis, target, zipKey)
+                            // v1.0.5：备份包内的 db 是**源设备 SQLCipher 加密**的（口令来自源设备
+                            // Keystore）。换机恢复时新机 Keystore 口令不同，直接落地会导致 Room
+                            // 打不开 → 被判损坏 → 回滚，用户永远恢复不了备份。
+                            // 因此必须"转码"：先用源口令读，再用本机口令写。
+                            extractDbSmart(context, zis, target, zipKey)
                             dbExtracted = true
                             onProgress?.onProgress("extract", entryIdx, 0, "已恢复数据库主文件")
                         }
@@ -1019,16 +1051,10 @@ object BackupManager {
 
         var report = ""
         try {
-            // v1.0.1 修复：必须用 OPEN_READWRITE 打开。
-            // 应用数据库为 WAL 模式（header write/read version = 2），OPEN_READONLY
-            // 连接无法创建 -shm/-wal sidecar 文件，会抛 "unable to open database file"，
-            // 导致所有恢复被误判为"数据库损坏"并删库回滚（应用自己生成的备份也恢复不了）。
-            // integrity_check 本身是只读操作，可写连接无副作用。
-            val sqliteDb = android.database.sqlite.SQLiteDatabase.openDatabase(
-                dbFile.absolutePath,
-                null,
-                android.database.sqlite.SQLiteDatabase.OPEN_READWRITE
-            )
+            // v1.0.5：数据库已由 SQLCipher 加密，必须用 [EncryptedDbOpener] 打开。
+            // 若沿用原生 android.database.sqlite.SQLiteDatabase，加密库会被判为
+            // "file is not a database"（文件头非 "SQLite format 3"）→ 恢复被误判损坏 → 回滚。
+            val sqliteDb = EncryptedDbOpener.openReadWrite(context, dbFile.absolutePath)
             sqliteDb.use { db ->
                 db.rawQuery("PRAGMA integrity_check;", null).use { cursor ->
                     val sb = StringBuilder()
@@ -1051,11 +1077,8 @@ object BackupManager {
         val dbFile = context.getDatabasePath(AppDatabase.activeDatabaseName())
         if (!dbFile.exists()) return
         try {
-            val sqliteDb = android.database.sqlite.SQLiteDatabase.openDatabase(
-                dbFile.absolutePath,
-                null,
-                android.database.sqlite.SQLiteDatabase.OPEN_READWRITE
-            )
+            // v1.0.5：加密库必须用 SQLCipher 打开（见 EncryptedDbOpener）
+            val sqliteDb = EncryptedDbOpener.openReadWrite(context, dbFile.absolutePath)
             sqliteDb.use { db ->
                 db.execSQL("INSERT INTO `studentFts`(`studentFts`) VALUES('rebuild')")
             }
@@ -1068,45 +1091,57 @@ object BackupManager {
      * 读取备份 ZIP 内数据库的 PRAGMA user_version（即备份时 AppDatabase 的版本号）。
      *
      * 实现要点：
-     * - 从 ZIP 中解出 [ZIP_ENTRY_DB] 条目到缓存临时文件，用只读 SQLite 打开后查询
+     * - 从 ZIP 中解出 [ZIP_ENTRY_DB] 条目到缓存临时文件，用 SQLite/SQLCipher 打开后查询
      *   PRAGMA user_version；临时文件查询后立即删除，不触碰本地现有数据库
      * - 无法读取（非本应用备份 / 损坏 / 无 db 条目）返回 0，
      *   兼容旧版备份与 WAL 未合并且主库无头部信息的情况——版本 0 恒 <= 当前版本，
      *   放行后由后续 integrity_check 兜底
      *
+     * v1.0.5：备份库可能是 SQLCipher 加密库，且口令来源有两种可能：
+     * - 未设备份口令 → 库用**本机** Keystore 口令加密（同机可读）
+     * - 设了备份口令 → 库被导出为**备份口令**加密（跨机可读，见 [exportPortableDb]）
+     * 两种都要试，否则 v48 跨版本防闪退保护会静默失效。
+     *
      * @param zipFile 已缓冲到本地的备份 ZIP 文件
      * @return 备份库版本号；无法读取时为 0
      */
-    private fun readBackupUserVersion(zipFile: File): Int {
+    private fun readBackupUserVersion(context: Context, zipFile: File): Int {
         return try {
+            // 先取备份包的加密参数（加密备份的 db 条目外层还有 SMTB 包裹）
+            var zipKey: javax.crypto.SecretKey? = null
+            runCatching {
+                java.util.zip.ZipFile(zipFile).use { zf ->
+                    val mf = zf.getEntry(ZIP_ENTRY_MANIFEST) ?: return@runCatching
+                    val obj = JSONObject(String(zf.getInputStream(mf).readBytes(), Charsets.UTF_8))
+                    if (!obj.optBoolean("encrypted", false)) return@runCatching
+                    val salt = obj.optString("salt", "")
+                    if (salt.isBlank()) return@runCatching
+                    val pass = SettingsRepository(context).getBackupPassphraseBlocking()
+                        .takeIf { it.isNotBlank() } ?: return@runCatching
+                    zipKey = BackupCrypto.deriveKey(
+                        pass, salt, obj.optInt("iterations", BackupCrypto.PBKDF2_ITERATIONS)
+                    )
+                }
+            }
+
             ZipInputStream(FileInputStream(zipFile)).use { zis ->
                 var entry = zis.nextEntry
                 while (entry != null) {
                     if (entry.name == ZIP_ENTRY_DB) {
+                        var raw = zis.readBytes()
+                        // 剥掉备份包外层加密（SMTB），得到源库字节
+                        zipKey?.let { key ->
+                            if (BackupCrypto.isEncrypted(raw)) {
+                                raw = BackupCrypto.decrypt(raw, key) ?: return 0
+                            }
+                        }
                         val tmp = File(
                             zipFile.parentFile,
                             "smty_backup_ver_${System.currentTimeMillis()}.db"
                         )
                         return try {
-                            FileOutputStream(tmp).use { fos ->
-                                val buffer = ByteArray(8192)
-                                var len = zis.read(buffer)
-                                while (len > 0) {
-                                    fos.write(buffer, 0, len)
-                                    len = zis.read(buffer)
-                                }
-                            }
-                            // v1.0.1：同 verifyIntegrity，WAL 库只读连接打不开（无法建 -shm）。
-                            // 此处失败会静默返回 0，导致 v48 跨版本防闪退保护失效。
-                            android.database.sqlite.SQLiteDatabase.openDatabase(
-                                tmp.absolutePath,
-                                null,
-                                android.database.sqlite.SQLiteDatabase.OPEN_READWRITE
-                            ).use { db ->
-                                db.rawQuery("PRAGMA user_version;", null).use { cursor ->
-                                    if (cursor.moveToFirst()) cursor.getInt(0) else 0
-                                }
-                            }
+                            FileOutputStream(tmp).use { it.write(raw) }
+                            readVersionFromFile(context, tmp)
                         } finally {
                             tmp.delete()
                         }
@@ -1120,6 +1155,43 @@ object BackupManager {
             Log.w(TAG, "读取备份库版本失败：${e.message}", e)
             0
         }
+    }
+
+    /**
+     * 从单个库文件读 user_version，逐个尝试可能的口令来源。
+     *
+     * 顺序：明文（v1.0.5 之前的旧备份）→ 本机口令（同机备份）→ 备份口令（跨机可迁移备份）。
+     * 全部失败返回 0（放行，由 integrity_check 兜底）。
+     */
+    private fun readVersionFromFile(context: Context, file: File): Int {
+        // 明文库：直接用原生 SQLite（也覆盖 v1.0.5 之前的旧备份）
+        if (!EncryptedDbOpener.isEncrypted(file)) {
+            return runCatching {
+                android.database.sqlite.SQLiteDatabase.openDatabase(
+                    file.absolutePath, null,
+                    android.database.sqlite.SQLiteDatabase.OPEN_READONLY
+                ).use { it.version }
+            }.getOrDefault(0)
+        }
+
+        if (EncryptedDbOpener.useNativeForTesting) return 0
+
+        val candidates = listOfNotNull(
+            runCatching { DatabaseKeyManager.getOrCreatePassphrase(context) }.getOrNull(),
+            runCatching {
+                DatabaseKeyManager.resolvePassphrase(
+                    context, DatabaseKeyManager.PassphraseCandidate.Backup
+                )
+            }.getOrNull()
+        ).distinct()
+
+        for (pass in candidates) {
+            val v = runCatching {
+                EncryptedDbOpener.openWithPassphrase(file.absolutePath, pass).use { it.version }
+            }.getOrDefault(0)
+            if (v > 0) return v
+        }
+        return 0
     }
 
     /**
@@ -1188,6 +1260,207 @@ object BackupManager {
         val plain = BackupCrypto.decrypt(raw, key)
             ?: throw IllegalStateException("备份解密失败：密钥不匹配或文件已损坏")
         FileOutputStream(target).use { it.write(plain) }
+    }
+
+    /**
+     * 数据库条目解包 + **SQLCipher 口令转码**（v1.0.5）。
+     *
+     * ## 为什么不能像其它条目一样"解密后直接写出"
+     * v1.0.5 起数据库文件由 SQLCipher 加密，**密钥来自源设备的 Android Keystore**。
+     * Keystore 密钥绑定设备且不可导出，换机后新机拿不到同一口令 —— 若把备份里的
+     * db 字节原样落到本机数据库路径，Room 会在恢复后的校验里报"文件不是数据库"，
+     * 恢复被误判失败并回滚，**用户永远恢复不了自己的备份**（这正是 v1.0.1 踩过的坑的加密版）。
+     *
+     * ## 转码流程
+     * 1. 先按备份包自身的加密层（SMTB / 明文）取出"源设备格式的 db 字节"到临时文件
+     * 2. 判定该临时文件是否 SQLCipher 加密（读文件头）：
+     *    - 明文（v1.0.5 之前的旧备份）→ 直接用本机口令重新加密后写到目标路径
+     *    - 已加密（v1.0.5+ 备份）→ 需要源口令才能打开
+     * 3. 源口令的获取顺序：
+     *    a. **本机口令**（同机恢复：Keystore 没变，口令相同）
+     *    b. 若失败，尝试用**备份口令**作为 SQLCipher 口令——
+     *       这是为「备份时把 db 也改用备份口令重新加密」这一形态预留的通道
+     * 4. 用 sqlcipher_export 把源库全量导入本机口令加密的新库
+     *
+     * 全部失败时抛 IllegalStateException，由外层回滚保护用户现有数据。
+     *
+     * @param zis ZIP 输入流（已定位到 db 条目）
+     * @param target 本机数据库目标路径
+     * @param zipKey 备份包外层加密密钥；null 表示备份包未加密
+     */
+    private fun extractDbSmart(
+        context: Context,
+        zis: ZipInputStream,
+        target: File,
+        zipKey: javax.crypto.SecretKey?
+    ) {
+        val raw = zis.readBytes()
+        // 1) 先剥掉备份包外层加密（SMTB），得到"源设备格式的 db 字节"
+        val sourceDbBytes: ByteArray = when {
+            BackupCrypto.isEncrypted(raw) -> {
+                if (zipKey == null) {
+                    throw IllegalStateException(
+                        "备份内容已加密，但未找到可用的解密密钥。请确认「设置 → 用户加密口令」与备份时一致")
+                }
+                BackupCrypto.decrypt(raw, zipKey)
+                    ?: throw IllegalStateException("备份解密失败：口令不匹配或文件已损坏")
+            }
+            else -> raw
+        }
+
+        // 2) 落到临时文件，判定源库是否被 SQLCipher 加密
+        val tmpDir = File(context.cacheDir, "db_restore").apply { mkdirs() }
+        val srcTmp = File(tmpDir, "src_${System.currentTimeMillis()}.db")
+        val dstTmp = File(tmpDir, "dst_${System.currentTimeMillis()}.db")
+        try {
+            // 测试环境（数据库加密被关闭）：源库与目标库都是明文，无需转码，直接落地。
+            // 生产环境恒不走此分支（useNativeForTesting 仅由测试开关置位）。
+            if (EncryptedDbOpener.useNativeForTesting) {
+                FileOutputStream(target).use { it.write(sourceDbBytes) }
+                return
+            }
+
+            FileOutputStream(srcTmp).use { it.write(sourceDbBytes) }
+
+            if (!EncryptedDbOpener.isEncrypted(srcTmp)) {
+                // 源库是明文（v1.0.5 之前的旧备份）：用本机口令加密后落盘
+                transcodePlainToEncrypted(context, srcTmp, target)
+                return
+            }
+
+            // 3) 源库已加密：优先本机口令（同机恢复），退而求其次用备份口令
+            val candidates = mutableListOf<DatabaseKeyManager.PassphraseCandidate>()
+            candidates += DatabaseKeyManager.PassphraseCandidate.Device
+            candidates += DatabaseKeyManager.PassphraseCandidate.Backup
+
+            var lastError: String? = null
+            for (cand in candidates) {
+                val ok = runCatching {
+                    transcodeEncrypted(context, cand, srcTmp, dstTmp)
+                }.getOrElse { e ->
+                    lastError = e.message
+                    false
+                }
+                if (ok) {
+                    dstTmp.copyTo(target, overwrite = true)
+                    return
+                }
+            }
+            throw IllegalStateException(
+                "备份中的数据库无法解密（口令不匹配）。${lastError ?: ""}".trim())
+        } finally {
+            srcTmp.delete()
+            dstTmp.delete()
+        }
+    }
+
+    /** 明文源库 → 本机口令加密库（旧备份升级路径） */
+    private fun transcodePlainToEncrypted(context: Context, srcPlain: File, target: File) {
+        val passBytes = DatabaseKeyManager.getOrCreatePassphraseBytes(context)
+        var db: net.zetetic.database.sqlcipher.SQLiteDatabase? = null
+        try {
+            db = net.zetetic.database.sqlcipher.SQLiteDatabase.openOrCreateDatabase(
+                target.absolutePath, passBytes, null, null
+            )
+            // 目标库关闭 WAL：确保导出结果自包含在单个 .db 文件里
+            db.rawExecSQL("PRAGMA journal_mode=DELETE;")
+            val attachPath = srcPlain.absolutePath.replace("'", "''")
+            db.rawExecSQL("ATTACH DATABASE '$attachPath' AS plaintext KEY '';")
+            db.rawExecSQL("SELECT sqlcipher_export('main', 'plaintext');")
+            db.rawExecSQL("DETACH DATABASE plaintext;")
+        } finally {
+            runCatching { db?.close() }
+        }
+    }
+
+    /**
+     * 加密源库 → 本机口令加密库（换机恢复 / 同机恢复共用）。
+     *
+     * 源口令以**字符串**形态传给 SQL 层的 `ATTACH ... KEY`，
+     * 与 Java API 传入同一字符串的 UTF-8 字节等价（见 [DatabaseKeyManager] 类注释）。
+     *
+     * @return true 表示转码成功（源口令正确且导出完成）
+     */
+    private fun transcodeEncrypted(
+        context: Context,
+        source: DatabaseKeyManager.PassphraseCandidate,
+        srcDb: File,
+        dstDb: File
+    ): Boolean {
+        if (dstDb.exists()) dstDb.delete()
+        val srcPassText = DatabaseKeyManager.resolvePassphrase(context, source) ?: return false
+        val dstPassBytes = DatabaseKeyManager.getOrCreatePassphraseBytes(context)
+
+        var src: net.zetetic.database.sqlcipher.SQLiteDatabase? = null
+        var dst: net.zetetic.database.sqlcipher.SQLiteDatabase? = null
+        try {
+            // 用源口令打开源库——口令错误会在此抛异常，即"候选不匹配"
+            src = net.zetetic.database.sqlcipher.SQLiteDatabase.openDatabase(
+                srcDb.absolutePath, srcPassText.toByteArray(Charsets.UTF_8), null,
+                net.zetetic.database.sqlcipher.SQLiteDatabase.OPEN_READONLY,
+                null as net.zetetic.database.DatabaseErrorHandler?,
+                null as net.zetetic.database.sqlcipher.SQLiteDatabaseHook?
+            )
+            // 源库能打开，说明口令正确；创建目标库并全量导出
+            dst = net.zetetic.database.sqlcipher.SQLiteDatabase.openOrCreateDatabase(
+                dstDb.absolutePath, dstPassBytes, null, null
+            )
+            dst.rawExecSQL("PRAGMA journal_mode=DELETE;")
+            val attachPath = srcDb.absolutePath.replace("'", "''")
+            // 口令为 [0-9a-f] 十六进制，无需 SQL 转义
+            dst.rawExecSQL("ATTACH DATABASE '$attachPath' AS source KEY '$srcPassText';")
+            dst.rawExecSQL("SELECT sqlcipher_export('main', 'source');")
+            dst.rawExecSQL("DETACH DATABASE source;")
+            return true
+        } finally {
+            runCatching { src?.close() }
+            runCatching { dst?.close() }
+        }
+    }
+
+    /**
+     * 把本机加密库导出为**以备份口令加密**的可迁移单文件库（v1.0.5）。
+     *
+     * ## 为什么必须做这一步
+     * 数据库由**本机 Keystore 口令**加密，而 Keystore 密钥绑定设备且不可导出。
+     * 若把本机加密库原样打进备份包，换机恢复时：
+     * - `Device` 候选 = 新机口令 ≠ 源机口令 → 打不开
+     * - `Backup` 候选 = SHA256(备份口令) → 也打不开（源库压根不是用备份口令加密的）
+     * → **换机后用户永远恢复不了自己的备份**。这正是 v1.0.1 "应用打不开自己的备份"
+     * 那类数据丢失事故的加密版，必须在备份侧解决。
+     *
+     * ## 做法
+     * 用 `sqlcipher_export` 把本机库全量导出到**以备份口令加密**的新库，
+     * 并把 `PRAGMA journal_mode` 置为 DELETE，使结果自包含在单个 .db 文件内
+     * （这样备份时只需写一个条目，不必再带 -wal / -shm）。
+     *
+     * @return true 表示导出成功且 [dest] 可用
+     */
+    private fun exportPortableDb(
+        context: Context,
+        source: File,
+        dest: File,
+        targetPassphrase: String
+    ): Boolean {
+        if (dest.exists()) dest.delete()
+        var dst: net.zetetic.database.sqlcipher.SQLiteDatabase? = null
+        return try {
+            val devicePassText = DatabaseKeyManager.getOrCreatePassphrase(context)
+            dst = net.zetetic.database.sqlcipher.SQLiteDatabase.openOrCreateDatabase(
+                dest.absolutePath, targetPassphrase.toByteArray(Charsets.UTF_8), null, null
+            )
+            dst.rawExecSQL("PRAGMA journal_mode=DELETE;")
+            val attachPath = source.absolutePath.replace("'", "''")
+            dst.rawExecSQL("ATTACH DATABASE '$attachPath' AS source KEY '$devicePassText';")
+            dst.rawExecSQL("SELECT sqlcipher_export('main', 'source');")
+            dst.rawExecSQL("DETACH DATABASE source;")
+            true
+        } catch (e: Throwable) {
+            Log.w(TAG, "导出可迁移数据库失败（将回退为原样打包）：${e.message}", e)
+            false
+        } finally {
+            runCatching { dst?.close() }
+        }
     }
 
     /**

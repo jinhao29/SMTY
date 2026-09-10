@@ -71,6 +71,68 @@ abstract class AppDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
+        /**
+         * SQLCipher 原生库是否已加载（v1.0.5）。
+         *
+         * net.zetetic 4.17.0 起初始化方式改为 System.loadLibrary("sqlcipher")，
+         * 旧的 net.sqlcipher.database.SQLiteDatabase.loadLibs(context) 已废弃。
+         * 只需加载一次，用 @Volatile 标记避免重复 dlopen 开销。
+         */
+        @Volatile
+        private var sqlcipherLoaded = false
+
+        /**
+         * 是否启用数据库文件加密（v1.0.5）。
+         *
+         * ⚠️ **仅供单元测试关闭**：SQLCipher 依赖 native 库（libsqlcipher.so），
+         * Robolectric 跑在桌面 JVM 上无法加载 Android ABI 的 .so，
+         * 所有走 [getDatabase] 的既有测试都会抛 UnsatisfiedLinkError。
+         *
+         * 生产代码路径**不提供**任何关闭入口——默认恒为 true，
+         * 只有测试通过 [devDisableEncryptionForTesting] 显式关闭。
+         */
+        @Volatile
+        private var encryptionEnabled = true
+
+        /**
+         * 关闭数据库加密（**仅限单元测试**）。
+         *
+         * 调用后 [getDatabase] 走原生 SQLite，用于让既有 Room 测试在 JVM 上继续可跑。
+         * 真机上加密行为不受影响（不会有生产代码调用此方法）。
+         */
+        @androidx.annotation.VisibleForTesting
+        fun devDisableEncryptionForTesting() {
+            encryptionEnabled = false
+            // 同步关闭裸连接工具的加密路径：否则 BackupManager.verifyIntegrity 等
+            // 仍会调 System.loadLibrary("sqlcipher") 在 JVM 上抛 UnsatisfiedLinkError
+            com.shangmentiyu.sportscoach.data.internal.EncryptedDbOpener.useNativeForTesting = true
+        }
+
+        /** 恢复加密开关为默认开启（测试 tearDown 用，避免静态状态跨用例泄漏） */
+        @androidx.annotation.VisibleForTesting
+        fun devResetEncryptionForTesting() {
+            encryptionEnabled = true
+            com.shangmentiyu.sportscoach.data.internal.EncryptedDbOpener.useNativeForTesting = false
+        }
+
+        private fun ensureSqlcipherLoaded() {
+            if (sqlcipherLoaded) return
+            synchronized(this) {
+                if (sqlcipherLoaded) return
+                // ⚠️ loadLibrary 失败抛 UnsatisfiedLinkError（Error，非 Exception）。
+                // 这里收敛为带可读文案的 IllegalStateException，避免用户只看到一行
+                // 原生链接错误的堆栈（与 PlainDbMigrator / EncryptedDbOpener 同一策略）。
+                try {
+                    System.loadLibrary("sqlcipher")
+                } catch (e: Throwable) {
+                    throw IllegalStateException(
+                        "数据库加密组件加载失败（当前设备 ABI 不受支持）：${e.message}", e
+                    )
+                }
+                sqlcipherLoaded = true
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 // === 终极防丢机制：打开数据库前先做启动前避风港备份 + 版本检查 ===
@@ -84,13 +146,43 @@ abstract class AppDatabase : RoomDatabase() {
                 com.shangmentiyu.sportscoach.data.internal.PreUpdateBackupManager
                     .checkVersionAndEmergencyBackup(context.applicationContext, DATABASE_VERSION)
 
-                val instance = Room.databaseBuilder(
+                // === v1.0.5 数据库文件加密（SQLCipher）===
+                // 1. 明文库 → 加密库一次性迁移（必须在 Room 打开之前完成，
+                //    否则 SQLCipher 打不开明文库会报"文件不是数据库"；迁移失败自动保留明文库）
+                // 2. 加载 SQLCipher 原生库（必须先于任何 SQLCipher API 调用）
+                // 3. 从 Android Keystore 取口令（密钥不落盘明文，Keystore 不可用直接抛异常）
+                // 4. 通过 SupportOpenHelperFactory 注入，Room 读写全程由 SQLCipher 接管
+                // 注意：数据库文件名与所有 Migration 保持不变，业务代码零改动
+                val dbName = activeDatabaseName()
+                val builder = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    activeDatabaseName()
+                    dbName
                 )
                     .addMigrations(*AppDatabaseMigrations.ALL)
                     .addCallback(AppDatabaseMigrations.DB_CALLBACK)
+
+                if (encryptionEnabled) {
+                    val migrated = com.shangmentiyu.sportscoach.data.internal.PlainDbMigrator
+                        .migrateIfNeeded(context.applicationContext, dbName)
+                    if (!migrated) {
+                        throw IllegalStateException(
+                            "数据库加密失败：无法把现有数据迁移到加密格式。\n" +
+                                "你的原始数据未被改动，请联系开发者。"
+                        )
+                    }
+                    ensureSqlcipherLoaded()
+                    // 口令为 64 位十六进制字符串；转成 UTF-8 字节交给 SQLCipher 做 PBKDF2，
+                    // 与 SQL 层 ATTACH ... KEY '<同一字符串>' 派生结果一致（见 DatabaseKeyManager）
+                    val passphrase =
+                        com.shangmentiyu.sportscoach.data.internal.DatabaseKeyManager
+                            .getOrCreatePassphraseBytes(context.applicationContext)
+                    builder.openHelperFactory(
+                        net.zetetic.database.sqlcipher.SupportOpenHelperFactory(passphrase)
+                    )
+                }
+
+                val instance = builder
                     // === 终极防丢机制：严禁任何破坏性清库 fallback ===
                     // 历史教训：fallbackToDestructiveMigrationOnDowngrade() 在数据库文件版本
                     // 大于代码版本时，会直接删除整个数据库重建，导致学员数据全部丢失。
