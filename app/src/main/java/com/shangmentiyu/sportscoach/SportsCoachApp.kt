@@ -58,6 +58,15 @@ class SportsCoachApp : Application() {
         android.util.Log.i("SportsCoachApp",
             "工作模式：${com.shangmentiyu.sportscoach.data.internal.ModeManager.activeMode}")
 
+        // === v1.0.4 照片跨机迁移桥 ===
+        // 签到照片的加解密实现位于 :app，而备份打包逻辑位于 :data。
+        // 依赖方向 :app → :data，:data 无法反向引用 :app，故通过桥接口注入。
+        // 未注入时备份仍可正常工作（照片原样打包），只是换机后无法解密。
+        runCatching {
+            com.shangmentiyu.sportscoach.data.internal.PhotoCryptoBridge.install(
+                com.shangmentiyu.sportscoach.app.framework.PhotoCrypto.backupBridgeImpl)
+        }
+
         // === 终极防丢机制：启动前避风港备份 ===
         // 必须在所有其他初始化之前执行（包括 CrashHandler）。
         // 即使后续 CrashHandler install 失败、Room 打开数据库失败、App 闪退，

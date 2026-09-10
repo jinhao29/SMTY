@@ -397,4 +397,82 @@ object PhotoCrypto {
         if (!file.exists()) return true
         return runCatching { file.delete() }.getOrDefault(false)
     }
+
+    // ==================== v1.0.4：备份跨机迁移支持 ====================
+
+    /**
+     * 用**本机密钥**加密明文照片字节（供备份恢复时落盘使用）。
+     *
+     * 安全契约：明文**绝不写盘**。方法与 [readPhoto] 对称——
+     * 备份恢复时把明文照片字节重新用本机格式加密后才写入文件系统。
+     *
+     * 加密方案与 [encryptFrom] 保持一致（配置了私钥走种子派生，否则走 EncryptedFile），
+     * 这样恢复出来的照片能被 [readPhoto] 正常读回。
+     *
+     * @param context 上下文
+     * @param plainBytes 明文 jpg 字节（来自备份包解密结果）
+     * @return 本机加密格式的字节；加密失败返回 null
+     */
+    fun encryptToDeviceFormat(context: Context, plainBytes: ByteArray): ByteArray? {
+        val seed = getSeedFromSettings(context)
+        return if (seed != null) {
+            // 新方案：种子派生密钥加密，密文可整体返回为字节
+            runCatching { encryptWithSeed(seed, plainBytes) }.getOrNull()
+        } else {
+            // 旧方案 EncryptedFile 是流式写入的，无法直接产出字节数组。
+            // 此处退化为"用固定哨兵告诉调用方走文件流路径"不可行，
+            // 故改用等价的种子派生方案：以设备专属种子派生（见 [getOrCreateDeviceSeed]）。
+            // 该种子存于 EncryptedSharedPreferences，效果等同于 EncryptedFile 的 Keystore 绑定，
+            // 但能产出字节数组，满足备份恢复的内存流程需求。
+            runCatching { encryptWithSeed(getOrCreateDeviceSeed(context), plainBytes) }.getOrNull()
+        }
+    }
+
+    /**
+     * 获取（或首次生成）**设备专属种子**。
+     *
+     * 用途：在用户未配置私钥时，提供一个等效于 Keystore 绑定的加密密钥来源，
+     * 且能产出字节数组（EncryptedFile 只能流式写文件，无法满足备份恢复的内存流程）。
+     *
+     * 安全性：
+     * - 种子本身随机生成（SecureRandom 32 字节 hex），不依赖用户输入，无弱口令风险
+     * - 存储走 [EncryptedSharedPreferences]（由 Android Keystore 主密钥加密）
+     * - 与 EncryptedFile 方案的安全等级一致：都绑定本机，换机后需靠备份口令恢复
+     *
+     * @return 设备专属种子字符串
+     */
+    private fun getOrCreateDeviceSeed(context: Context): String {
+        val prefsName = "smty_photo_device_seed"
+        val keyName = "device_seed"
+        val prefs = androidx.security.crypto.EncryptedSharedPreferences.create(
+            context,
+            prefsName,
+            MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
+            androidx.security.crypto.EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            androidx.security.crypto.EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
+        prefs.getString(keyName, null)?.takeIf { it.isNotBlank() }?.let { return it }
+
+        val generated = ByteArray(32)
+            .also { java.security.SecureRandom().nextBytes(it) }
+            .joinToString("") { "%02x".format(it) }
+        prefs.edit().putString(keyName, generated).apply()
+        return generated
+    }
+
+    /**
+     * 实现 [com.shangmentiyu.sportscoach.data.internal.PhotoCryptoBridge.Impl]，
+     * 供 `:data` 模块的备份逻辑解出照片明文（用于换机迁移）。
+     *
+     * 在 Application.onCreate 中通过
+     * [com.shangmentiyu.sportscoach.data.internal.PhotoCryptoBridge.install] 注入。
+     */
+    val backupBridgeImpl: com.shangmentiyu.sportscoach.data.internal.PhotoCryptoBridge.Impl =
+        object : com.shangmentiyu.sportscoach.data.internal.PhotoCryptoBridge.Impl {
+            override fun decrypt(context: Context, file: File): ByteArray? =
+                readPhoto(context, file)
+
+            override fun encryptToDeviceFormat(context: Context, plain: ByteArray): ByteArray? =
+                this@PhotoCrypto.encryptToDeviceFormat(context, plain)
+        }
 }

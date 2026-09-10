@@ -32,11 +32,14 @@ class BackupRepository(
      * @param success 是否成功
      * @param message 可读结果消息，用于直接展示给用户
      * @param needRestart 恢复成功后是否需要重启 App（仅 restore=true 时为 true）
+     * @param rolledBack v1.0.4：本次恢复失败但已自动回滚（数据仍可用，但**备份没恢复**）。
+     *                   UI 必须明确告诉用户"你的备份没有恢复"，否则用户会以为恢复成功了。
      */
     data class Result(
         val success: Boolean,
         val message: String,
-        val needRestart: Boolean = false
+        val needRestart: Boolean = false,
+        val rolledBack: Boolean = false
     )
 
     /**
@@ -97,15 +100,18 @@ class BackupRepository(
                 return@withContext Result(false, "无法访问备份文件，请检查文件是否存在")
             }
             inputStream.use { ins ->
-                val ok = BackupManager.restore(context, ins, onProgress)
-                if (ok) {
+                // v1.0.4：改用 restoreDetailed，以区分「恢复成功」与「失败后回滚」——
+                // 两者 success 均为 true，但语义完全不同，UI 必须能分辨。
+                val r = BackupManager.restoreDetailed(context, ins, onProgress)
+                if (r.success) {
                     Result(
                         success = true,
-                        message = "数据恢复完成，请手动重启 App",
-                        needRestart = true
+                        message = r.message,
+                        needRestart = r.needRestart,
+                        rolledBack = r.rolledBack
                     )
                 } else {
-                    Result(false, "恢复失败，备份文件可能已损坏或格式不正确")
+                    Result(false, r.message.ifBlank { "恢复失败，备份文件可能已损坏或格式不正确" })
                 }
             }
         } catch (e: Exception) {

@@ -273,8 +273,19 @@ internal fun DataManageSection(
 
     // 恢复前二次确认对话框：恢复会覆盖当前所有学员/课时/签到数据
     // v1.0.3 备份加密口令设置对话框
+    // v1.0.4：补二次确认输入 + 显隐切换。口令打错一个字就会把备份永久锁死，
+    //         单输入框无法自查——必须两次输入一致才允许保存。
     if (showPassphraseDialog) {
         var draft by remember(backupPassphrase) { mutableStateOf(backupPassphrase) }
+        var confirmDraft by remember(backupPassphrase) { mutableStateOf(backupPassphrase) }
+        var showPlain by remember { mutableStateOf(false) }
+        // 仅当"修改了口令"时才校验一致性；未改动（如只是查看）直接放行
+        val changed = draft != backupPassphrase
+        val mismatch = changed && draft.isNotBlank() && draft != confirmDraft
+        val tooShort = draft.isNotBlank() && draft.length < 8
+        val canSave = !mismatch && !tooShort &&
+            (!changed || draft.isBlank() || draft == confirmDraft)
+
         GlassAlertDialog(
             onDismissRequest = { showPassphraseDialog = false },
             title = "备份加密口令",
@@ -290,9 +301,30 @@ internal fun DataManageSection(
                         value = draft,
                         onValueChange = { draft = it },
                         singleLine = true,
+                        visualTransformation = if (showPlain) androidx.compose.ui.text.input.VisualTransformation.None
+                            else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        trailingIcon = {
+                            TextButton(onClick = { showPlain = !showPlain }) {
+                                Text(if (showPlain) "隐藏" else "显示",
+                                    style = MaterialTheme.typography.labelSmall)
+                            }
+                        },
                         label = { Text("加密口令（至少 8 位）") },
                         modifier = Modifier.fillMaxWidth()
                     )
+                    if (changed && draft.isNotBlank()) {
+                        Spacer(Modifier.height(Spacing.sm))
+                        OutlinedTextField(
+                            value = confirmDraft,
+                            onValueChange = { confirmDraft = it },
+                            singleLine = true,
+                            isError = mismatch,
+                            visualTransformation = if (showPlain) androidx.compose.ui.text.input.VisualTransformation.None
+                                else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                            label = { Text("再次输入确认") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                     Spacer(Modifier.height(Spacing.sm))
                     Text(
                         "⚠️ 口令不会上传到任何服务器。请务必自行记牢——" +
@@ -300,10 +332,18 @@ internal fun DataManageSection(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error
                     )
-                    if (draft.isNotBlank() && draft.length < 8) {
+                    if (tooShort) {
                         Spacer(Modifier.height(Spacing.xs))
                         Text(
                             "口令至少 8 位",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                    if (mismatch) {
+                        Spacer(Modifier.height(Spacing.xs))
+                        Text(
+                            "两次输入的口令不一致",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error
                         )
@@ -312,7 +352,7 @@ internal fun DataManageSection(
             },
             confirmButton = {
                 Button(
-                    enabled = draft.isBlank() || draft.length >= 8,
+                    enabled = canSave,
                     onClick = {
                         vm.setBackupPassphrase(draft)
                         showPassphraseDialog = false

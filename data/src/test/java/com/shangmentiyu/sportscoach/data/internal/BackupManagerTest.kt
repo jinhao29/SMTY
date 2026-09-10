@@ -5,6 +5,7 @@ import com.google.common.truth.Truth.assertThat
 import com.shangmentiyu.sportscoach.data.db.AppDatabase
 import com.shangmentiyu.sportscoach.data.model.LessonPackage
 import com.shangmentiyu.sportscoach.data.model.Student
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Before
@@ -226,5 +227,177 @@ class BackupManagerTest {
 
         assertThat(result.success).isFalse()
         assertThat(result.message).contains("未找到数据库文件")
+    }
+
+    // ================================================================
+    // 5. 备份加密链路（v1.0.4 补测）
+    // ================================================================
+    //
+    // 说明：BackupCryptoTest 已覆盖加密原语（往返/错误口令/篡改/IV 随机），
+    // 这里补的是**端到端**行为——加密设置真的作用到了备份包上、且导出物
+    // 无法被普通工具直接读取。这是"加密是否真的生效"的最后一道防线。
+
+    /** 写入备份口令（模拟用户在设置页配置） */
+    private suspend fun setPassphrase(value: String) {
+        com.shangmentiyu.sportscoach.data.repo.SettingsRepository(context)
+            .setBackupPassphrase(value)
+    }
+
+    @Test
+    fun `设置口令后_导出包加密_文件头非PK无法被普通解压工具打开`() = runTest {
+        setPassphrase("smty-test-pass")
+        AppDatabase.getDatabase(context)
+            .studentDao().insert(Student(name = "加密学员", studentId = "s400", phone = "13800001111"))
+
+        val bos = ByteArrayOutputStream()
+        assertThat(BackupManager.backup(context, bos)).isTrue()
+        val zipBytes = bos.toByteArray()
+
+        // 1. ZIP 结构本身仍成立（备份包还是合法 ZIP，否则 PC 端整个读不了）
+        val entries = zipEntryNames(zipBytes)
+        assertThat(entries).contains("backup_manifest.json")
+        assertThat(entries).contains("export_meta.json")
+
+        // 2. 清单标记为已加密
+        val manifest = ZipInputStream(ByteArrayInputStream(zipBytes)).use { zis ->
+            var e = zis.nextEntry
+            var json: String? = null
+            while (e != null) {
+                if (e.name == "backup_manifest.json") json = String(zis.readBytes(), Charsets.UTF_8)
+                zis.closeEntry()
+                e = zis.nextEntry
+            }
+            json
+        }
+        assertThat(manifest).contains("\"encrypted\"")
+        assertThat(manifest).contains("\"salt\"")
+
+        // 3. ★ 核心断言：数据库条目是密文（SMTB 魔数），不是可直接打开的 SQLite
+        val dbEntry = ZipInputStream(ByteArrayInputStream(zipBytes)).use { zis ->
+            var e = zis.nextEntry
+            var bytes: ByteArray? = null
+            while (e != null) {
+                if (e.name == "sports_coach_db") bytes = zis.readBytes()
+                zis.closeEntry()
+                e = zis.nextEntry
+            }
+            bytes
+        }
+        assertThat(dbEntry).isNotNull()
+        // SQLite 明文文件头固定为 "SQLite format 3\u0000"
+        assertThat(String(dbEntry!!.copyOfRange(0, 15), Charsets.US_ASCII))
+            .isNotEqualTo("SQLite format 3")
+        // 加密载荷以 SMTB 魔数开头
+        assertThat(String(dbEntry.copyOfRange(0, 4), Charsets.US_ASCII)).isEqualTo("SMTB")
+    }
+
+    @Test
+    fun `错误口令_恢复失败_不产出任何数据`() = runTest {
+        // 用口令 A 备份
+        setPassphrase("correct-passphrase-A")
+        AppDatabase.getDatabase(context)
+            .studentDao().insert(Student(name = "机密学员", studentId = "s500"))
+        val bos = ByteArrayOutputStream()
+        assertThat(BackupManager.backup(context, bos)).isTrue()
+
+        // 改成错误口令 B 再恢复
+        setPassphrase("wrong-passphrase-B")
+        val result = BackupManager.restoreDetailed(context, ByteArrayInputStream(bos.toByteArray()))
+
+        // ★ 核心契约：恢复**没有生效**。v47 的安全不变量让本地数据完好回滚，
+        //   所以 success=true（数据可用），但必须标记 rolledBack=true 以区别于"恢复成功"。
+        assertThat(result.rolledBack).isTrue()
+        assertThat(result.integrityOk).isTrue()  // 回滚后的库是完好的
+        assertThat(result.message).contains("已自动回滚")
+        // 错误口令的失败原因必须回传到消息里，让用户知道是口令问题
+        assertThat(result.message).contains("解密")
+
+        // 现有数据未被破坏，且不产生"半个库"
+        AppDatabase.closeAndResetInstance(context)
+        val db = AppDatabase.getDatabase(context)
+        // 先执行一次真实查询强制打开连接（Robolectric 下 isOpen 是惰性的，
+        // 不先查询会在未打开状态被误判为 false）
+        db.studentDao().getAllIncludeDeleted().first()
+        assertThat(db.isOpen).isTrue()
+    }
+
+    @Test
+    fun `密文被篡改_GCM校验失败_恢复被拒`() = runTest {
+        setPassphrase("tamper-test-pass")
+        AppDatabase.getDatabase(context)
+            .studentDao().insert(Student(name = "篡改学员", studentId = "s600"))
+        val bos = ByteArrayOutputStream()
+        assertThat(BackupManager.backup(context, bos)).isTrue()
+
+        // 翻转数据库条目密文中的若干字节（模拟文件被修改/损坏）
+        val original = bos.toByteArray()
+        val tampered = ByteArrayOutputStream()
+        ZipInputStream(ByteArrayInputStream(original)).use { zis ->
+            ZipOutputStream(tampered).use { zos ->
+                var e = zis.nextEntry
+                while (e != null) {
+                    var payload = zis.readBytes()
+                    if (e.name == "sports_coach_db" && payload.size > 40) {
+                        // 改密文中段：既非魔数也非 IV，确保命中的是 GCM 密文本体
+                        payload[payload.size / 2] = (payload[payload.size / 2].toInt() xor 0xFF).toByte()
+                    }
+                    zos.putNextEntry(ZipEntry(e.name))
+                    zos.write(payload)
+                    zos.closeEntry()
+                    e = zis.nextEntry
+                }
+            }
+        }
+
+        val result = BackupManager.restoreDetailed(
+            context, ByteArrayInputStream(tampered.toByteArray()))
+
+        // GCM 认证标签校验必须拦住篡改：恢复不生效，回滚保住原数据
+        assertThat(result.rolledBack).isTrue()
+        assertThat(result.message).contains("已自动回滚")
+
+        // 篡改过的备份绝不能把损坏数据写进本地库
+        AppDatabase.closeAndResetInstance(context)
+        val db = AppDatabase.getDatabase(context)
+        // 先查询强制打开连接（Robolectric 下 isOpen 惰性）
+        db.studentDao().getAllIncludeDeleted().first()
+        assertThat(db.isOpen).isTrue()
+    }
+
+    @Test
+    fun `清除口令后_导出包恢复为明文格式_向后兼容`() = runTest {
+        // 不设口令（默认状态）
+        setPassphrase("")
+        AppDatabase.getDatabase(context)
+            .studentDao().insert(Student(name = "明文学员", studentId = "s700"))
+
+        val bos = ByteArrayOutputStream()
+        assertThat(BackupManager.backup(context, bos)).isTrue()
+        val zipBytes = bos.toByteArray()
+
+        // 未设口令 → 不写 manifest，整包保持旧格式（PC 端旧逻辑照常工作）
+        val entries = zipEntryNames(zipBytes)
+        assertThat(entries).doesNotContain("backup_manifest.json")
+        assertThat(entries).contains("sports_coach_db")
+
+        // 数据库条目应为明文 SQLite（旧格式），且能正常恢复
+        val dbEntry = ZipInputStream(ByteArrayInputStream(zipBytes)).use { zis ->
+            var e = zis.nextEntry
+            var bytes: ByteArray? = null
+            while (e != null) {
+                if (e.name == "sports_coach_db") bytes = zis.readBytes()
+                zis.closeEntry()
+                e = zis.nextEntry
+            }
+            bytes
+        }
+        assertThat(dbEntry).isNotNull()
+        assertThat(String(dbEntry!!.copyOfRange(0, 15), Charsets.US_ASCII))
+            .isEqualTo("SQLite format 3")
+
+        // 明文备份仍可恢复（向后兼容铁律）
+        val result = BackupManager.restoreDetailed(context, ByteArrayInputStream(zipBytes))
+        assertThat(result.success).isTrue()
+        assertThat(result.integrityOk).isTrue()
     }
 }

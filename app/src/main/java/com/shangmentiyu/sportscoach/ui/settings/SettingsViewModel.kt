@@ -903,8 +903,18 @@ class SettingsViewModel(
                 val result = backupRepo.backup(targetUri) { phase, current, total, msg ->
                     _backupProgress.value = BackupProgress.Working(phase, current, total, msg)
                 }
-                _statusMessage.value = result.message
-                _backupProgress.value = BackupProgress.Done(result.message)
+                // v1.0.4：加密备份成功后必须强提示「牢记口令」——
+                // 口令遗失 = 备份永久报废，用户往往在恢复那天才意识到这一点。
+                val encrypted = runCatching {
+                    settingsRepo.getBackupPassphraseBlocking().isNotBlank()
+                }.getOrDefault(false)
+                val finalMessage = if (result.success && encrypted) {
+                    "${result.message}　⚠️ 备份已加密，请牢记口令——口令遗失将无法恢复。"
+                } else {
+                    result.message
+                }
+                _statusMessage.value = finalMessage
+                _backupProgress.value = BackupProgress.Done(finalMessage)
 
                 // === v23 双端同步：开启「桌面同步」时，手动备份成功即自动推送到 PC 合并 ===
                 // 独立 runCatching：推送失败不影响备份成功状态
@@ -915,7 +925,7 @@ class SettingsViewModel(
                                 val push = mgr.pushBackupUri(
                                     app, targetUri,
                                     name = "smty_backup_${System.currentTimeMillis() / 1000}.smty_backup")
-                                _statusMessage.value = "${result.message}；${push.message}"
+                                _statusMessage.value = "${finalMessage}；${push.message}"
                             }
                         }
                     }
@@ -956,6 +966,17 @@ class SettingsViewModel(
                 }
                 _statusMessage.value = result.message
                 if (result.success && result.needRestart) {
+                    // === v1.0.4：区分「恢复成功」与「失败后回滚」 ===
+                    // 两者都可以重启继续用，但用户的备份**只有前者才真的恢复了**。
+                    // 若不做区分，用户看到旧数据会以为恢复有问题，或反之以为成功。
+                    if (result.rolledBack) {
+                        // 回滚路径：备份没恢复，给出准确文案（消息里已含失败原因）
+                        _backupProgress.value = BackupProgress.Done(
+                            "⚠️ 恢复未生效，已保留原有数据")
+                        _statusMessage.value =
+                            "⚠️ 备份未能恢复，你的原有数据完好无损。\n\n${result.message}"
+                        return@safeLaunch
+                    }
                     // === v46 修复：恢复成功立即自动重启（根治"恢复后无法添加学员"）===
                     // 数据库已被 closeAndResetInstance 关闭，各 Repository 注入的旧 db 引用永久失效；
                     // 若继续运行（用户按返回键/不点重启），此后所有写操作（添加学员/排课/签到等）

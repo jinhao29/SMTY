@@ -60,6 +60,24 @@ object BackupManager {
     /** 备份 ZIP 内签到照片目录条目前缀 */
     private const val ZIP_ENTRY_PHOTOS_DIR = "SignPhotos/"
 
+    /**
+     * 备份 ZIP 内**可跨机恢复**照片的条目前缀（v1.0.4 新增）。
+     *
+     * 背景：签到照片在本机以 [androidx.security.crypto.EncryptedFile] 格式存储，
+     * 该格式的密钥绑定**本机 Android Keystore**（不可导出）。若直接原样打进备份包，
+     * 换机恢复后新机 Keystore 中没有对应密钥 → **历史照片全部无法解密**。
+     *
+     * 解法：备份时先用本机 Keystore 解出明文，再用**备份口令**（用户自己记的那串）
+     * 重新以 AES-GCM 加密，条目名加本前缀区分。恢复时按前缀反向处理——
+     * 口令在，照片就能在新机上打开，完全不依赖任何设备的 Keystore。
+     *
+     * 兼容性：
+     * - 未设置备份口令时**不**走此路径，照片仍以 [ZIP_ENTRY_PHOTOS_DIR] 原样打包
+     *   （旧备份格式不变，PC 端解析逻辑不受影响）
+     * - 恢复端两种前缀都认，旧备份照常可恢复
+     */
+    private const val ZIP_ENTRY_PHOTOS_ENCRYPTED_DIR = "SignPhotosEnc/"
+
     /** 签到照片在 App 内部存储的目录名（与 PhotoCrypto 约定一致） */
     private const val PHOTOS_DIR_NAME = "SignPhotos"
 
@@ -134,18 +152,24 @@ object BackupManager {
      * 调用方（[com.shangmentiyu.sportscoach.data.repo.BackupRepository]）按需将
      * 消息直接展示给用户；当 [integrityOk]=false 时，应明确提示用户数据可能损坏。
      *
-     * @param success 解压是否成功（不含完整性校验失败的情况）
+     * @param success 是否可继续使用（恢复成功 **或** 失败后已安全回滚，两种都算 true）
      * @param message 用户可读消息
      * @param needRestart 是否需要重启 App（仅在 success=true && integrityOk=true 时为 true）
      * @param integrityOk PRAGMA integrity_check 是否通过
      * @param integrityReport 完整性校验原始输出（多行文本，错误时为问题描述）
+     * @param rolledBack v1.0.4 新增：本次操作是否为「恢复失败后回滚」。
+     *
+     * 为什么需要它：回滚成功时 [success] 也是 true（数据仍可用），但**用户的备份并没有恢复**。
+     * 调用方若只看 [success] 会误判为"恢复成功"并直接重启，用户重启后会发现数据没变、
+     * 却已错过失败原因。用本字段区分两种语义，UI 才能给出准确反馈。
      */
     data class RestoreResult(
         val success: Boolean,
         val message: String,
         val needRestart: Boolean = false,
         val integrityOk: Boolean = false,
-        val integrityReport: String = ""
+        val integrityReport: String = "",
+        val rolledBack: Boolean = false
     )
 
     /**
@@ -214,6 +238,8 @@ object BackupManager {
                         .put("kdf", "PBKDF2WithHmacSHA256")
                         .put("iterations", BackupCrypto.PBKDF2_ITERATIONS)
                         .put("salt", salt)
+                        // v1.0.4：照片以备份口令重新加密（跨机可恢复），恢复端据此判断
+                        .put("photosPortable", true)
                 }
                 manifestJson?.let {
                     putBytesEntry(zos, ZIP_ENTRY_MANIFEST, it.toString().toByteArray(Charsets.UTF_8))
@@ -263,16 +289,40 @@ object BackupManager {
                 }
 
                 // 3. 写入签到照片目录
+                // v1.0.4：设置备份口令时，照片先解出明文再以口令重新加密（可跨机恢复）；
+                //         未设置口令时保持原样打包（旧格式，向后兼容）。
                 migrateLegacySignPhotosDir(context.filesDir)
                 val photosDir = File(context.filesDir, PHOTOS_DIR_NAME)
                 if (photosDir.exists() && photosDir.isDirectory) {
                     val photos = photosDir.listFiles()?.filter { it.isFile } ?: emptyList()
                     val total = photos.size
+                    var migrated = 0
                     photos.forEachIndexed { idx, photoFile ->
-                        putFileEntry(zos, ZIP_ENTRY_PHOTOS_DIR + photoFile.name, photoFile)
+                        if (encKey != null) {
+                            // 解出明文照片 → 用备份口令重新加密 → 条目名加 Enc 前缀
+                            val plain = PhotoCryptoBridge.decryptForBackup(context, photoFile)
+                            if (plain != null) {
+                                putEncryptedBytesEntry(
+                                    zos, ZIP_ENTRY_PHOTOS_ENCRYPTED_DIR + photoFile.name, plain, encKey
+                                )
+                                migrated++
+                            } else {
+                                // 单张解密失败不阻断整包：原样打包，恢复端按旧格式处理
+                                Log.w(TAG, "照片解密失败，按原格式打包：${photoFile.name}")
+                                putFileEntry(zos, ZIP_ENTRY_PHOTOS_DIR + photoFile.name, photoFile)
+                            }
+                        } else {
+                            putFileEntry(zos, ZIP_ENTRY_PHOTOS_DIR + photoFile.name, photoFile)
+                        }
                         onProgress?.onProgress(
                             "photos", idx + 1, total,
                             "正在备份签到照片（${idx + 1}/$total）"
+                        )
+                    }
+                    if (migrated > 0) {
+                        onProgress?.onProgress(
+                            "photos", total, total,
+                            "已加密 $migrated 张照片（可用备份口令在新手机恢复）"
                         )
                     }
                 }
@@ -652,7 +702,10 @@ object BackupManager {
                     message = "恢复失败，已自动回滚到恢复前数据，应用将重启。\n\n失败原因：${result.message}",
                     needRestart = true,
                     integrityOk = true,
-                    integrityReport = result.integrityReport
+                    integrityReport = result.integrityReport,
+                    // ★ 关键：标记这是回滚而非恢复。UI 据此提示"你的备份没有恢复"，
+                    //   避免用户以为恢复成功却看到旧数据。
+                    rolledBack = true
                 )
             }
             return RestoreResult(
@@ -788,7 +841,48 @@ object BackupManager {
                                 }
                             }
                         }
-                        // 签到照片
+                        // 签到照片（v1.0.4：Enc 前缀 = 明文照片用备份口令加密，跨机可恢复）
+                        entry.name.startsWith(ZIP_ENTRY_PHOTOS_ENCRYPTED_DIR) -> {
+                            val photoName = entry.name.removePrefix(ZIP_ENTRY_PHOTOS_ENCRYPTED_DIR)
+                            if (photoName.isNotBlank()) {
+                                val isPathTraversal = photoName.contains("..") ||
+                                    photoName.startsWith("/") ||
+                                    photoName.contains("\\")
+                                if (isPathTraversal) {
+                                    onProgress?.onProgress("extract", entryIdx, 0, "跳过异常照片条目：$photoName")
+                                } else {
+                                    val target = File(context.filesDir, "$PHOTOS_DIR_NAME/$photoName")
+                                    val canonicalBase = File(context.filesDir, PHOTOS_DIR_NAME).canonicalPath
+                                    val canonicalTarget = runCatching { target.canonicalPath }.getOrNull()
+                                    if (canonicalTarget != null &&
+                                        canonicalTarget.startsWith(canonicalBase + File.separator)
+                                    ) {
+                                        target.parentFile?.mkdirs()
+                                        // 解开备份口令的加密 → 用本机密钥重新加密落盘
+                                        // （明文绝不落盘，与 PhotoCrypto 的安全契约一致）
+                                        val raw = zis.readBytes()
+                                        if (zipKey == null) {
+                                            throw IllegalStateException(
+                                                "备份中的照片已加密，请先填写备份口令后再恢复")
+                                        }
+                                        val plain = BackupCrypto.decrypt(raw, zipKey!!)
+                                            ?: throw IllegalStateException(
+                                                "照片解密失败：备份口令不匹配或文件已损坏")
+                                        val reEncrypted = PhotoCryptoBridge.encryptForDevice(context, plain)
+                                            ?: throw IllegalStateException(
+                                                "照片重新加密失败，请重试")
+                                        FileOutputStream(target).use { it.write(reEncrypted) }
+                                        onProgress?.onProgress(
+                                            "extract", entryIdx, 0,
+                                            "正在恢复签到照片（第 $entryIdx 项）"
+                                        )
+                                    } else {
+                                        onProgress?.onProgress("extract", entryIdx, 0, "跳过越界照片条目：$photoName")
+                                    }
+                                }
+                            }
+                        }
+                        // 签到照片（旧格式：本机 EncryptedFile 字节，跨机无法解密）
                         entry.name.startsWith(ZIP_ENTRY_PHOTOS_DIR) -> {
                             val photoName = entry.name.removePrefix(ZIP_ENTRY_PHOTOS_DIR)
                             if (photoName.isNotBlank()) {
