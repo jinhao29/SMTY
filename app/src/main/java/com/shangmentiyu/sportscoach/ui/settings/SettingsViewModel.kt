@@ -223,14 +223,21 @@ class SettingsViewModel(
             }
             settingsRepo.setBackupDirUri(uri.toString())
             _statusMessage.value = "备份文件夹已设置，开始备份…"
-            backupToDefaultFolder()
+            backupToDefaultFolder(treeUriOverride = uri.toString())
         }
     }
 
-    /** 手动备份到固定文件夹：自动命名 → 复用 [backupData]（含桌面端推送联动） */
-    fun backupToDefaultFolder() {
+    /** 手动备份到固定文件夹：自动命名 → 复用 [backupData]（含桌面端推送联动）。
+     *  [treeUriOverride]：首次选完文件夹时直接传入，避开 DataStore 流未传播的竞态。 */
+    fun backupToDefaultFolder(treeUriOverride: String? = null) {
         viewModelScope.launch {
-            val treeUri = backupDirUri.value ?: return@launch
+            // 直接从 DataStore 挂起读取：backupDirUri 是 WhileSubscribed 惰性流，
+            // 无订阅者时 .value 恒为初始 null，不能在这里读（17:06 真机 trace 定位）
+            val treeUri = treeUriOverride ?: settingsRepo.getBackupDirUri()
+            if (treeUri == null) {
+                _statusMessage.value = "尚未设置备份文件夹，请先点击备份选择文件夹"
+                return@launch
+            }
             val fileUri = withContext(Dispatchers.IO) {
                 val folder = BackupFolderStore.resolveFolder(app, treeUri)
                     ?: return@withContext null
@@ -247,7 +254,8 @@ class SettingsViewModel(
     /** 从固定文件夹自动恢复最新一份备份（无需手动选文件） */
     fun restoreLatestFromFolder() {
         viewModelScope.launch {
-            val treeUri = backupDirUri.value
+            // 同 backupToDefaultFolder：惰性 StateFlow 无人订阅时 .value 恒 null，直接读 DataStore
+            val treeUri = settingsRepo.getBackupDirUri()
             val latestName = withContext(Dispatchers.IO) {
                 BackupFolderStore.listBackups(app, treeUri).firstOrNull()?.first
             }
