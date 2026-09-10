@@ -39,7 +39,10 @@ val defaultVersionCode: Int = parsedSemver?.let {
 // - Fallback：未配置 keystore.properties 时使用 debug 签名，保证 AS 直接打包不报错
 //   ⚠️ 注意：debug 签名的 APK 无法覆盖安装到已安装 release 签名的设备
 //           GitHub Release 必须配置 KEYSTORE_BASE64 Secret 以使用 release 签名
-val signingPropsFile: File = file("keystore.properties")
+val signingPropsFile: File = listOf(
+    file("keystore.properties"),                 // CI 解码位置（GitHub Actions 写入）
+    rootDir.resolve("keystore.properties")       // 本地开发位置（根目录，密码可手填）
+).firstOrNull { it.exists() } ?: file("keystore.properties")
 val hasSigningProps: Boolean = signingPropsFile.exists()
 val signingProps: Properties = Properties().apply {
     if (hasSigningProps) {
@@ -56,6 +59,11 @@ val releaseStorePassword: String = System.getenv("KEYSTORE_PASSWORD")
     ?: signingProps.getProperty("storePassword", "")
 val releaseKeyPassword: String = System.getenv("KEY_PASSWORD")
     ?: signingProps.getProperty("keyPassword", "")
+
+// 签名配置"实际可用"判定：props 存在且密码非空（本地根目录 props 密码留空时自动降级 debug 签名，
+// 避免 Studio 直接打包因空密码报错；CI 注入环境变量后恢复 release 签名）
+val signingUsable: Boolean = hasSigningProps &&
+    releaseStorePassword.isNotBlank() && releaseKeyPassword.isNotBlank()
 
 android {
     namespace = "com.shangmentiyu.sportscoach"
@@ -84,9 +92,9 @@ android {
     }
 
     signingConfigs {
-        // 仅在 keystore.properties 存在时创建 release 签名配置
+        // 仅在签名配置实际可用（props 存在且密码非空）时创建 release 签名配置
         // 未配置时 fallback 到 debug 签名（Android Studio 直接打包不报错）
-        if (hasSigningProps) {
+        if (signingUsable) {
             create("release") {
                 storeFile = file(signingProps.getProperty("storeFile", "keystore.jks"))
                 storePassword = releaseStorePassword
@@ -101,6 +109,16 @@ android {
     }
 
     buildTypes {
+        // === debug 也绑 release 签名（签名可用时） ===
+        // 真机上常驻的是 CI 发布的 release 签名包（v1.0.x），Android Studio Run 部署的
+        // debug APK 若用 debug keystore 签名，覆盖安装必报 INSTALL_FAILED_UPDATE_INCOMPATIBLE
+        // （系统签名保护：同包名不同签名禁止覆盖）。debug 走同一把 release 密钥后，
+        // Studio Run 可直接覆盖安装且不丢数据；无签名配置时保持默认 debug 签名不影响模拟器开发。
+        debug {
+            if (signingUsable) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
         release {
             // === 强制开启代码混淆与资源压缩 ===
             // - isMinifyEnabled=true：移除未使用代码（R8 优化），APK 体积可减 30-50%
@@ -119,7 +137,7 @@ android {
             // ⚠️ UpdateChecker 警告：发布到 GitHub 的 APK 必须使用 release 签名，
             //    否则覆盖安装时会报"解析包错误 / 应用未安装"
             //    必须保证 KEYSTORE_BASE64 Secret 被正确解码到 app/../keystore.jks 路径
-            signingConfig = if (hasSigningProps) {
+            signingConfig = if (signingUsable) {
                 signingConfigs.getByName("release")
             } else {
                 signingConfigs.getByName("debug")
