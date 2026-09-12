@@ -19,6 +19,30 @@ object SyncPacketAuth {
     const val FIELD_SIG = "sig"
 
     /**
+     * 重放窗口（毫秒）：已配对报文的时间戳超出该窗口视为重放，拒绝。
+     *
+     * 取 10 分钟：远大于正常时钟偏移（双端 NTP 下秒级），远小于攻击者
+     * 重放旧报文劫持上传目标的可行窗口。仅对带签名的报文生效——未配对
+     * 报文不校验时间戳，保持与旧版本 PC 的兼容（时钟偏移不破坏发现）。
+     */
+    const val FRESHNESS_TOLERANCE_MS: Long = 10 * 60_000L
+
+    /**
+     * 时间戳新鲜度校验（重放窗口）。
+     *
+     * @param timestampMs 报文携带的时间戳
+     * @param nowMs 接收方当前时间
+     * @param toleranceMs 容忍窗口（默认 [FRESHNESS_TOLERANCE_MS]）
+     * @return true 表示新鲜可接受；false 表示过期/超前过多，疑似重放
+     */
+    fun isFresh(timestampMs: Long, nowMs: Long,
+                toleranceMs: Long = FRESHNESS_TOLERANCE_MS): Boolean {
+        if (timestampMs <= 0) return false
+        val delta = nowMs - timestampMs
+        return delta in -toleranceMs..toleranceMs
+    }
+
+    /**
      * 构造 desktop_online 心跳的规范化签名串。
      * 字段顺序与桌面端 canonical_online 一致，勿单端改动。
      */

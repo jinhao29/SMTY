@@ -56,4 +56,28 @@ class SyncPacketAuthTest {
         assertThat(bytes).isNotNull()
         assertThat(bytes!!.size).isEqualTo(32)
     }
+
+    @Test
+    fun `重放窗口_新鲜报文接受`() {
+        val now = 1726118400000L
+        assertThat(SyncPacketAuth.isFresh(now - 30_000L, now)).isTrue()   // 30 秒前
+        assertThat(SyncPacketAuth.isFresh(now + 60_000L, now)).isTrue()   // 轻微超前（时钟偏移）
+    }
+
+    @Test
+    fun `重放窗口_过期与超前沿拒绝`() {
+        val now = 1726118400000L
+        // 过期：窗口外 1 秒即拒绝（重放的旧报文）
+        assertThat(SyncPacketAuth.isFresh(now - SyncPacketAuth.FRESHNESS_TOLERANCE_MS - 1, now)).isFalse()
+        // 超前：窗口外同样拒绝
+        assertThat(SyncPacketAuth.isFresh(now + SyncPacketAuth.FRESHNESS_TOLERANCE_MS + 1, now)).isFalse()
+        // 窗口边界（含）接受
+        assertThat(SyncPacketAuth.isFresh(now - SyncPacketAuth.FRESHNESS_TOLERANCE_MS, now)).isTrue()
+    }
+
+    @Test
+    fun `重放窗口_时间戳缺失拒绝`() {
+        assertThat(SyncPacketAuth.isFresh(0L, 1726118400000L)).isFalse()
+        assertThat(SyncPacketAuth.isFresh(-1L, 1726118400000L)).isFalse()
+    }
 }

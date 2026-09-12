@@ -307,14 +307,19 @@ class UdpDesktopDiscoveryService : Service() {
             val pairingKey = com.shangmentiyu.sportscoach.data.internal.PairingKeyStore.get(this)
             if (pairingKey != null) {
                 if (sig.isNotEmpty()) {
+                    val ts = json.optLong("timestamp", 0L)
                     val canonical = SyncPacketAuth.canonicalOnline(
-                        host, port,
-                        json.optLong("timestamp", 0L),
+                        host, port, ts,
                         json.optString("token", ""),
                         json.optString("name", "")
                     )
                     if (!SyncPacketAuth.verify(pairingKey, canonical, sig)) {
                         Log.w(TAG, "心跳签名校验失败，拒绝报文（host=$host 可能是伪造来源）")
+                        return
+                    }
+                    // 重放窗口：签名合法但时间戳过期/超前过多 → 疑似重放旧报文，拒绝
+                    if (!SyncPacketAuth.isFresh(ts, System.currentTimeMillis())) {
+                        Log.w(TAG, "心跳时间戳超出重放窗口（ts=$ts），拒绝报文（host=$host）")
                         return
                     }
                 } else {
