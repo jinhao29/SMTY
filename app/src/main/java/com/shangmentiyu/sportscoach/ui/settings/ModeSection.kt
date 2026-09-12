@@ -59,43 +59,31 @@ fun ModeSection() {
     val scope = rememberCoroutineScope()
     val current by ModeManager.mode.collectAsStateWithLifecycle()
     var pending by remember { mutableStateOf<String?>(null) }
+    // v23.13：模式清单来自 assets/config/modes.json（新增机构零代码）
+    val modes = remember { ModeManager.allModes() }
 
     IosSectionWrapper(text = "工作模式") {
         IosGroupedListCard {
-            ModeOption(
-                icon = Icons.Outlined.FitnessCenter,
-                iconContentDescription = "上门体育",
-                title = "上门体育",
-                desc = "现有学员 / 课时 / 财务数据（sports_coach_db）",
-                selected = (pending ?: current) == ModeManager.MODE_COACHING,
-                showTopDivider = false,
-                onClick = {
-                    if (current != ModeManager.MODE_COACHING) {
-                        pending = ModeManager.MODE_COACHING
-                        scope.launch {
-                            ModeManager.setMode(context, ModeManager.MODE_COACHING)
-                            restartApp(context)
+            // v23.13：选项由配置生成（含显示名/说明/库名），顺序 = 配置顺序
+            modes.forEachIndexed { index, m ->
+                ModeOption(
+                    icon = iconForMode(m.icon, index),
+                    iconContentDescription = m.displayName,
+                    title = m.displayName,
+                    desc = "${m.tagline}（${m.dbName}）",
+                    selected = ModeManager.isSameMode(pending ?: current, m.id),
+                    showTopDivider = index > 0,
+                    onClick = {
+                        if (!ModeManager.isSameMode(current, m.id)) {
+                            pending = m.id
+                            scope.launch {
+                                ModeManager.setMode(context, m.id)
+                                restartApp(context)
+                            }
                         }
                     }
-                }
-            )
-            ModeOption(
-                icon = Icons.Outlined.Workspaces,
-                iconContentDescription = "俱乐部",
-                title = "俱乐部",
-                desc = "EVOLVE 独立数据空间，与上门体育完全隔离（club_db）",
-                selected = (pending ?: current) == ModeManager.MODE_CLUB,
-                showTopDivider = true,
-                onClick = {
-                    if (current != ModeManager.MODE_CLUB) {
-                        pending = ModeManager.MODE_CLUB
-                        scope.launch {
-                            ModeManager.setMode(context, ModeManager.MODE_CLUB)
-                            restartApp(context)
-                        }
-                    }
-                }
-            )
+                )
+            }
         }
         Spacer(Modifier.height(Spacing.xs))
         Text(
@@ -168,6 +156,17 @@ private fun ModeOption(
         }
     }
 }
+
+/**
+ * 配置里的 icon 键 → Material 图标（与启动页同一套映射约定）。
+ * 未知键按位置回退，保证新机构不填 icon 也有合理图标。
+ */
+private fun iconForMode(key: String, index: Int): androidx.compose.ui.graphics.vector.ImageVector =
+    when (key) {
+        "stopwatch", "home" -> Icons.Outlined.FitnessCenter
+        "bolt", "emoji_events" -> Icons.Outlined.Workspaces
+        else -> if (index == 0) Icons.Outlined.FitnessCenter else Icons.Outlined.Workspaces
+    }
 
 /** 切换模式后重启应用（重新创建入口 Activity，Application 重新初始化挂新库） */
 private fun restartApp(context: android.content.Context) {

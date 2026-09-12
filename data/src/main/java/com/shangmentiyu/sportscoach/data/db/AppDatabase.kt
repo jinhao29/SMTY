@@ -197,20 +197,16 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
-         * 当前模式对应的数据库文件名（v23.12 多租户·物理隔离）。
+         * 当前模式对应的数据库文件名。
          *
-         * 上门体育 = sports_coach_db（既有库）；俱乐部 = sports_coach_club_db（独立库）。
+         * v23.13 起由 [com.shangmentiyu.sportscoach.data.internal.ModeManager.activeDbName]
+         * 从 `assets/config/modes.json` 动态解析（此前是本文件内的 if/else 硬编码）。
          * 两个库共用同一套 Entity/DAO/Migration（schema 相同，version 一起走）。
-         * 选库依据 [ModeManager.activeMode] 必须在首次 getDatabase 前由
-         * Application.onCreate 同步初始化。
+         * 选库依据 [com.shangmentiyu.sportscoach.data.internal.ModeManager.activeMode]
+         * 必须在首次 getDatabase 前由 Application.onCreate 同步初始化。
          */
         fun activeDatabaseName(): String =
-            if (com.shangmentiyu.sportscoach.data.internal.ModeManager.activeMode ==
-                com.shangmentiyu.sportscoach.data.internal.ModeManager.MODE_CLUB) {
-                CLUB_DATABASE_NAME
-            } else {
-                DATABASE_NAME
-            }
+            com.shangmentiyu.sportscoach.data.internal.ModeManager.activeDbName
 
         /**
          * 关闭并重置数据库单例（仅用于整库备份/恢复流程）。

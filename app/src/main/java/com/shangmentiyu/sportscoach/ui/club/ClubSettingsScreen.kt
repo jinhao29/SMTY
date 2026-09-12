@@ -98,7 +98,8 @@ fun ClubSettingsScreen(
                 }
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    text = "数据空间：俱乐部（${ModeManager.MODE_CLUB}）· 独立数据库，与上门体育物理隔离",
+                    text = "数据空间：${ModeManager.displayName()}（${ModeManager.activeDbName}）" +
+                        "· 独立数据库，与上门体育物理隔离",
                     fontSize = 12.sp,
                     lineHeight = 17.sp,
                     color = appOnSurfaceVariant()

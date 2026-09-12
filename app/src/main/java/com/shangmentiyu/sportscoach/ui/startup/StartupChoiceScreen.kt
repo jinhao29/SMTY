@@ -22,9 +22,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -61,6 +63,9 @@ fun StartupChoiceScreen(
 ) {
     val context = LocalContext.current
     val activeMode = ModeManager.activeMode
+    // v23.13：板块清单（显示名 / 副标题 / 图标）来自 assets/config/modes.json，
+    // 新增机构只需改配置；卡片顺序 = 配置顺序
+    val modes = remember { ModeManager.allModes() }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -85,37 +90,28 @@ fun StartupChoiceScreen(
         // v64：欢迎语与卡片组之间改为弹性间距，两张卡片在剩余空间垂直居中
         Spacer(Modifier.weight(1f))
 
-        // 板块选择卡片 1：教练工作台（现有全部功能）
-        ModuleCard(
-            title = "教练工作台",
-            subtitle = "学员管理 · 课时排课 · 双端同步",
-            icon = { Icon(Icons.Outlined.Home, null, tint = BrandCoral, modifier = Modifier.size(30.dp)) },
-            badge = if (activeMode == ModeManager.MODE_COACHING) "当前数据空间" else null,
-            onClick = {
-                if (activeMode == ModeManager.MODE_COACHING) {
-                    onEnterCoach()
-                } else {
-                    switchMode(context, ModeManager.MODE_COACHING)
+        // v23.13：板块卡片由配置生成（不再硬编码两张）
+        modes.forEachIndexed { index, m ->
+            if (index > 0) Spacer(Modifier.height(20.dp))
+            ModuleCard(
+                title = m.displayName,
+                subtitle = m.tagline,
+                icon = {
+                    Icon(
+                        iconForMode(m.icon), null, tint = BrandCoral,
+                        modifier = Modifier.size(30.dp)
+                    )
+                },
+                badge = if (ModeManager.isSameMode(activeMode, m.id)) "当前数据空间" else null,
+                onClick = {
+                    if (ModeManager.isSameMode(activeMode, m.id)) {
+                        enterMode(m.id, onEnterCoach, onEnterClub)
+                    } else {
+                        switchMode(context, m.id)
+                    }
                 }
-            }
-        )
-
-        Spacer(Modifier.height(20.dp))
-
-        // 板块选择卡片 2：体育俱乐部（v24 真实 UI 已上线）
-        ModuleCard(
-            title = "体育俱乐部",
-            subtitle = "EVOLVE · 会员 / 课程 / 教练团队",
-            icon = { Icon(Icons.Outlined.EmojiEvents, null, tint = BrandCoral, modifier = Modifier.size(30.dp)) },
-            badge = if (activeMode == ModeManager.MODE_CLUB) "当前数据空间" else null,
-            onClick = {
-                if (activeMode == ModeManager.MODE_CLUB) {
-                    onEnterClub()
-                } else {
-                    switchMode(context, ModeManager.MODE_CLUB)
-                }
-            }
-        )
+            )
+        }
 
         Spacer(Modifier.weight(1f))
 
@@ -136,6 +132,32 @@ fun StartupChoiceScreen(
         )
         Spacer(Modifier.height(40.dp))
     }
+}
+
+/**
+ * 配置里的 icon 键 → Material 图标。
+ *
+ * 桌面端用自绘图标（stopwatch / bolt），Android 用 Material Icons，
+ * 两端键值不必相同，此处做兼容映射；未知键回退俱乐部图标
+ * （新机构不填 icon 时也能正常展示）。
+ */
+private fun iconForMode(key: String): ImageVector = when (key) {
+    "stopwatch", "home" -> Icons.Outlined.Home
+    else -> Icons.Outlined.EmojiEvents
+}
+
+/**
+ * 进入所选模式的界面。
+ *
+ * 目前只有两套界面：coaching 走教练工作台，其余模式复用俱乐部版 UI
+ * （数据仍互相隔离）。将来出现第三套界面时，在 [SportsApp] 的路由层扩展。
+ */
+private fun enterMode(
+    modeId: String,
+    onEnterCoach: () -> Unit,
+    onEnterClub: () -> Unit
+) {
+    if (modeId == ModeManager.MODE_COACHING) onEnterCoach() else onEnterClub()
 }
 
 /** 切换工作模式：落盘 + 重启（重启后回到本页，再点对应卡片即进入新数据空间） */

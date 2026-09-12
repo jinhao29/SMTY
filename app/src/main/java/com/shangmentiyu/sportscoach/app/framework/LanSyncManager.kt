@@ -463,13 +463,15 @@ class LanSyncManager(
             val code = conn.responseCode
             dbg("pull http code=$code")
             // v23.12 多租户防串库：PC 报告的工作模式必须与本机一致才合并
+            // v23.13：比较前先做别名归一化 —— PC 端升级过渡期可能仍下发旧值（club），
+            // 直接字符串比较会把"其实同一模式"误判为不一致，导致同步被拒。
             val pcMode = conn.getHeaderField("X-Workspace-Mode")
-            if (pcMode != null && pcMode != ModeManager.activeMode) {
+            if (pcMode != null && !ModeManager.isSameMode(pcMode, ModeManager.activeMode)) {
                 dbg("pull mode mismatch pc=$pcMode local=${ModeManager.activeMode}")
                 return@withContext SyncResult(
                     false,
-                    "模式不一致：PC 端在${if (pcMode == "club") "俱乐部" else "上门体育"}模式，" +
-                        "手机在${if (ModeManager.activeMode == "club") "俱乐部" else "上门体育"}模式，已拒绝拉取（防串库）",
+                    "模式不一致：PC 端在${ModeManager.displayName(pcMode)}模式，" +
+                        "手机在${ModeManager.displayName(ModeManager.activeMode)}模式，已拒绝拉取（防串库）",
                     code)
             }
             if (code != 200) {
@@ -628,8 +630,9 @@ class LanSyncManager(
                 return@withContext SyncResult(false, "", code)
             }
             // v23.12 多租户防串库：PC 数据包的工作模式必须与本机一致
+            // v23.13：归一化后比较（兼容 PC 端下发的旧值 club）
             val pcMode = json.optString("workspaceMode", "")
-            if (pcMode.isNotEmpty() && pcMode != ModeManager.activeMode) {
+            if (pcMode.isNotEmpty() && !ModeManager.isSameMode(pcMode, ModeManager.activeMode)) {
                 return@withContext SyncResult(false, "", code)  // 静默拒绝，防串库
             }
             val packages = mutableListOf<com.shangmentiyu.sportscoach.data.repo.PcPackage>()
