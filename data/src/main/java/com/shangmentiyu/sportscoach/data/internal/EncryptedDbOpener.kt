@@ -98,8 +98,12 @@ internal object EncryptedDbOpener {
         open(context, path, readOnly = true)
 
     private fun open(context: Context, path: String, readOnly: Boolean): Handle {
-        if (useNativeForTesting) {
-            // 测试路径：加密被关闭，库是明文，原生 SQLite 可读
+        // 明文库直接用原生 SQLite：SQLCipher 带口令开明文库只会报 "file is not a database"。
+        // 明文库只出现在迁移尚未执行的窗口（升级后第一次启动、v1.0.5 前的旧急救/避风港备份），
+        // 此时若按密文打开会让 PreUpdateBackupManager 的版本检查（v48 降级保护）失效。
+        // 判据与 PlainDbMigrator 同源：文件头是否为 "SQLite format 3"。
+        if (useNativeForTesting || !isEncrypted(java.io.File(path))) {
+            // 测试路径或明文库：原生 SQLite 可读
             val flags = if (readOnly) {
                 android.database.sqlite.SQLiteDatabase.OPEN_READONLY
             } else {
