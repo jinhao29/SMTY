@@ -69,6 +69,11 @@ class SettingsRepository(private val context: Context) {
         // 选卸载不丢的公共目录（如 Download），避免应用私有目录备份随卸载蒸发。
         private val KEY_BACKUP_DIR_URI = stringPreferencesKey("backup_dir_uri")
 
+        // === 合规同意（v1.0.6 新增） ===
+        // 记录用户已同意的《用户协议》《隐私政策》版本号（见 Legal.kt 的 LEGAL_VERSION）。
+        // 首次安装为空、或政策版本升级后不一致 → 必须重新展示合规弹窗，未同意不得进入应用。
+        private val KEY_LEGAL_ACCEPTED_VERSION = stringPreferencesKey("legal_accepted_version")
+
     }
 
     val coach: Flow<String> = context.dataStore.data.map { it[KEY_COACH] ?: "" }
@@ -206,6 +211,25 @@ class SettingsRepository(private val context: Context) {
             else it[KEY_BACKUP_DIR_URI] = value
         }
     }
+
+    // === 合规同意（v1.0.6 新增） ===
+
+    /**
+     * 用户已同意的《用户协议》《隐私政策》版本号；从未同意时为空串。
+     *
+     * 调用方（合规弹窗）应比对 [com.shangmentiyu.sportscoach.ui.legal.LEGAL_VERSION]：
+     * 不等即需重新展示并取得同意。政策修订后只需提升该常量，即自动触发全量重新确认。
+     */
+    val legalAcceptedVersion: Flow<String> =
+        context.dataStore.data.map { it[KEY_LEGAL_ACCEPTED_VERSION] ?: "" }
+
+    suspend fun setLegalAcceptedVersion(value: String) {
+        context.dataStore.edit { it[KEY_LEGAL_ACCEPTED_VERSION] = value.trim() }
+    }
+
+    /** 同步读取已同意版本（供启动门禁在非协程上下文判定） */
+    suspend fun getLegalAcceptedVersion(): String =
+        context.dataStore.data.map { it[KEY_LEGAL_ACCEPTED_VERSION] ?: "" }.first()
 
     // === 悬浮窗开关 ===
 

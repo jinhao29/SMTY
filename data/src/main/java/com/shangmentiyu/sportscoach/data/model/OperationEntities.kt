@@ -35,8 +35,8 @@ data class LessonPackage(
     /** 使用进度（0-1） */
     val progress: Float get() = if (totalLessons > 0) usedLessons.toFloat() / totalLessons else 0f
 
-    /** 是否即将用完（剩余 ≤ 3） */
-    val isLowBalance: Boolean get() = remainingLessons in 1..3
+    /** 是否即将用完（剩余 ≤ [RenewalThresholds.LOW_BALANCE_REMAINING]） */
+    val isLowBalance: Boolean get() = remainingLessons in 1..RenewalThresholds.LOW_BALANCE_REMAINING
 
     /** 是否已用完 */
     val isExhausted: Boolean get() = remainingLessons == 0
@@ -48,11 +48,11 @@ data class LessonPackage(
     /** 是否需要续费提醒（剩余≤3 或 30 天内过期） */
     val needsRenewal: Boolean get() = isLowBalance || isNearExpiry()
 
-    /** 是否接近过期（30 天内） */
+    /** 是否接近过期（[RenewalThresholds.NEAR_EXPIRY_DAYS] 天内） */
     fun isNearExpiry(): Boolean {
         if (expireDate.isBlank()) return false
         val days = daysToExpiry()
-        return days in 0..30
+        return days in 0..RenewalThresholds.NEAR_EXPIRY_DAYS
     }
 
     /** 距过期天数（负数=已过期） */

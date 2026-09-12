@@ -12,13 +12,19 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Apps
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.PrivacyTip
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -29,6 +35,8 @@ import com.shangmentiyu.sportscoach.ui.settings.components.IosGroupedListCard
 import com.shangmentiyu.sportscoach.ui.settings.components.IosIconBadge
 import com.shangmentiyu.sportscoach.ui.settings.components.IosSectionWrapper
 import com.shangmentiyu.sportscoach.ui.settings.components.SettingsActionRow
+import com.shangmentiyu.sportscoach.ui.legal.Legal
+import com.shangmentiyu.sportscoach.ui.legal.LegalFullTextDialog
 import com.shangmentiyu.sportscoach.ui.theme.LightPrimary
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appDividerColor
@@ -50,6 +58,9 @@ internal fun AboutSection(
     vm: SettingsViewModel,
     onNavigate: (String) -> Unit
 ) {
+    // v1.0.6 合规入口：非空时展示对应全文
+    var legalDoc by remember { mutableStateOf<String?>(null) }
+
     UpdateSection(vm, LocalContext.current)
 
     // 关于：应用信息
@@ -117,7 +128,43 @@ internal fun AboutSection(
                     )
                 }
             }
+            // 分隔线
+            Box(
+                modifier = Modifier
+                    .padding(start = 60.dp)
+                    .fillMaxWidth()
+                    .height(0.5.dp)
+                    .background(appDividerColor())
+            )
+            // === v1.0.6 合规文本常驻入口 ===
+            // 首启弹窗只保证"告知—同意"一次；用户随时可在设置里回看全文。
+            SettingsActionRow(
+                icon = Icons.Outlined.Description,
+                iconBgColor = LightPrimary,
+                iconContentDescription = "用户协议",
+                title = "用户协议",
+                subtitle = "使用本应用的权利与义务（v${Legal.VERSION}）",
+                showTopDivider = false,
+                onClick = { legalDoc = Legal.AGREEMENT_ASSET }
+            )
+            SettingsActionRow(
+                icon = Icons.Outlined.PrivacyTip,
+                iconBgColor = LightPrimary,
+                iconContentDescription = "隐私政策",
+                title = "隐私政策",
+                subtitle = "学员信息（含未成年人）如何被收集与保护",
+                showTopDivider = true,
+                onClick = { legalDoc = Legal.PRIVACY_ASSET }
+            )
         }
+    }
+
+    legalDoc?.let { asset ->
+        LegalFullTextDialog(
+            assetPath = asset,
+            title = if (asset == Legal.PRIVACY_ASSET) "隐私政策" else "用户协议",
+            onClose = { legalDoc = null }
+        )
     }
 }
 

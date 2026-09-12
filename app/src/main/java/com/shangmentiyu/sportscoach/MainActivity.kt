@@ -7,6 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.shangmentiyu.sportscoach.ui.SportsApp
+import com.shangmentiyu.sportscoach.ui.legal.LegalConsentGate
 import com.shangmentiyu.sportscoach.ui.settings.SettingsViewModel
 import com.shangmentiyu.sportscoach.ui.theme.SportsCoachTheme
 import org.koin.androidx.compose.koinViewModel
@@ -28,7 +29,12 @@ class MainActivity : ComponentActivity() {
             val settingsVm: SettingsViewModel = koinViewModel()
             val darkTheme by settingsVm.darkTheme.collectAsStateWithLifecycle()
             SportsCoachTheme(darkTheme = darkTheme) {
-                SportsApp()
+                // === v1.0.6 合规门禁 ===
+                // 未同意《用户协议》《隐私政策》当前版本时全屏拦截，
+                // 任何业务界面（含启动选择页）都无法绕过。
+                LegalConsentGate {
+                    SportsApp()
+                }
             }
         }
     }
