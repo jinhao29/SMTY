@@ -11,6 +11,7 @@ import androidx.room.withTransaction
 import com.shangmentiyu.sportscoach.data.internal.AutoBackupScheduler
 import com.shangmentiyu.sportscoach.data.internal.BackupFolderStore
 import com.shangmentiyu.sportscoach.data.internal.BackupManager
+import com.shangmentiyu.sportscoach.data.internal.MiniprogramImporter
 import com.shangmentiyu.sportscoach.core.ProgressState
 import com.shangmentiyu.sportscoach.data.repo.BackupRepository
 import com.shangmentiyu.sportscoach.data.repo.LessonRepository
@@ -291,6 +292,38 @@ class SettingsViewModel(
                 return@launch
             }
             restoreData(fileUri)
+        }
+    }
+
+    /**
+     * === 阶段五互通：导入小程序本地数据（备份 JSON） ===
+     *
+     * 读取用户选择的 JSON 文件 → [MiniprogramImporter.parse]（纯解析，结构错误
+     * 直接反馈用户）→ [MiniprogramImporter.execute]（IO 线程，按姓名去重落库）。
+     */
+    fun importMiniprogramData(uri: android.net.Uri) {
+        safeLaunch {
+            _statusMessage.value = "正在读取小程序数据…"
+            val result = withContext(Dispatchers.IO) {
+                try {
+                    val json = app.contentResolver.openInputStream(uri)
+                        ?.bufferedReader()?.use { it.readText() }
+                        ?: return@withContext "无法读取所选文件"
+                    val plan = MiniprogramImporter.parse(json)
+                    MiniprogramImporter.execute(app, plan).let { r ->
+                        "导入完成：新建 ${r.createdStudents} 位学员" +
+                            "（跳过已存在 ${r.skippedExistingStudents} 位，" +
+                            "软删 ${r.skippedDeleted} 位），课时包 ${r.createdPackages} 个" +
+                            if (r.skippedTables.isEmpty()) ""
+                            else "；跳过手机端无对应实体的表：${r.skippedTables.joinToString()}"
+                    }
+                } catch (e: IllegalArgumentException) {
+                    e.message ?: "文件格式不正确"
+                } catch (e: Exception) {
+                    "导入失败：${e.message ?: e.javaClass.simpleName}"
+                }
+            }
+            _statusMessage.value = result
         }
     }
 

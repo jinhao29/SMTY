@@ -15,7 +15,10 @@ import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.SaveAlt
+import androidx.compose.material.icons.outlined.Smartphone
 import androidx.compose.material.icons.outlined.Storage
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -74,6 +77,13 @@ internal fun DataManageSection(
     val backupPassphrase by vm.backupPassphrase.collectAsStateWithLifecycle()
     var showPassphraseDialog by remember { mutableStateOf(false) }
 
+    // 阶段五互通：选择小程序备份 JSON 导入（文件由微信"用其他应用打开"/文件管理器提供）
+    val mpImportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) vm.importMiniprogramData(uri)
+    }
+
     // 最新备份的展示时间（文件夹内最新一份；无备份时提示首次备份）
     val latestText = latestBackup?.let { (name, ms) ->
         val time = java.time.Instant.ofEpochMilli(ms)
@@ -116,6 +126,20 @@ internal fun DataManageSection(
                     if (!backupInProgress) {
                         if (folderSet && latestText != null) showRestoreConfirm = true
                         else onRequestRestore()
+                    }
+                }
+            )
+            // 阶段五互通：导入微信小程序本地数据（backup_{mode}_{日期}.json）
+            SettingsActionRow(
+                icon = Icons.Outlined.Smartphone,
+                iconBgColor = LightSecondary,
+                iconContentDescription = "导入小程序数据",
+                title = "导入小程序数据",
+                subtitle = "选择小程序导出的备份 JSON，学员与课时包按姓名去重合并",
+                showTopDivider = true,
+                onClick = {
+                    if (!backupInProgress) {
+                        mpImportLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
                     }
                 }
             )
