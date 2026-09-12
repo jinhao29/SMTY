@@ -11,6 +11,7 @@ import androidx.room.withTransaction
 import com.shangmentiyu.sportscoach.data.internal.AutoBackupScheduler
 import com.shangmentiyu.sportscoach.data.internal.BackupFolderStore
 import com.shangmentiyu.sportscoach.data.internal.BackupManager
+import com.shangmentiyu.sportscoach.data.internal.MiniprogramExporter
 import com.shangmentiyu.sportscoach.data.internal.MiniprogramImporter
 import com.shangmentiyu.sportscoach.core.ProgressState
 import com.shangmentiyu.sportscoach.data.repo.BackupRepository
@@ -321,6 +322,33 @@ class SettingsViewModel(
                     e.message ?: "文件格式不正确"
                 } catch (e: Exception) {
                     "导入失败：${e.message ?: e.javaClass.simpleName}"
+                }
+            }
+            _statusMessage.value = result
+        }
+    }
+
+    /**
+     * === 阶段五互通遗留 #1：导出小程序本地数据（exportBackup v1 JSON） ===
+     *
+     * 读取本机学员/课时包 → [MiniprogramExporter.export] → 写入用户选定位置。
+     * [miniprogramMode] 必须是小程序侧模式 id（shangmen/club）——与 Android 模式
+     * id 不同源，UI 层经 [MiniprogramExporter.miniprogramModeId] 映射或让用户选择。
+     */
+    fun exportMiniprogramData(miniprogramMode: String, uri: android.net.Uri) {
+        safeLaunch {
+            _statusMessage.value = "正在导出小程序数据…"
+            val result = withContext(Dispatchers.IO) {
+                try {
+                    val out = app.contentResolver.openOutputStream(uri)
+                        ?: return@withContext "无法写入所选位置"
+                    val r = MiniprogramExporter.execute(app, miniprogramMode, out)
+                    "导出完成：${r.students} 位学员、${r.packages} 个课时包（小程序模式 " +
+                        "${r.mode}）。把文件发到电脑或另一台手机的微信即可导入。"
+                } catch (e: IllegalArgumentException) {
+                    e.message ?: "导出参数不正确"
+                } catch (e: Exception) {
+                    "导出失败：${e.message ?: e.javaClass.simpleName}"
                 }
             }
             _statusMessage.value = result

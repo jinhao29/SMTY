@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.shangmentiyu.sportscoach.data.internal.MiniprogramExporter
 import com.shangmentiyu.sportscoach.ui.settings.components.IosGroupedListCard
 import com.shangmentiyu.sportscoach.ui.settings.components.IosIconBadge
 import com.shangmentiyu.sportscoach.ui.settings.components.IosSectionWrapper
@@ -82,6 +83,17 @@ internal fun DataManageSection(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) vm.importMiniprogramData(uri)
+    }
+
+    // 阶段五遗留 #1：导出小程序数据（先选目标模式，再选保存位置）
+    var pendingMpExportMode by remember { mutableStateOf<String?>(null) }
+    var showMpExportModeDialog by remember { mutableStateOf(false) }
+    val mpExportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        val mode = pendingMpExportMode
+        if (uri != null && mode != null) vm.exportMiniprogramData(mode, uri)
+        pendingMpExportMode = null
     }
 
     // 最新备份的展示时间（文件夹内最新一份；无备份时提示首次备份）
@@ -142,6 +154,16 @@ internal fun DataManageSection(
                         mpImportLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
                     }
                 }
+            )
+            // 阶段五遗留 #1：导出小程序数据（先选目标模式，微信发送即可互通）
+            SettingsActionRow(
+                icon = Icons.Outlined.Smartphone,
+                iconBgColor = LightSecondary,
+                iconContentDescription = "导出小程序数据",
+                title = "导出小程序数据",
+                subtitle = "生成小程序可导入的 JSON，微信发送给电脑或其他设备",
+                showTopDivider = true,
+                onClick = { if (!backupInProgress) showMpExportModeDialog = true }
             )
             // 备份/恢复进行中时显示加载动画与具体进度文案
             if (backupInProgress) {
@@ -459,6 +481,54 @@ internal fun DataManageSection(
             },
             dismissButton = {
                 // 不提供取消按钮：数据已覆盖，旧 ViewModel 已失效，必须重启
+            }
+        )
+    }
+
+    // 阶段五遗留 #1：导出小程序数据——先选目标模式（小程序与 App 模式 id 不同源）
+    if (showMpExportModeDialog) {
+        val defaultMode = MiniprogramExporter.miniprogramModeId(
+            com.shangmentiyu.sportscoach.data.internal.ModeManager.activeMode
+        ) ?: "shangmen"
+        var selected by remember { mutableStateOf(defaultMode) }
+        GlassAlertDialog(
+            onDismissRequest = { showMpExportModeDialog = false },
+            title = "导出到哪个小程序模式？",
+            content = {
+                Column {
+                    Text(
+                        "小程序分「上门体育 / 俱乐部」两个独立数据空间，导出文件只能导入对应模式。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(Spacing.sm))
+                    MiniprogramExporter.allMiniprogramModes().forEach { mode ->
+                        val label = if (mode == "shangmen") "上门体育（shangmen）" else "俱乐部（club）"
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = Spacing.xs),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            androidx.compose.material3.RadioButton(
+                                selected = selected == mode,
+                                onClick = { selected = mode }
+                            )
+                            Text(label, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    showMpExportModeDialog = false
+                    pendingMpExportMode = selected
+                    val date = java.time.LocalDate.now().toString()
+                    mpExportLauncher.launch("backup_${selected}_$date.json")
+                }) { Text("选择保存位置") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMpExportModeDialog = false }) { Text("取消") }
             }
         )
     }
