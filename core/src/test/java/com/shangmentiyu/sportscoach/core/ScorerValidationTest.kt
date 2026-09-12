@@ -56,6 +56,37 @@ class ScorerValidationTest {
     }
 
     @Test
+    fun `分秒负数_纯秒数输入_被拒绝`() {
+        // v50 补丁回归："-5" 秒走 parseTime 纯秒数路径，曾绕过负数拦截得满分
+        val e = runCatching { Scorer.parseValue("-5", "分秒") }.exceptionOrNull()
+        assertThat(e).isInstanceOf(IllegalArgumentException::class.java)
+        assertThat(e?.message).contains("负数")
+
+        val r = Scorer.calcScore(std50m.copy(unit = "分秒"), "男", "-5")
+        assertThat(r.ok).isFalse()
+        assertThat(r.msg).contains("负数")
+    }
+
+    @Test
+    fun `分秒负数_带分格式输入_被拒绝`() {
+        val e = runCatching { Scorer.parseValue("-1:05", "分秒") }.exceptionOrNull()
+        assertThat(e).isInstanceOf(IllegalArgumentException::class.java)
+        assertThat(e?.message).contains("负数")
+    }
+
+    @Test
+    fun `非分秒负数_拦截不回归`() {
+        assertThat(Scorer.calcScore(stdJump, "男", "-20").ok).isFalse()
+    }
+
+    @Test
+    fun `分秒正数_正常解析不受影响`() {
+        assertThat(Scorer.parseValue("1:05", "分秒")).isEqualTo(65.0)
+        assertThat(Scorer.parseValue("4'05\"", "分秒")).isEqualTo(245.0)
+        assertThat(Scorer.parseValue("12.5", "分秒")).isEqualTo(12.5)
+    }
+
+    @Test
     fun `正数成绩_正常解析与评分`() {
         assertThat(Scorer.calcScore(std50m, "男", "7.5").ok).isTrue()
         assertThat(Scorer.calcScore(stdJump, "男", "210").ok).isTrue()

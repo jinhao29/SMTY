@@ -14,6 +14,8 @@ object Scorer {
     fun parseValue(raw: String?, unit: String): Double {
         if (raw.isNullOrBlank()) throw IllegalArgumentException("成绩为空")
         val s = raw.trim()
+        // v50 补丁：分秒分支同样拒绝负数（如 "-5" 秒），与非分秒分支口径一致
+        if (unit == "分秒" && s.startsWith("-")) throw IllegalArgumentException("成绩不能为负数")
         if (unit == "分秒") return parseTime(s)
         // === v50：显式拒绝负数成绩 ===
         // 原实现直接 toDoubleOrNull()，负数（如 "-5"）会被 scoreLess 误判为满分，
