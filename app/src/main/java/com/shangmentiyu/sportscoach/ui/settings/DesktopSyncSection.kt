@@ -37,6 +37,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.shangmentiyu.sportscoach.app.framework.LanSyncManager
 import com.shangmentiyu.sportscoach.app.framework.UdpDesktopDiscoveryService
+import com.shangmentiyu.sportscoach.core.SyncPacketAuth
+import com.shangmentiyu.sportscoach.data.internal.PairingKeyStore
 import com.shangmentiyu.sportscoach.ui.settings.components.IosGroupedListCard
 import com.shangmentiyu.sportscoach.ui.settings.components.IosIconBadge
 import com.shangmentiyu.sportscoach.ui.settings.components.IosSectionWrapper
@@ -74,8 +76,12 @@ internal fun DesktopSyncSection(vm: SettingsViewModel) {
     var showHostDialog by remember { mutableStateOf(false) }
     var showPortDialog by remember { mutableStateOf(false) }
     var showTokenDialog by remember { mutableStateOf(false) }
+    var showPairingDialog by remember { mutableStateOf(false) }
     var discoveryHint by remember { mutableStateOf("") }
+    // v1.0.6 配对状态（PairingKeyStore 非 Flow，对话框关闭后手动刷新）
+    var paired by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    LaunchedEffect(Unit) { paired = PairingKeyStore.get(context) != null }
 
     // v23.6 自动连接：进入设置页时未配置地址且心跳新鲜 → 自动填充并提示（零配置）
     LaunchedEffect(Unit) {
@@ -247,6 +253,17 @@ internal fun DesktopSyncSection(vm: SettingsViewModel) {
                 subtitle = if (syncToken.isBlank()) "未设置（两端都为空时跳过校验）" else "已设置",
                 showTopDivider = true
             ) { showTokenDialog = true }
+
+            // v1.0.6 心跳 HMAC 配对：PC 端同步面板生成配对码，两端一致后心跳防伪造
+            SettingsActionRow(
+                icon = Icons.Outlined.Lan,
+                iconBgColor = LightSecondary,
+                iconContentDescription = "配对码",
+                title = "配对码（心跳防伪造）",
+                subtitle = if (paired) "已配对 · 点按重新配对或清除"
+                else "未配对 · 在 PC 端同步面板生成后粘贴到此处",
+                showTopDivider = true
+            ) { showPairingDialog = true }
         }
     }
 
@@ -280,6 +297,68 @@ internal fun DesktopSyncSection(vm: SettingsViewModel) {
             showTokenDialog = false
         }
     }
+    if (showPairingDialog) {
+        PairingDialog(
+            onDismiss = {
+                showPairingDialog = false
+                paired = PairingKeyStore.get(context) != null
+            }
+        )
+    }
+}
+
+/** v1.0.6 配对码对话框：PC 端同步面板生成后粘贴此处，两端一致即完成配对。 */
+@Composable
+private fun PairingDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    var text by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf("") }
+    GlassAlertDialog(
+        onDismissRequest = onDismiss,
+        title = "配对码（心跳防伪造）",
+        content = {
+            Column {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = {
+                        text = it
+                        error = ""
+                    },
+                    placeholder = { Text("粘贴 PC 端同步面板生成的配对码") },
+                    singleLine = true
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "两端配对后，PC 心跳报文携带 HMAC 签名，" +
+                        "同网段伪造心跳将无法劫持照片上传目标。未配对不影响自动发现。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+                if (error.isNotEmpty()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                if (SyncPacketAuth.decodeKey(text) == null) {
+                    error = "配对码格式不正确（应为 PC 端生成的 base64 码）"
+                    return@Button
+                }
+                if (PairingKeyStore.set(context, text)) onDismiss() else error = "保存失败"
+            }) { Text("保存并配对") }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = {
+                    PairingKeyStore.clear(context)
+                    onDismiss()
+                }) { Text("清除配对") }
+                TextButton(onClick = onDismiss) { Text("取消") }
+            }
+        }
+    )
 }
 
 /** 单行文本编辑对话框（地址/端口/token 共用）。 */

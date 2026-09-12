@@ -12,6 +12,7 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.shangmentiyu.sportscoach.MainActivity
+import com.shangmentiyu.sportscoach.core.SyncPacketAuth
 import org.json.JSONObject
 import java.net.DatagramPacket
 import java.net.DatagramSocket
@@ -297,6 +298,31 @@ class UdpDesktopDiscoveryService : Service() {
             val host = json.optString("host", "")
             val port = json.optInt("port", 0)
             if (host.isBlank() || port <= 0) return
+
+            // v1.0.6 心跳 HMAC 认证（与桌面端 pairing_key.py / SyncPacketAuth 对齐）：
+            // - 已配对 + 带签名：校验失败 → 拒绝（同网段伪造心跳无法劫持上传目标）
+            // - 已配对 + 无签名：旧版 PC 未配对，降级接受但记录警告
+            // - 未配对 + 带签名：本机未完成配对，忽略 sig 字段（graceful degradation）
+            val sig = json.optString(SyncPacketAuth.FIELD_SIG, "")
+            val pairingKey = com.shangmentiyu.sportscoach.data.internal.PairingKeyStore.get(this)
+            if (pairingKey != null) {
+                if (sig.isNotEmpty()) {
+                    val canonical = SyncPacketAuth.canonicalOnline(
+                        host, port,
+                        json.optLong("timestamp", 0L),
+                        json.optString("token", ""),
+                        json.optString("name", "")
+                    )
+                    if (!SyncPacketAuth.verify(pairingKey, canonical, sig)) {
+                        Log.w(TAG, "心跳签名校验失败，拒绝报文（host=$host 可能是伪造来源）")
+                        return
+                    }
+                } else {
+                    Log.w(TAG, "PC 心跳未签名（未配对或旧版本），降级接受——建议完成配对")
+                }
+            } else if (sig.isNotEmpty()) {
+                Log.d(TAG, "本机未配对，忽略心跳 sig 字段")
+            }
 
             val now = System.currentTimeMillis()
             val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
