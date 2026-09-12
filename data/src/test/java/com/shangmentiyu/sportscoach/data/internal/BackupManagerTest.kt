@@ -47,6 +47,8 @@ class BackupManagerTest {
         // 本测试关注的是备份/恢复业务逻辑而非加密本身，故测试期关闭数据库加密。
         // 加密实效的真机验证清单见 docs/db_encryption_verification.md。
         AppDatabase.devDisableEncryptionForTesting()
+        // v23.13：复位到默认模式（mode 校验测试会切换模式，防静态状态跨用例泄漏）
+        ModeManager.setMode(context, ModeManager.MODE_COACHING)
     }
 
     @After
@@ -405,5 +407,67 @@ class BackupManagerTest {
         val result = BackupManager.restoreDetailed(context, ByteArrayInputStream(zipBytes))
         assertThat(result.success).isTrue()
         assertThat(result.integrityOk).isTrue()
+    }
+
+    // ================================================================
+    // 7. v23.13 多租户防串库：备份 mode 校验
+    // ================================================================
+
+    /** 构造带指定 mode 标记的最小备份（明文库 + export_meta.json） */
+    private fun zipWithMode(mode: String, dbName: String): ByteArray {
+        val bos = ByteArrayOutputStream()
+        val tmpDb = File(context.cacheDir, "mode_probe_${System.nanoTime()}.db")
+        tmpDb.parentFile?.mkdirs()
+        android.database.sqlite.SQLiteDatabase.openOrCreateDatabase(tmpDb, null).use {
+            it.version = AppDatabase.DATABASE_VERSION
+        }
+        ZipOutputStream(bos).use { zos ->
+            zos.putNextEntry(ZipEntry(dbName))
+            tmpDb.inputStream().use { it.copyTo(zos) }
+            zos.closeEntry()
+            zos.putNextEntry(ZipEntry("export_meta.json"))
+            zos.write("""{"meta":{"version":"1.0","mode":"$mode"}}""".toByteArray())
+            zos.closeEntry()
+        }
+        tmpDb.delete()
+        return bos.toByteArray()
+    }
+
+    @Test
+    fun `跨模式备份_拒绝恢复_提示模式不一致`() = runTest {
+        // 现有数据在场（coaching 模式库）
+        AppDatabase.getDatabase(context)
+            .studentDao().insert(Student(name = "现役学员", studentId = "s800"))
+
+        // 当前模式默认 coaching，备份标记却是俱乐部
+        val result = BackupManager.restoreDetailed(
+            context, ByteArrayInputStream(zipWithMode("club_evolve", "sports_coach_db")))
+
+        assertThat(result.success).isFalse()
+        assertThat(result.message).contains("模式不一致")
+        // 拒绝发生在触碰任何数据之前，现有数据完好
+        assertThat(AppDatabase.getDatabase(context).studentDao().getByName("现役学员"))
+            .isNotNull()
+    }
+
+    @Test
+    fun `旧值club备份_归一化后可恢复_不误拒`() = runTest {
+        // 切到俱乐部（旧值写入 → 归一化为 club_evolve）
+        ModeManager.setMode(context, "club")
+        assertThat(ModeManager.activeMode).isEqualTo("club_evolve")
+
+        // 升级前导出的旧备份（mode=club）必须能恢复（向后兼容）。
+        // 注意：备份 zip 的 db 条目名固定为 ZIP_ENTRY_DB（sports_coach_db），
+        // 内容与落盘位置由当前 activeDbName 决定 —— 条目名不是 "sports_coach_club_db"。
+        val result = BackupManager.restoreDetailed(
+            context, ByteArrayInputStream(zipWithMode("club", "sports_coach_db")))
+
+        assertThat(result.success).isTrue()
+        assertThat(result.integrityOk).isTrue()
+
+        // 复位到默认模式并清偏好，避免污染其他测试的静态状态
+        ModeManager.setMode(context, ModeManager.MODE_COACHING)
+        context.getSharedPreferences("mode_prefs", Context.MODE_PRIVATE)
+            .edit().clear().commit()
     }
 }

@@ -674,6 +674,28 @@ object BackupManager {
             )
         }
 
+        // === v23.13 多租户防串库：备份的 mode 必须与当前模式一致 ===
+        // 旧版备份没有 meta.mode 标记（v23.12 之前）→ 宽容放行（向后兼容）；
+        // 但只要带了标记，就必须归一化后一致，否则明确拒绝 —— 俱乐部备份恢复进
+        // 上门体育库等于学员数据直接串库，比恢复失败严重得多。
+        onProgress?.onProgress("prepare", 0, 0, "正在检查备份模式兼容性…")
+        val backupMode = readBackupMode(context, buffered)
+        if (backupMode != null && !ModeManager.isSameMode(backupMode, ModeManager.activeMode)) {
+            Log.w(TAG, "拒绝恢复：备份模式 $backupMode 与当前 ${ModeManager.activeMode} 不一致")
+            buffered.delete()
+            val msg = "模式不一致：此备份来自「${ModeManager.displayName(backupMode)}」，" +
+                "当前是「${ModeManager.displayName(ModeManager.activeMode)}」模式，已拒绝恢复（防串库）。" +
+                "请切换到对应工作模式后再恢复。"
+            onProgress?.onProgress("error", 0, 0, msg)
+            return RestoreResult(
+                success = false,
+                message = msg,
+                needRestart = false,
+                integrityOk = false,
+                integrityReport = "workspace mode mismatch: backup=$backupMode current=${ModeManager.activeMode}"
+            )
+        }
+
         return try {
             FileInputStream(buffered).use { restoreWithSafety(context, it, onProgress) }
         } finally {
@@ -1107,22 +1129,7 @@ object BackupManager {
      */
     private fun readBackupUserVersion(context: Context, zipFile: File): Int {
         return try {
-            // 先取备份包的加密参数（加密备份的 db 条目外层还有 SMTB 包裹）
-            var zipKey: javax.crypto.SecretKey? = null
-            runCatching {
-                java.util.zip.ZipFile(zipFile).use { zf ->
-                    val mf = zf.getEntry(ZIP_ENTRY_MANIFEST) ?: return@runCatching
-                    val obj = JSONObject(String(zf.getInputStream(mf).readBytes(), Charsets.UTF_8))
-                    if (!obj.optBoolean("encrypted", false)) return@runCatching
-                    val salt = obj.optString("salt", "")
-                    if (salt.isBlank()) return@runCatching
-                    val pass = SettingsRepository(context).getBackupPassphraseBlocking()
-                        .takeIf { it.isNotBlank() } ?: return@runCatching
-                    zipKey = BackupCrypto.deriveKey(
-                        pass, salt, obj.optInt("iterations", BackupCrypto.PBKDF2_ITERATIONS)
-                    )
-                }
-            }
+            val zipKey = deriveBackupZipKey(context, zipFile)
 
             ZipInputStream(FileInputStream(zipFile)).use { zis ->
                 var entry = zis.nextEntry
@@ -1154,6 +1161,64 @@ object BackupManager {
         } catch (e: Exception) {
             Log.w(TAG, "读取备份库版本失败：${e.message}", e)
             0
+        }
+    }
+
+    /**
+     * 取备份包加密参数并派生解密密钥；未加密备份返回 null。
+     * 供 [readBackupUserVersion] 与 [readBackupMode] 共用（原先内联在版本检查里）。
+     */
+    private fun deriveBackupZipKey(context: Context, zipFile: File): javax.crypto.SecretKey? {
+        var zipKey: javax.crypto.SecretKey? = null
+        runCatching {
+            java.util.zip.ZipFile(zipFile).use { zf ->
+                val mf = zf.getEntry(ZIP_ENTRY_MANIFEST) ?: return@runCatching
+                val obj = JSONObject(String(zf.getInputStream(mf).readBytes(), Charsets.UTF_8))
+                if (!obj.optBoolean("encrypted", false)) return@runCatching
+                val salt = obj.optString("salt", "")
+                if (salt.isBlank()) return@runCatching
+                val pass = SettingsRepository(context).getBackupPassphraseBlocking()
+                    .takeIf { it.isNotBlank() } ?: return@runCatching
+                zipKey = BackupCrypto.deriveKey(
+                    pass, salt, obj.optInt("iterations", BackupCrypto.PBKDF2_ITERATIONS)
+                )
+            }
+        }
+        return zipKey
+    }
+
+    /**
+     * 读取备份包 export_meta.json 里的 meta.mode（工作模式标记）。
+     *
+     * - 加密备份：export_meta.json 同样被备份口令加密，需先解密
+     * - 旧版备份没有该条目 / 没有 mode 字段 / 读取失败 → 返回 null
+     *   （模式校验宁缺勿错：读不到绝不能误拒旧备份）
+     */
+    private fun readBackupMode(context: Context, zipFile: File): String? {
+        return try {
+            val zipKey = deriveBackupZipKey(context, zipFile)
+            ZipInputStream(FileInputStream(zipFile)).use { zis ->
+                var entry = zis.nextEntry
+                while (entry != null) {
+                    if (entry.name == ZIP_ENTRY_META_JSON) {
+                        var raw = zis.readBytes()
+                        zipKey?.let { key ->
+                            if (BackupCrypto.isEncrypted(raw)) {
+                                raw = BackupCrypto.decrypt(raw, key) ?: return null
+                            }
+                        }
+                        val obj = JSONObject(String(raw, Charsets.UTF_8))
+                        val mode = obj.optJSONObject("meta")?.optString("mode")?.trim().orEmpty()
+                        return mode.ifBlank { null }
+                    }
+                    zis.closeEntry()
+                    entry = zis.nextEntry
+                }
+                null
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "读取备份工作模式失败（按旧备份宽容处理）：${e.message}", e)
+            null
         }
     }
 
