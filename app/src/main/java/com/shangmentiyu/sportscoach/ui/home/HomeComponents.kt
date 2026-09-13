@@ -198,7 +198,7 @@ internal fun avatarColorFor(name: String): Color {
  * @param scheduleCount 今日排课数量
  */
 @Composable
-internal fun TodayOverviewHeader(scheduleCount: Int) {
+internal fun TodayOverviewHeader(scheduleCount: Int, onClick: () -> Unit = {}) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -215,6 +215,8 @@ internal fun TodayOverviewHeader(scheduleCount: Int) {
                     colors = listOf(appPrimary(), appSecondary())
                 )
             )
+            // P1-4 反馈：点概览卡查看当日具体排课（滚动到课前准备清单）
+            .clickable(onClick = onClick)
             .padding(horizontal = 24.dp, vertical = 28.dp)
     ) {
         Column {
@@ -276,7 +278,8 @@ internal fun TodayOverviewHeader(scheduleCount: Int) {
 internal fun FloatingStatCard(
     label: String,
     value: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit = {}
 ) {
     Column(
         modifier = modifier
@@ -288,6 +291,8 @@ internal fun FloatingStatCard(
             )
             .clip(RoundedCornerShape(24.dp))
             .background(appSurface())
+            // P1-4 反馈：统计格可点击（如"已签到/待签到"跳签到明细）
+            .clickable(onClick = onClick)
             .padding(vertical = 20.dp, horizontal = 8.dp),
         horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
     ) {

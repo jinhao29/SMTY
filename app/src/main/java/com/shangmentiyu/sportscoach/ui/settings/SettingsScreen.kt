@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -30,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -207,21 +209,23 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(Spacing.lg)
             ) {
-                // 【首要元素】"设置"大标题：紧贴状态栏。
-                // 美化（v51）：displayMedium(45sp)+Bold 视觉过于厚重突兀，
-                // 改 headlineLarge(32sp)+SemiBold 更柔和，跟 Material 3 Large Title 节奏一致。
+                // 【首要元素】"设置"大标题：居中置顶（李哥 2026-09-13 反馈），
+                // 字形 34sp/Bold，与下方卡片内容层级拉开
                 Text(
                     text = "设置",
-                    modifier = Modifier.padding(horizontal = Spacing.screenH),
-                    style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.SemiBold),
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.headlineLarge.copy(
+                        fontWeight = FontWeight.Bold, fontSize = 34.sp
+                    ),
                     color = appOnSurface()
                 )
                 Spacer(Modifier.height(4.dp))
-                // 副标题：改用 bodyMedium 主题 typography（替代裸 fontSize=14.sp），
-                // letterSpacing 微调让"·"分隔的节奏更舒展。
+                // 副标题：随标题居中，letterSpacing 保持"·"分隔的舒展节奏
                 Text(
                     text = "教练信息 · 外观 · 数据同步 · 关于",
-                    modifier = Modifier.padding(horizontal = Spacing.screenH),
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.bodyMedium.copy(letterSpacing = 0.3.sp),
                     color = appOnSurfaceVariant()
                 )

@@ -123,7 +123,7 @@ fun CoachManageScreen(
             )
             when (tabIndex) {
                 0 -> CoachRosterTab(viewModel)
-                1 -> CoachLessonGridTab(viewModel)
+                1 -> CoachLessonGridTab(viewModel, onGoToRoster = { tabIndex = 0 })
                 2 -> CoachScheduleTab(viewModel)
                 3 -> CoachTeamTab(viewModel)
                 else -> CoachPayrollTab(viewModel)

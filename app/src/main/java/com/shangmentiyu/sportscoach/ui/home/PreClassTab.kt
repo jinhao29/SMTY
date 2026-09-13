@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -52,6 +54,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -188,7 +191,12 @@ fun PreClassTab(
     // 排序结果用 remember(schedules) 缓存，仅在 schedules 变化时重排。
     val sortedSchedules = remember(schedules) { schedules.sortedBy { it.startTime } }
 
+    // P1-4 反馈：概览卡/统计格点击后滚动到「课前准备清单」（查看当日具体排课）
+    val listState = rememberLazyListState()
+    val scrollScope = rememberCoroutineScope()
+
     LazyColumn(
+        state = listState,
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = Spacing.screenH, vertical = Spacing.screenV),
@@ -304,7 +312,15 @@ fun PreClassTab(
                 verticalArrangement = Arrangement.spacedBy(Spacing.md)
             ) {
                 // 1. 珊瑚橙渐变头部卡片（展示"今日排课 X 节"）
-                TodayOverviewHeader(scheduleCount = schedules.size)
+                // 点击 → 滚动到下方排课清单（查看当日具体排课，李哥 2026-09-13 反馈）
+                TodayOverviewHeader(
+                    scheduleCount = schedules.size,
+                    onClick = {
+                        scrollScope.launch {
+                            listState.animateScrollToItem(index = 2)  // "课前准备清单" header
+                        }
+                    }
+                )
 
                 // 2. 三个独立白色大圆角统计卡片
                 Row(
@@ -314,17 +330,27 @@ fun PreClassTab(
                     FloatingStatCard(
                         label = "排课数",
                         value = "${schedules.size}",
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        // 点击 → 滚动到当日排课明细
+                        onClick = {
+                            scrollScope.launch {
+                                listState.animateScrollToItem(index = 2)
+                            }
+                        }
                     )
                     FloatingStatCard(
                         label = "已签到",
                         value = "${lessons.size}",
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        // 点击 → 签到页（当日签到明细与补签操作都在那里）
+                        onClick = onLessonCheckIn
                     )
                     FloatingStatCard(
                         label = "待签到",
                         value = "${(schedules.size - lessons.size).coerceAtLeast(0)}",
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        // 点击 → 签到页（谁还没到一眼可见，可直接补签到）
+                        onClick = onLessonCheckIn
                     )
                 }
 

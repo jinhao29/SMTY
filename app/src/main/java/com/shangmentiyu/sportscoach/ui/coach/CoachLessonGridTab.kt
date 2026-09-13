@@ -17,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Category
@@ -26,6 +27,8 @@ import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material3.Button
+import androidx.compose.foundation.background
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -49,6 +52,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.shangmentiyu.sportscoach.data.model.Schedule
 import com.shangmentiyu.sportscoach.data.model.Student
 import com.shangmentiyu.sportscoach.data.repo.CoachScheduleRepository
+import com.shangmentiyu.sportscoach.ui.home.IosCard
 import com.shangmentiyu.sportscoach.ui.schedule.TodayButton
 import com.shangmentiyu.sportscoach.ui.theme.AppTextField
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
@@ -70,7 +74,11 @@ import java.time.LocalDate
  * - 下方"本周安排"以"周几 时段 · 学员 · 类型 @ 地点"汇总主要任务
  */
 @Composable
-internal fun CoachLessonGridTab(viewModel: CoachManageViewModel) {
+internal fun CoachLessonGridTab(
+    viewModel: CoachManageViewModel,
+    // 空态「去新增教练」按钮：切回档案 Tab（由 CoachManageScreen 提供）
+    onGoToRoster: () -> Unit = {}
+) {
     val coaches by viewModel.activeCoaches.collectAsStateWithLifecycle()
     val selected by viewModel.selectedCoach.collectAsStateWithLifecycle()
     val lessons by viewModel.coachLessons.collectAsStateWithLifecycle()
@@ -168,13 +176,51 @@ internal fun CoachLessonGridTab(viewModel: CoachManageViewModel) {
                 }
             }
         } else {
+            // 空态图形化（李哥 2026-09-13 反馈"教练管理 UI 参考首页/成绩查看"）：
+            // 原来只有一行小字+大片空白；改为首页同款空态卡——图标 + 标题 + 副文案 + 直达按钮
             item {
-                Text(
-                    "选择教练后可查看周课表、为绑定学员排课。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = appOnSurfaceVariant(),
-                    modifier = Modifier.padding(vertical = 24.dp)
-                )
+                IosCard {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 48.dp, horizontal = Spacing.md),
+                        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(72.dp)
+                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(24.dp))
+                                .background(appPrimary().copy(alpha = 0.10f)),
+                            contentAlignment = androidx.compose.ui.Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Outlined.Person,
+                                contentDescription = null,
+                                modifier = Modifier.size(36.dp),
+                                tint = appPrimary()
+                            )
+                        }
+                        Text(
+                            "还没有教练",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            "新增教练后即可查看周课表、为绑定学员排课",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = appOnSurfaceVariant()
+                        )
+                        Button(
+                            onClick = onGoToRoster,
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
+                        ) {
+                            Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("去新增教练")
+                        }
+                    }
+                }
             }
         }
         item { Spacer(Modifier.height(160.dp)) }
