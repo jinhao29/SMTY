@@ -84,6 +84,24 @@ fun LessonManageTab(vm: HomeViewModel) {
 
     // === v32：全体学员课时/费用统计（纯内存计算，依赖 packages 与 students） ===
     val stats = remember(packages, students) { computeLessonStats(packages, students) }
+    // 批 3（操作摩擦修复）：对账时间段 —— 默认本月（月底对账就是这个口径），可切「全部」。
+    // 数据源是收费记录流水（含手机现场收款与 PC 同步记录），带日期，能按时间段算。
+    var showThisMonthOnly by remember { mutableStateOf(true) }
+    val monthPrefix = remember {
+        java.time.LocalDate.now().format(
+            java.time.format.DateTimeFormatter.ofPattern("yyyy-MM", java.util.Locale.getDefault()))
+    }
+    val rangeReceived = remember(feeRecords, showThisMonthOnly, monthPrefix) {
+        if (showThisMonthOnly) {
+            feeRecords.filter { it.date.startsWith(monthPrefix) }.sumOf { it.amount }
+        } else {
+            feeRecords.sumOf { it.amount }
+        }
+    }
+    val rangeCount = remember(feeRecords, showThisMonthOnly, monthPrefix) {
+        if (showThisMonthOnly) feeRecords.count { it.date.startsWith(monthPrefix) }
+        else feeRecords.size
+    }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -140,8 +158,14 @@ fun LessonManageTab(vm: HomeViewModel) {
                 // 费用统计卡片
                 IosCard {
                     Column(modifier = Modifier.padding(Spacing.md)) {
-                        Text("费用统计", style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("费用统计", style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                            // 批 3：切换对账时间段（点一下即切，不弹窗、不跳页）
+                            TextButton(onClick = { showThisMonthOnly = !showThisMonthOnly }) {
+                                Text(if (showThisMonthOnly) "本月 ▾" else "全部 ▾")
+                            }
+                        }
                         Spacer(Modifier.height(Spacing.sm))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -151,6 +175,14 @@ fun LessonManageTab(vm: HomeViewModel) {
                             StatItem(label = "总实收", value = money(stats.totalReceived))
                             StatItem(label = "总待收", value = money(stats.totalPending))
                         }
+                        Spacer(Modifier.height(Spacing.sm))
+                        // 批 3：按收费日期的实收合计（含手机现场收款）
+                        Text(
+                            (if (showThisMonthOnly) "本月实收" else "累计实收") +
+                                "（按收费日期）：${money(rangeReceived)} · ${rangeCount} 笔",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
+                        )
                     }
                 }
                 // 年级分组统计 + 导出
