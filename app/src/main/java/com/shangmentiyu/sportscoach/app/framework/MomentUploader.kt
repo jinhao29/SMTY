@@ -4,12 +4,12 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import com.shangmentiyu.sportscoach.data.repo.SettingsRepository
+import com.shangmentiyu.sportscoach.data.internal.SyncTlsTrust
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.io.InputStream
 import java.net.HttpURLConnection
-import java.net.URL
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -25,7 +25,7 @@ import java.util.Locale
  *
  * 协议：
  * - 方法：POST
- * - URL：http://{host}:{port}/upload_moment?student={name}&date={YYYYMMDD}
+ * - URL：{http|https}://{host}:{port}/upload_moment?student={name}&date={YYYYMMDD}（TLS 路由见 SyncTlsTrust）
  * - Header：
  *     X-Sync-Token: {token}              // 鉴权（两端均为空时跳过校验）
  *     Content-Type: image/jpeg 或 image/png
@@ -167,13 +167,14 @@ class MomentUploader(
         val date = dateStr ?: LocalDateTime.now()
             .format(DateTimeFormatter.ofPattern("yyyyMMdd", Locale.getDefault()))
         val safeName = studentName.trim()
-        val urlStr = buildUploadUrl(host, port, safeName, date)
+        val uploadPath = buildUploadPath(safeName, date)
 
         // 4. 上传
         var conn: HttpURLConnection? = null
         try {
-            val url = URL(urlStr)
-            conn = (url.openConnection() as HttpURLConnection).apply {
+            conn = SyncTlsTrust.openSyncConnection(
+                context, host, port, uploadPath, CONNECT_TIMEOUT_MS, READ_TIMEOUT_MS
+            ).apply {
                 requestMethod = "POST"
                 connectTimeout = CONNECT_TIMEOUT_MS
                 readTimeout = READ_TIMEOUT_MS
@@ -205,7 +206,7 @@ class MomentUploader(
                 ?.use { it.readText() } ?: ""
             if (code == 200 && body.contains("\"code\":0")) {
                 val remoteName = parseFilenameFromResponse(body)
-                Log.i(TAG, "精彩瞬间上传成功：$safeName → $urlStr ($remoteName)")
+                Log.i(TAG, "精彩瞬间上传成功：$safeName → $host:$port$uploadPath ($remoteName)")
                 UploadResult(true, "已上传到 PC 端", remoteFilename = remoteName, httpCode = code)
             } else {
                 Log.w(TAG, "上传失败 HTTP $code: $body")
@@ -233,12 +234,11 @@ class MomentUploader(
     // 内部工具
     // ============================================================
 
-    /** 拼接上传 URL，含 student/date 查询参数 */
-    private fun buildUploadUrl(host: String, port: String, student: String, date: String): String {
-        val cleanHost = host.trimEnd('/')
+    /** 拼接上传路径（含 student/date 查询参数），http/https 传输层由 SyncTlsTrust 路由选择 */
+    private fun buildUploadPath(student: String, date: String): String {
         // 学员名 URL 编码（保留中文，避免特殊字符截断）
         val encodedName = java.net.URLEncoder.encode(student, "UTF-8")
-        return "http://$cleanHost:$port/upload_moment?student=$encodedName&date=$date"
+        return "/upload_moment?student=$encodedName&date=$date"
     }
 
     /** 流式拷贝 InputStream → OutputStream */

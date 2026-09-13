@@ -6,6 +6,7 @@ import com.shangmentiyu.sportscoach.data.repo.BackupRepository
 import com.shangmentiyu.sportscoach.data.repo.SettingsRepository
 import com.shangmentiyu.sportscoach.data.repo.StudentRepository
 import com.shangmentiyu.sportscoach.data.internal.ModeManager
+import com.shangmentiyu.sportscoach.data.internal.SyncTlsTrust
 import com.shangmentiyu.sportscoach.excel.ExcelSync
 import com.shangmentiyu.sportscoach.excel.ImportStrategy
 import kotlinx.coroutines.CoroutineScope
@@ -25,7 +26,6 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.net.HttpURLConnection
-import java.net.URL
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -260,8 +260,9 @@ class LanSyncManager(
         withContext(NonCancellable + Dispatchers.IO) {
             var conn: HttpURLConnection? = null
             try {
-                conn = (URL("http://$host:$port/sync/version").openConnection()
-                        as HttpURLConnection).apply {
+                conn = SyncTlsTrust.openSyncConnection(
+                    context, host, port, "/sync/version", 2_500, 2_500
+                ).apply {
                     requestMethod = "GET"
                     connectTimeout = 2_500
                     readTimeout = 2_500
@@ -283,7 +284,9 @@ class LanSyncManager(
     private fun pingHealth(host: String, port: String): Boolean {
         var conn: HttpURLConnection? = null
         return try {
-            conn = (URL("http://$host:$port/health").openConnection() as HttpURLConnection).apply {
+            conn = SyncTlsTrust.openSyncConnection(
+                context, host, port, "/health", 2_500, 2_500
+            ).apply {
                 requestMethod = "GET"
                 connectTimeout = 2_500
                 readTimeout = 2_500
@@ -374,10 +377,11 @@ class LanSyncManager(
         port: String,
         token: String
     ): SyncResult {
-        val urlStr = "http://$host:$port/upload"
         var conn: HttpURLConnection? = null
         try {
-            conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
+            conn = SyncTlsTrust.openSyncConnection(
+                context, host, port, "/upload", CONNECT_TIMEOUT_MS, READ_TIMEOUT_MS
+            ).apply {
                 requestMethod = "POST"
                 connectTimeout = CONNECT_TIMEOUT_MS
                 readTimeout = READ_TIMEOUT_MS
@@ -440,7 +444,6 @@ class LanSyncManager(
         val cfg = readEndpoint() ?: return@withContext SyncResult(false, MSG_NO_ENDPOINT)
         val (host, port, token) = cfg
 
-        val urlStr = "http://$host:$port/sync/students.xlsx"
         var conn: HttpURLConnection? = null
         val downloadFile = File(context.cacheDir, "students_sync.xlsx")
         // v23.6.1 诊断插桩：分步写 cache/smty_debug.log 定位取消点
@@ -450,7 +453,9 @@ class LanSyncManager(
         }
         try {
             dbg("pull enter host=$host port=$port")
-            conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
+            conn = SyncTlsTrust.openSyncConnection(
+                context, host, port, "/sync/students.xlsx", CONNECT_TIMEOUT_MS, READ_TIMEOUT_MS
+            ).apply {
                 requestMethod = "GET"
                 connectTimeout = CONNECT_TIMEOUT_MS
                 readTimeout = READ_TIMEOUT_MS
@@ -611,8 +616,9 @@ class LanSyncManager(
             ?: return@withContext SyncResult(false, MSG_NO_ENDPOINT, 0)
         var conn: HttpURLConnection? = null
         try {
-            conn = (URL("http://$host:$port/sync/pc_data.json").openConnection()
-                    as HttpURLConnection).apply {
+            conn = SyncTlsTrust.openSyncConnection(
+                context, host, port, "/sync/pc_data.json", CONNECT_TIMEOUT_MS, 15_000
+            ).apply {
                 requestMethod = "GET"
                 connectTimeout = CONNECT_TIMEOUT_MS
                 readTimeout = 15_000

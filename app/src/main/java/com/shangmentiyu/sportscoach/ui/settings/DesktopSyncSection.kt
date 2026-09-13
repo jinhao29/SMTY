@@ -13,6 +13,7 @@ import androidx.compose.material.icons.outlined.Autorenew
 import androidx.compose.material.icons.outlined.Computer
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Lan
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.NetworkCheck
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.Wifi
@@ -39,6 +40,7 @@ import com.shangmentiyu.sportscoach.app.framework.LanSyncManager
 import com.shangmentiyu.sportscoach.app.framework.UdpDesktopDiscoveryService
 import com.shangmentiyu.sportscoach.core.SyncPacketAuth
 import com.shangmentiyu.sportscoach.data.internal.PairingKeyStore
+import com.shangmentiyu.sportscoach.data.internal.SyncTlsTrust
 import com.shangmentiyu.sportscoach.ui.settings.components.IosGroupedListCard
 import com.shangmentiyu.sportscoach.ui.settings.components.IosIconBadge
 import com.shangmentiyu.sportscoach.ui.settings.components.IosSectionWrapper
@@ -82,6 +84,10 @@ internal fun DesktopSyncSection(vm: SettingsViewModel) {
     var paired by remember { mutableStateOf(false) }
     val context = LocalContext.current
     LaunchedEffect(Unit) { paired = PairingKeyStore.get(context) != null }
+
+    // TLS 信任状态（TOFU 首连自动信任；非 Flow，进入页面时刷新一次）
+    var tlsFingerprint by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) { tlsFingerprint = SyncTlsTrust.trustedFingerprint(context) }
 
     // v23.6 自动连接：进入设置页时未配置地址且心跳新鲜 → 自动填充并提示（零配置）
     LaunchedEffect(Unit) {
@@ -253,6 +259,26 @@ internal fun DesktopSyncSection(vm: SettingsViewModel) {
                 subtitle = if (syncToken.isBlank()) "未设置（两端都为空时跳过校验）" else "已设置",
                 showTopDivider = true
             ) { showTokenDialog = true }
+
+            // TLS 信任（TOFU）：首次 HTTPS 连接自动存证书指纹，之后指纹一致才放行；
+            // PC 端证书更换（指纹不一致被拒）时点按清除后重连即可重新信任
+            val tlsFp = tlsFingerprint
+            SettingsActionRow(
+                icon = Icons.Outlined.Lock,
+                iconBgColor = if (tlsFp != null) LightPrimary else LightSecondary,
+                iconContentDescription = "HTTPS 证书信任",
+                title = "HTTPS 证书信任",
+                subtitle = if (tlsFp != null)
+                    "已信任 · 指纹 ${tlsFp.take(8)}…（点按清除，下次连接重新自动信任）"
+                else "未信任 · HTTPS 首次连接自动信任",
+                showTopDivider = true
+            ) {
+                if (tlsFp != null) {
+                    SyncTlsTrust.clearFingerprint(context)
+                    tlsFingerprint = null
+                    vm.updateStatus("已清除 HTTPS 证书信任：下次连接将重新自动信任")
+                }
+            }
 
             // v1.0.6 心跳 HMAC 配对：PC 端同步面板生成配对码，两端一致后心跳防伪造
             SettingsActionRow(
