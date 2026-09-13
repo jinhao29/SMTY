@@ -10,10 +10,37 @@ data class ScoreResult(
 )
 
 object Scorer {
+    /**
+     * 全角 → 半角归一化。
+     *
+     * 真机观察（2026-09-13，vivo）：中文输入法在成绩输入框里会把句点打成全角「。」，
+     * 小数点/冒号/引号也可能整体用全角（．：＇＂），于是用户看着是「7。5」，
+     * 系统判「格式错误」——属可用性缺陷，不是用户输错。
+     *
+     * 规则（与 PC `scorer.normalize_input` 同一张映射表，跨端口径一致）：
+     * 1. U+FF01–U+FF5E 全角 ASCII 整体平移 0xFEE0（覆盖 ．：＇＂＋－ and ０-９）
+     * 2. 「。」U+3002 → '.'（中文句号，IME 最常见的误产）
+     * 3. 「−」U+2212 → '-'（真减号，被 IME/复制粘贴引入时会绕过负数拦截）
+     */
+    fun normalizeInput(raw: String): String {
+        val sb = StringBuilder(raw.length)
+        for (ch in raw) {
+            sb.append(
+                when (ch.code) {
+                    in 0xFF01..0xFF5E -> (ch.code - 0xFEE0).toChar()
+                    0x3002 -> '.'    // 。
+                    0x2212 -> '-'    // −
+                    else -> ch
+                }
+            )
+        }
+        return sb.toString()
+    }
+
     /** 解析用户输入为数值 */
     fun parseValue(raw: String?, unit: String): Double {
         if (raw.isNullOrBlank()) throw IllegalArgumentException("成绩为空")
-        val s = raw.trim()
+        val s = normalizeInput(raw).trim()
         // v50 补丁：分秒分支同样拒绝负数（如 "-5" 秒），与非分秒分支口径一致
         if (unit == "分秒" && s.startsWith("-")) throw IllegalArgumentException("成绩不能为负数")
         if (unit == "分秒") return parseTime(s)
