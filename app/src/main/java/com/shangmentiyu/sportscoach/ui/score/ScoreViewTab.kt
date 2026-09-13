@@ -45,6 +45,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -81,7 +82,12 @@ import com.shangmentiyu.sportscoach.ui.theme.appSurface
  * @param onEditScore 编辑已有成绩回调，参数为课时 ID（跳转 ScoringScreen 加载已有成绩）
  */
 @Composable
-fun ScoreViewTab(onEditScore: (String) -> Unit = {}) {
+fun ScoreViewTab(
+    onEditScore: (String) -> Unit = {},
+    // P1-4：学员弹层「查成绩」跳转时预选的学员名（null = 不预选）
+    initialStudent: String? = null,
+    onInitialStudentConsumed: () -> Unit = {}
+) {
     val vm: AnalyticsViewModel = koinViewModel()
 
     val loading by vm.loading.collectAsStateWithLifecycle()
@@ -93,6 +99,15 @@ fun ScoreViewTab(onEditScore: (String) -> Unit = {}) {
     val overview by vm.overview.collectAsStateWithLifecycle()
     var pickerOpen by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<Pair<String, String>?>(null) } // (lessonId, projectName)
+
+    // P1-4：学员弹层「查成绩」跳过来时自动选中该学员。
+    // ⚠️ 消费即清（必盯点①）：预选完立刻通知上层清 pending——不清的话，
+    // 查完甲的成绩后，之后每次进成绩页都会自动选甲（预选残留）。
+    LaunchedEffect(initialStudent) {
+        val name = initialStudent ?: return@LaunchedEffect
+        vm.selectStudent(name)
+        onInitialStudentConsumed()
+    }
 
     if (loading) {
         Box(

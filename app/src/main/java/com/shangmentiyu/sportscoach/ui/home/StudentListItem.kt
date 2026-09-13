@@ -52,7 +52,7 @@ import com.shangmentiyu.sportscoach.ui.theme.appPrimary
  * @param remaining 剩余课时数
  * @param nextLesson 下一节课（可为 null）
  * @param onSign 签到回调
- * @param onGrowth 成长档案回调
+ * @param onCardClick 整卡点击回调（P1-4：两种模式统一为弹出学员详情层，成长报告在层内第一按钮直达）
  * @param onEdit 编辑回调
  * @param onDelete 删除回调
  * @param onEditNextLesson 编辑下节课回调
@@ -65,7 +65,7 @@ internal fun StudentListItem(
     remaining: Int,
     expireDate: String?,
     onSign: () -> Unit,
-    onGrowth: () -> Unit,
+    onCardClick: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onHeightPrediction: () -> Unit = {},
@@ -106,7 +106,7 @@ internal fun StudentListItem(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(onClick = onGrowth)
+                .clickable(onClick = onCardClick)
                 .padding(Spacing.md)
         ) {
         // === 第一行：头像 + 姓名 + 剩余课时徽章 ===

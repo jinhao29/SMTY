@@ -218,6 +218,35 @@ class HomeViewModel(
     private fun moneyText(v: Double): String =
         if (v % 1.0 == 0.0) v.toInt().toString() else String.format("%.2f", v)
 
+    // ================= P1-4 学员全史入口 · 跨页桥接 =================
+    // 学员弹层的跳转按钮通过这组 pending 状态把意图带给底部 Tab 页
+    //（底部 Tab 路由无法携带导航参数，故经 Activity 级 HomeViewModel 桥接）。
+    //
+    // ⚠️ 消费即清（铁律）：目标页 LaunchedEffect 读到值、完成预选后必须立刻调
+    // 对应 consumeXxx()。不清的后果：查完甲的成绩，下次随便进成绩页都会
+    // 自动选中甲——预选残留是这类桥接最典型的 bug（李哥 2026-09-13 实施必盯点①）。
+
+    /** 目标主页 Tab 索引（0 课前 / 1 课时管理 / 2 课后反馈 / 3 学员列表） */
+    private val _pendingHomeTab = kotlinx.coroutines.flow.MutableStateFlow<Int?>(null)
+    val pendingHomeTab: kotlinx.coroutines.flow.StateFlow<Int?> = _pendingHomeTab.asStateFlow()
+
+    /** 课后反馈 Tab 要预选的学员名 */
+    private val _pendingFeedbackStudent = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+    val pendingFeedbackStudent: kotlinx.coroutines.flow.StateFlow<String?> = _pendingFeedbackStudent.asStateFlow()
+
+    /** 成绩查看页要预选的学员名 */
+    private val _pendingScoreStudent = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+    val pendingScoreStudent: kotlinx.coroutines.flow.StateFlow<String?> = _pendingScoreStudent.asStateFlow()
+
+    fun requestHomeTab(tabIndex: Int) { _pendingHomeTab.value = tabIndex }
+    fun consumePendingHomeTab() { _pendingHomeTab.value = null }
+
+    fun requestFeedbackStudent(name: String) { _pendingFeedbackStudent.value = name }
+    fun consumePendingFeedbackStudent() { _pendingFeedbackStudent.value = null }
+
+    fun requestScoreStudent(name: String) { _pendingScoreStudent.value = name }
+    fun consumePendingScoreStudent() { _pendingScoreStudent.value = null }
+
     /**
      * === v25 优化1：全局到期预警课时包列表 ===
      *

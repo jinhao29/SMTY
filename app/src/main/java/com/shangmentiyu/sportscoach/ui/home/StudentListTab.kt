@@ -35,14 +35,18 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.automirrored.outlined.Sort
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import com.shangmentiyu.sportscoach.ui.club.StudentDetailSheet
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import com.shangmentiyu.sportscoach.ui.theme.OutlinedDatePickerField
 import com.shangmentiyu.sportscoach.ui.theme.OutlinedTimePickerField
+import com.shangmentiyu.sportscoach.ui.theme.appSurface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -73,9 +77,10 @@ import com.shangmentiyu.sportscoach.ui.theme.StyledDropdown
 /**
  * 学员列表 Tab：展示所有学员，每项仅显示姓名、年级、联系方式、剩余课时、到期日。
  *
- * - 点击学员跳转成长档案
+ * - P1-4：点击学员弹出学员详情层（全史入口：成长报告 / 查成绩 / 课后反馈 / 缴费记录 / 编辑）
  * - 底部提供编辑 / 删除 / 签到操作
  */
+@OptIn(ExperimentalMaterial3Api::class)  // ModalBottomSheet（P1-4 学员详情弹层）
 @Composable
 fun StudentListTab(
     vm: HomeViewModel,
@@ -84,7 +89,9 @@ fun StudentListTab(
     onGrowth: (String) -> Unit,
     onEditStudent: (Student) -> Unit,
     onHeightPrediction: (String) -> Unit = {},
-    onDietManage: (String) -> Unit = {}
+    onDietManage: (String) -> Unit = {},
+    // P1-4：弹层「查成绩」按钮的跳转（底部 Tab 路由需 navController，由调用方提供）
+    onOpenScores: () -> Unit = {}
 ) {
     val students by vm.students.collectAsStateWithLifecycle()
     // === v48 终极打磨：学员列表首帧加载标记（骨架屏） ===
@@ -98,6 +105,9 @@ fun StudentListTab(
     val nameQuery by vm.nameQuery.collectAsStateWithLifecycle()
 
     var deleteTarget by remember { mutableStateOf<Student?>(null) }
+    // P1-4：学员详情弹层（全史入口）——点卡弹出，替代原先"点卡直达成长报告"
+    var detailStudent by remember { mutableStateOf<Student?>(null) }
+    val allLessons by vm.allLessons.collectAsStateWithLifecycle()
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -297,7 +307,8 @@ fun StudentListTab(
                                         }
                                     }
                                 },
-                                onGrowth = { onGrowth(student.name) },
+                                // P1-4：点卡弹详情层（成长报告移入层内第一按钮，直达能力不丢）
+                                onCardClick = { detailStudent = student },
                                 onEdit = { onEditStudent(student) },
                                 onDelete = { deleteTarget = student },
                                 onHeightPrediction = { onHeightPrediction(student.name) },
@@ -315,6 +326,50 @@ fun StudentListTab(
                     }
                 }
             }
+        }
+    }
+
+    // === P1-4：学员详情弹层（与俱乐部模式共用 StudentDetailSheet） ===
+    // 必盯点②：成长报告是层内第一按钮，一点直达——点卡从直达改弹层后能力不能丢。
+    detailStudent?.let { s ->
+        ModalBottomSheet(
+            onDismissRequest = { detailStudent = null },
+            containerColor = appSurface()
+        ) {
+            StudentDetailSheet(
+                student = s,
+                remaining = remainingMap[s.name],
+                expireDate = expireDateMap[s.name],
+                lessons = allLessons.filter { it.studentName == s.name }
+                    .sortedByDescending { it.date + it.time }
+                    .take(5),
+                onEdit = {
+                    detailStudent = null
+                    onEditStudent(s)
+                },
+                onGrowth = {
+                    detailStudent = null
+                    onGrowth(s.name)
+                },
+                // 查成绩：桥接预选学员 + 跳底部「成绩查看」Tab（消费即清由目标页负责）
+                onScore = {
+                    detailStudent = null
+                    vm.requestScoreStudent(s.name)
+                    onOpenScores()
+                },
+                // 课后反馈：预选学员 + 切主页 Tab 2（同页切换，无需导航）
+                onFeedback = {
+                    detailStudent = null
+                    vm.requestFeedbackStudent(s.name)
+                    vm.requestHomeTab(2)
+                },
+                // 缴费记录：仅切主页 Tab 1（列表仍为全员，按学员筛选留待下一轮）
+                onPayments = {
+                    detailStudent = null
+                    vm.requestHomeTab(1)
+                },
+                showHomeTabShortcuts = true
+            )
         }
     }
 

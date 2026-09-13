@@ -71,7 +71,9 @@ fun ClubStudentListScreen(
     opVm: OperationViewModel,
     onAddStudent: () -> Unit,
     onEditStudent: (String) -> Unit,
-    onGrowth: (String) -> Unit
+    onGrowth: (String) -> Unit,
+    // P1-4：弹层「查成绩」按钮的跳转（底部 Tab 路由需 navController，由调用方提供）
+    onOpenScores: () -> Unit = {}
 ) {
     val students by vm.students.collectAsStateWithLifecycle()
     val remainingMap by vm.remainingMap.collectAsStateWithLifecycle()
@@ -226,7 +228,14 @@ fun ClubStudentListScreen(
                 onGrowth = {
                     detailStudent = null
                     onGrowth(s.name)
+                },
+                // P1-4：查成绩 = 桥接预选学员 + 跳底部「成绩查看」Tab（消费即清由目标页负责）
+                onScore = {
+                    detailStudent = null
+                    vm.requestScoreStudent(s.name)
+                    onOpenScores()
                 }
+                // 课后反馈/缴费按钮不显示：这两页是上门模式主页 Tab，俱乐部无对应页
             )
         }
     }
@@ -329,15 +338,30 @@ private fun ClubStudentCard(
     }
 }
 
-/** 学员详情底部弹层：基本信息 + 课时概览 + 最近记录 + 操作入口 */
+/**
+ * 学员详情底部弹层：基本信息 + 课时概览 + 最近记录 + 操作入口。
+ *
+ * P1-4（操作摩擦修复）：从俱乐部私有组件公开为 internal，供上门模式
+ * `StudentListTab` 复用——它就是两个模式共用的"学员全史入口"。
+ *
+ * 按钮布局（必盯点②）：**成长报告保持第一**——上门模式点卡从"直达成长报告"
+ * 改为弹层，弹层里第一个按钮必须一点即到，直达能力不能丢。
+ *
+ * @param showHomeTabShortcuts 是否显示「课后反馈 / 缴费记录」按钮。
+ *   这两页是上门模式主页的 Tab，俱乐部模式没有对应页面，故隐藏（P1-4 决策）。
+ */
 @Composable
-private fun StudentDetailSheet(
+internal fun StudentDetailSheet(
     student: Student,
     remaining: Int?,
     expireDate: String?,
     lessons: List<Lesson>,
     onEdit: () -> Unit,
-    onGrowth: () -> Unit
+    onGrowth: () -> Unit,
+    onScore: () -> Unit = {},
+    onFeedback: () -> Unit = {},
+    onPayments: () -> Unit = {},
+    showHomeTabShortcuts: Boolean = false
 ) {
     Column(
         modifier = Modifier
@@ -415,25 +439,44 @@ private fun StudentDetailSheet(
         }
         Spacer(Modifier.height(18.dp))
 
-        // 操作按钮
+        // 操作按钮：第一行核心动作（成长报告第一，必盯点②），第二行全史跳转
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             TextButton(
-                onClick = onEdit,
-                modifier = Modifier.weight(1f)
-            ) { Text("编辑资料", color = appPrimary()) }
-            TextButton(
                 onClick = onGrowth,
                 modifier = Modifier.weight(1f)
             ) { Text("成长报告", color = appPrimary()) }
+            TextButton(
+                onClick = onEdit,
+                modifier = Modifier.weight(1f)
+            ) { Text("编辑资料", color = appPrimary()) }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            TextButton(
+                onClick = onScore,
+                modifier = Modifier.weight(1f)
+            ) { Text("查成绩", color = appPrimary()) }
+            if (showHomeTabShortcuts) {
+                TextButton(
+                    onClick = onFeedback,
+                    modifier = Modifier.weight(1f)
+                ) { Text("课后反馈", color = appPrimary()) }
+                TextButton(
+                    onClick = onPayments,
+                    modifier = Modifier.weight(1f)
+                ) { Text("缴费记录", color = appPrimary()) }
+            }
         }
     }
 }
 
 @Composable
-private fun InfoRow(label: String, value: String) {
+internal fun InfoRow(label: String, value: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()

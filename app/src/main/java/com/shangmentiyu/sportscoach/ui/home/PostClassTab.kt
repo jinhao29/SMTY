@@ -26,6 +26,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -74,13 +75,25 @@ import java.io.File
 @Composable
 fun PostClassTab(
     vm: HomeViewModel,
-    onSign: (String) -> Unit
+    onSign: (String) -> Unit,
+    // P1-4：学员弹层「课后反馈」跳转时预选的学员名（null/空 = 不预选）
+    initialStudent: String? = null,
+    onInitialStudentConsumed: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val allLessons by vm.allLessons.collectAsStateWithLifecycle()
 
     // 学员筛选状态：null=全部，否则按学员名筛选
     var selectedStudent by remember { mutableStateOf<String?>(null) }
+
+    // P1-4：学员弹层「课后反馈」跳过来时自动选中该学员。
+    // ⚠️ 消费即清（必盯点①）：预选完立刻通知上层清 pending，
+    // 否则下次进本 Tab 会残留上一个学员的筛选，看起来像"自己会变"。
+    LaunchedEffect(initialStudent) {
+        val name = initialStudent ?: return@LaunchedEffect
+        selectedStudent = name
+        onInitialStudentConsumed()
+    }
     // 展开内联编辑的课时 ID
     var expandedLessonId by remember { mutableStateOf<String?>(null) }
     // 删除确认对话框

@@ -81,9 +81,15 @@ fun HomeScreen(
     onSchedule: () -> Unit = {},
     onHeightPrediction: (String) -> Unit = {},
     onDietManage: (String) -> Unit = {},
-    onOpenUnsignedOutLessons: () -> Unit = {}
+    onOpenUnsignedOutLessons: () -> Unit = {},
+    // P1-4：弹层「查成绩」跳底部 Tab 需 navController，由 SportsApp 提供
+    onOpenScores: () -> Unit = {},
+    // P1-4：显式传入 Activity 级 HomeViewModel——桥接 pending 状态必须全局单实例，
+    // 否则弹层（俱乐部用 Activity 级）写入的状态主页这里读不到。
+    // 未传时回退 koinViewModel()，兼容既有 Preview/测试调用。
+    vm: HomeViewModel? = null
 ) {
-        val vm: HomeViewModel = koinViewModel()
+    val homeVm: HomeViewModel = vm ?: koinViewModel()
 
     var tabIndex by remember { mutableStateOf(0) } // 默认显示课前准备 Tab（123.txt 重构后首页为今日概览）
     // === 终极修复：toast 订阅与 SnackbarHost 已提升到 SportsApp 外层 Box ===
@@ -94,9 +100,21 @@ fun HomeScreen(
     // === v25 优化1：到期预警横幅文案与目标学员 ===
     // === 性能优化：在 HomeScreen 顶层订阅一次 expiringPackages，传入 ExpiryBanner ===
     // 避免向 ExpiryBanner 传整个 vm 导致其因 vm 引用变化而重组范围扩大
-    val expiringBannerText by vm.expiringBannerText.collectAsStateWithLifecycle()
-    val expiringPackages by vm.expiringPackages.collectAsStateWithLifecycle()
-    val unsignedOutReminder by vm.unsignedOutReminder.collectAsStateWithLifecycle()
+    val expiringBannerText by homeVm.expiringBannerText.collectAsStateWithLifecycle()
+    val expiringPackages by homeVm.expiringPackages.collectAsStateWithLifecycle()
+    val unsignedOutReminder by homeVm.unsignedOutReminder.collectAsStateWithLifecycle()
+
+    // === P1-4：桥接消费（必盯点①：消费即清） ===
+    // 学员弹层把"切到某 Tab / 预选某学员"的意图写进 Activity 级 homeVm，
+    // 这里读到后立刻切 Tab 并清空——不清会导致下次进主页莫名其妙又跳 Tab。
+    val pendingHomeTab by homeVm.pendingHomeTab.collectAsStateWithLifecycle()
+    val pendingFeedbackStudent by homeVm.pendingFeedbackStudent.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingHomeTab) {
+        pendingHomeTab?.let {
+            tabIndex = it
+            homeVm.consumePendingHomeTab()
+        }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -147,7 +165,7 @@ fun HomeScreen(
             UnsignedOutReminderCard(
                 state = unsignedOutReminder,
                 onView = onOpenUnsignedOutLessons,
-                onDismiss = { vm.dismissUnsignedOutReminder() }
+                onDismiss = { homeVm.dismissUnsignedOutReminder() }
             )
             // === 修复：Tab 切换动画拖沓 ===
             // 原 220ms Crossfade 会让整页内容先淡出再淡入，体感延迟明显。
@@ -162,17 +180,24 @@ fun HomeScreen(
                 label = "HomeTabCrossfade"
             ) { index ->
                 when (index) {
-                    0 -> PreClassTab(vm = vm, onLessonCheckIn = onLessonCheckIn, onSchedule = onSchedule)
-                    1 -> LessonManageTab(vm = vm)
-                    2 -> PostClassTab(vm = vm, onSign = onSign)
+                    0 -> PreClassTab(vm = homeVm, onLessonCheckIn = onLessonCheckIn, onSchedule = onSchedule)
+                    1 -> LessonManageTab(vm = homeVm)
+                    2 -> PostClassTab(
+                        vm = homeVm,
+                        onSign = onSign,
+                        // P1-4：学员弹层「课后反馈」跳过来时自动选中该学员（消费即清在 Tab 内完成）
+                        initialStudent = pendingFeedbackStudent,
+                        onInitialStudentConsumed = { homeVm.consumePendingFeedbackStudent() }
+                    )
                     3 -> StudentListTab(
-                        vm = vm,
+                        vm = homeVm,
                         onSign = onSign,
                         onAddStudent = onAddStudent,
                         onGrowth = onGrowth,
                         onEditStudent = onEditStudent,
                         onHeightPrediction = onHeightPrediction,
-                        onDietManage = onDietManage
+                        onDietManage = onDietManage,
+                        onOpenScores = onOpenScores
                     )
                 }
             }

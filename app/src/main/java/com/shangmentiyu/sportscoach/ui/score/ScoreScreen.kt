@@ -55,7 +55,10 @@ fun ScoreScreen(
     onBack: (() -> Unit)? = null,
     onOpenLesson: (String) -> Unit,
     onEditScore: (String) -> Unit = {},
-    onOpenSportDetail: (String) -> Unit = {}
+    onOpenSportDetail: (String) -> Unit = {},
+    // P1-4：学员弹层「查成绩」跳转时预选的学员名（null = 不预选）
+    initialStudent: String? = null,
+    onInitialStudentConsumed: () -> Unit = {}
 ) {
     var tabIndex by remember { mutableStateOf(1) } // 默认"查看成绩"
 
@@ -76,7 +79,11 @@ fun ScoreScreen(
                 ) { index ->
                     when (index) {
                         0 -> ScoreInputTab()
-                        1 -> ScoreViewTab(onEditScore = onEditScore)
+                        1 -> ScoreViewTab(
+                            onEditScore = onEditScore,
+                            initialStudent = initialStudent,
+                            onInitialStudentConsumed = onInitialStudentConsumed
+                        )
                         else -> SportCategoryContent(onItemClick = onOpenSportDetail)
                     }
                 }

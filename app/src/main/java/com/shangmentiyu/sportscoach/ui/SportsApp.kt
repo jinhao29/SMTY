@@ -526,7 +526,11 @@ fun SportsApp() {
                     opVm = operationVm,
                     onAddStudent = { navController.navigate(Routes.ADD_STUDENT) },
                     onEditStudent = { name -> navController.navigate(Routes.editStudent(name)) },
-                    onGrowth = { name -> navController.navigate(Routes.growth(name)) }
+                    onGrowth = { name -> navController.navigate(Routes.growth(name)) },
+                    // P1-4：学员弹层「查成绩」→ 底部「成绩查看」Tab
+                    onOpenScores = {
+                        navController.navigate(Routes.SCORE) { launchSingleTop = true }
+                    }
                 )
             }
             composable(Routes.CLUB_LESSONS) {
@@ -549,6 +553,8 @@ fun SportsApp() {
             // === 底部 Tab ===
             composable(Routes.HOME) {
                 HomeScreen(
+                    // P1-4：显式传 Activity 级 homeVm——桥接 pending 状态必须全局单实例
+                    vm = homeVm,
                     onSign = { lessonId -> navController.navigate(Routes.lesson(lessonId)) },
                     onAddStudent = { navController.navigate(Routes.ADD_STUDENT) },
                     onGrowth = { studentName -> navController.navigate(Routes.growth(studentName)) },
@@ -562,15 +568,26 @@ fun SportsApp() {
                         navController.navigate(Routes.lessonCheckIn(filterUnsignedOut = true)) {
                             launchSingleTop = true
                         }
+                    },
+                    // P1-4：学员弹层「查成绩」→ 底部「成绩查看」Tab
+                    onOpenScores = {
+                        navController.navigate(Routes.SCORE) { launchSingleTop = true }
                     }
                 )
             }
             composable(Routes.SCORE) {
+                val pendingScoreStudent by homeVm.pendingScoreStudent.collectAsStateWithLifecycle()
                 ScoreScreen(
-                    onBack = null,
+                    // 俱乐部模式：成绩页不是底部 Tab（经学员弹层跳入），需要返回箭头
+                    onBack = if (isClubMode) {
+                        { navController.popBackStack() }
+                    } else null,
                     onOpenLesson = { lessonId -> navController.navigate(Routes.lesson(lessonId)) },
                     onEditScore = { lessonId -> navController.navigate(Routes.scoringWithLesson(lessonId)) },
-                    onOpenSportDetail = { sportId -> navController.navigate(Routes.sportStandardDetail(sportId)) }
+                    onOpenSportDetail = { sportId -> navController.navigate(Routes.sportStandardDetail(sportId)) },
+                    // P1-4：学员弹层「查成绩」预选该学员（消费即清在 ScoreViewTab 内触发）
+                    initialStudent = pendingScoreStudent,
+                    onInitialStudentConsumed = { homeVm.consumePendingScoreStudent() }
                 )
             }
             composable(Routes.SETTINGS) {
