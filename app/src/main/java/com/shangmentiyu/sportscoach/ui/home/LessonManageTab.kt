@@ -356,15 +356,29 @@ fun LessonManageTab(vm: HomeViewModel) {
 
     // 批 2：现场收款对话框（金额 / 课时数 / 日期 / 收款方式 / 备注）
     // 一次录入做两件事，保证「手机实收」与「收费流水」口径一致：
-    //   1) 课时包 paidAmount 累加 → 费用统计的「实收」立刻包含这笔（D2 硬要求）
+    //   1) 课时包实收累加 → 费用统计的「实收」立刻包含这笔（D2 硬要求）
     //   2) 收费流水落库 → 「收费记录」可见 + 随备份回传 PC（自然键去重）
+    // 真机修复（2026-09-13，李哥发现待收 -4800）：收款时若填了课时数（>0），
+    // 必须同时把课时加进包（totalLessons+hours、price+amount），否则续费后
+    // 实收 > 应收 → 待收变负。课时数=0 视为补欠款，只加实收。
     receivingPkg?.let { pkg ->
         ReceivePaymentDialog(
             pkg = pkg,
             onDismiss = { receivingPkg = null },
             onConfirm = { amount, hours, date, method, note ->
                 val paidBase = if (pkg.paidAmount < 0) pkg.price else pkg.paidAmount
-                opVm.updatePackage(pkg.copy(paidAmount = paidBase + amount))
+                val updated = if (hours > 0) {
+                    // 续费 / 加购：课时与钱同步加，待收口径保持不变
+                    pkg.copy(
+                        totalLessons = pkg.totalLessons + hours.toInt(),
+                        price = pkg.price + amount,
+                        paidAmount = paidBase + amount
+                    )
+                } else {
+                    // 补欠款 / 纯收款：只加实收
+                    pkg.copy(paidAmount = paidBase + amount)
+                }
+                opVm.updatePackage(updated)
                 vm.recordPaymentLocal(
                     studentName = pkg.studentName,
                     date = date,
@@ -588,7 +602,9 @@ private fun ReceivePaymentDialog(
         (pkg.price - paid).coerceAtLeast(0.0)
     }
     var amountText by remember { mutableStateOf(if (pending > 0.001) amountText(pending) else "") }
-    var hoursText by remember { mutableStateOf(pkg.totalLessons.toString()) }
+    // 课时数默认空：留空/0 = 补欠款（只加钱）；填了 = 续费/加购（课时与钱同步加）。
+    // 原默认填包总课时是错的——那会让补欠款也误加课时（真机待收 -4800 的根因之一）。
+    var hoursText by remember { mutableStateOf("") }
     var dateText by remember { mutableStateOf(today) }
     var method by remember { mutableStateOf("微信") }
     var note by remember { mutableStateOf("") }
@@ -615,7 +631,7 @@ private fun ReceivePaymentDialog(
                 AppTextField(
                     value = hoursText,
                     onValueChange = { hoursText = it.filter { c -> c.isDigit() } },
-                    label = { Text("对应课时数") },
+                    label = { Text("本次课时数（续费才填，补欠款留空）") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
