@@ -169,9 +169,47 @@ class PcSyncRepository(private val db: AppDatabase) {
 }
 
 /**
- * PC 收费记录镜像只读仓储（v35，课时管理页「PC 收费记录」区块展示用）。
+ * PC 收费记录仓储。
+ *
+ * v35：仅镜像 PC 下发的收费记录（只读）。
+ * 批 2（操作摩擦修复）：新增 [addLocal] —— 手机端现场收款直接落库。
+ * 与 PC 下发**共用** [FeeRecord.stableKey] 幂等键（学员|日期|金额|课时|方式|备注），
+ * 同一条收费无论来自手机还是 PC 落到同一 id，因此合并时天然不重复。
  */
 class FeeRecordRepository(private val dao: FeeRecordDao) {
     fun getAll(): Flow<List<FeeRecord>> = dao.getAll()
     fun getByStudent(name: String): Flow<List<FeeRecord>> = dao.getByStudent(name)
+
+    /**
+     * 手机端现场录入一笔收费（复用既有表与既有幂等键，不新建表、不新建协议字段）。
+     *
+     * 幂等语义：同（学员|日期|金额|课时|方式|备注）重复提交只覆盖同一行，
+     * 不产生重复记录——这是备份上传 PC 后「不重复」的依据。
+     *
+     * 口径约定：传参必须与 [FeeRecord.stableKey] 的生成口径一致，
+     * 调用方不要在值里带首尾空格（PC 下发的值同样不带），否则同一条收
+     * 费在两端会算出不同 id 而各成一行。
+     */
+    suspend fun addLocal(
+        studentName: String,
+        date: String,
+        amount: Double,
+        hours: Double,
+        method: String,
+        note: String
+    ): FeeRecord {
+        val rec = FeeRecord(
+            id = FeeRecord.stableKey(studentName, date, amount, hours, method, note),
+            studentName = studentName,
+            date = date,
+            amount = amount,
+            hours = hours,
+            method = method,
+            note = note
+        )
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            dao.upsertBlocking(listOf(rec))
+        }
+        return rec
+    }
 }

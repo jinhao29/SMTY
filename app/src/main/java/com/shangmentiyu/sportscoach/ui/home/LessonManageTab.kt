@@ -28,6 +28,7 @@ import com.shangmentiyu.sportscoach.ui.theme.AppTextField
 import com.shangmentiyu.sportscoach.ui.theme.GlassAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -93,6 +94,8 @@ fun LessonManageTab(vm: HomeViewModel) {
     var deletingPkg by remember { mutableStateOf<LessonPackage?>(null) }
     // === 一键排课：从课时包管理页直接进入自动排课对话框（预选中该课时包） ===
     var autoSchedulePkg by remember { mutableStateOf<LessonPackage?>(null) }
+    // === 批 2（操作摩擦修复）：现场收款 —— 手机端直接录入收费，不再「记备忘回家再录」 ===
+    var receivingPkg by remember { mutableStateOf<LessonPackage?>(null) }
 
     // === 性能优化 H2+M5：改用 LazyColumn + remember 缓存排序 ===
     // 原 Column + verticalScroll + forEach 一次性把所有 PackageCard 组合进树，
@@ -180,13 +183,13 @@ fun LessonManageTab(vm: HomeViewModel) {
             }
         }
 
-        // === v35：PC 收费记录（PC 录账 → 同步 → 手机核对，只读镜像） ===
+        // === 收费记录：手机现场录入 + PC 同步镜像（批 2 起手机可直接收钱） ===
         item(key = "pc_fees") {
             var feesExpanded by remember { mutableStateOf(false) }
             IosCard {
                 Column(modifier = Modifier.padding(Spacing.md)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("PC 收费记录", style = MaterialTheme.typography.titleMedium,
+                        Text("收费记录", style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                         if (feeRecords.isNotEmpty()) {
                             TextButton(onClick = { feesExpanded = !feesExpanded }) {
@@ -195,7 +198,7 @@ fun LessonManageTab(vm: HomeViewModel) {
                         }
                     }
                     if (feeRecords.isEmpty()) {
-                        Text("暂无 PC 收费记录（在 PC 端录入收费并同步后显示）",
+                        Text("暂无收费记录（在课时包卡片点「收款」即可现场录入）",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.outline)
                     } else {
@@ -203,7 +206,9 @@ fun LessonManageTab(vm: HomeViewModel) {
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f))
                         if (feesExpanded) {
-                            feeRecords.take(30).forEach { f ->
+                            // 批 2：去掉此前的「前 30 笔」截断——数据本就完整下发，
+                            // 截断只会让人以为记录丢了。默认收起，因此不影响首屏开销。
+                            feeRecords.forEach { f ->
                                 Spacer(Modifier.height(6.dp))
                                 Text(
                                     "${f.date}  ${f.studentName}  ${money(f.amount)}" +
@@ -211,12 +216,6 @@ fun LessonManageTab(vm: HomeViewModel) {
                                         if (f.method.isNotBlank()) " · ${f.method}" else "",
                                     style = MaterialTheme.typography.bodySmall
                                 )
-                            }
-                            if (feeRecords.size > 30) {
-                                Spacer(Modifier.height(4.dp))
-                                Text("…其余 ${feeRecords.size - 30} 笔见 PC 端财务页",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.outline)
                             }
                         }
                     }
@@ -249,6 +248,7 @@ fun LessonManageTab(vm: HomeViewModel) {
                     onAdd = { adjustingPkg = pkg; adjustMode = "add" },
                     onReduce = { adjustingPkg = pkg; adjustMode = "reduce" },
                     onGift = { adjustingPkg = pkg; adjustMode = "gift" },
+                    onReceive = { receivingPkg = pkg },
                     onRename = { renamingStudent = pkg.studentName },
                     onEdit = { editingPkg = pkg },
                     onDelete = { deletingPkg = pkg },
@@ -322,6 +322,30 @@ fun LessonManageTab(vm: HomeViewModel) {
         )
     }
 
+    // 批 2：现场收款对话框（金额 / 课时数 / 日期 / 收款方式 / 备注）
+    // 一次录入做两件事，保证「手机实收」与「收费流水」口径一致：
+    //   1) 课时包 paidAmount 累加 → 费用统计的「实收」立刻包含这笔（D2 硬要求）
+    //   2) 收费流水落库 → 「收费记录」可见 + 随备份回传 PC（自然键去重）
+    receivingPkg?.let { pkg ->
+        ReceivePaymentDialog(
+            pkg = pkg,
+            onDismiss = { receivingPkg = null },
+            onConfirm = { amount, hours, date, method, note ->
+                val paidBase = if (pkg.paidAmount < 0) pkg.price else pkg.paidAmount
+                opVm.updatePackage(pkg.copy(paidAmount = paidBase + amount))
+                vm.recordPaymentLocal(
+                    studentName = pkg.studentName,
+                    date = date,
+                    amount = amount,
+                    hours = hours,
+                    method = method,
+                    note = note
+                )
+                receivingPkg = null
+            }
+        )
+    }
+
     // 删除课时包确认对话框：用于删除错误学员的课时包
     deletingPkg?.let { pkg ->
         GlassAlertDialog(
@@ -362,6 +386,7 @@ private fun PackageCard(
     onAdd: () -> Unit,
     onReduce: () -> Unit,
     onGift: () -> Unit,
+    onReceive: () -> Unit,
     onRename: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -466,6 +491,25 @@ private fun PackageCard(
                 }
             }
 
+            // === 批 2：现场收款 —— 与「增添/减少/赠送」同级，不另找位置 ===
+            // 家长当场付款时直接用这里落库，不必事后回电脑补录。
+            Spacer(Modifier.height(Spacing.sm))
+            Button(
+                onClick = onReceive,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = appPrimary().copy(alpha = 0.12f),
+                    contentColor = appPrimary()
+                )
+            ) {
+                Text(
+                    "收款 · 记一笔实收",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
             // === 一键排课：关联课时包自动排课到课时上完那一周 ===
             // 珊瑚橙主色按钮，作为卡片的主要操作（每卡片仅 1 个主操作按钮）
             // 仅在课时包有剩余课时且状态为活跃时显示
@@ -487,6 +531,106 @@ private fun PackageCard(
             }
         }
     }
+}
+
+/**
+ * 现场收款对话框（批 2）。
+ *
+ * 5 个字段：金额 / 课时数 / 日期（默认今天）/ 收款方式（默认微信）/ 备注。
+ * 「保存收款」由调用方做两件事（均为复用既有链路）：
+ * 更新课时包实收（费用统计立刻包含）+ 写入收费流水（随备份回传 PC）。
+ */
+@Composable
+private fun ReceivePaymentDialog(
+    pkg: LessonPackage,
+    onDismiss: () -> Unit,
+    onConfirm: (amount: Double, hours: Double, date: String, method: String, note: String) -> Unit
+) {
+    val today = remember {
+        java.time.LocalDate.now()
+            .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd", java.util.Locale.getDefault()))
+    }
+    // 待收金额作为默认值：多数场景就是「把剩下的收掉」
+    val pending = remember(pkg) {
+        val paid = if (pkg.paidAmount < 0) pkg.price else pkg.paidAmount
+        (pkg.price - paid).coerceAtLeast(0.0)
+    }
+    var amountText by remember { mutableStateOf(if (pending > 0.001) amountText(pending) else "") }
+    var hoursText by remember { mutableStateOf(pkg.totalLessons.toString()) }
+    var dateText by remember { mutableStateOf(today) }
+    var method by remember { mutableStateOf("微信") }
+    var note by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    GlassAlertDialog(
+        onDismissRequest = onDismiss,
+        title = "收款 · ${pkg.studentName}",
+        content = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "${pkg.name} · 应收 ${money(pkg.price)}" +
+                        if (pending > 0.001) " · 待收 ${money(pending)}" else " · 已付清",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+                AppTextField(
+                    value = amountText,
+                    onValueChange = { amountText = it },
+                    label = { Text("收款金额（元）") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                AppTextField(
+                    value = hoursText,
+                    onValueChange = { hoursText = it.filter { c -> c.isDigit() } },
+                    label = { Text("对应课时数") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                AppTextField(
+                    value = dateText,
+                    onValueChange = { dateText = it },
+                    label = { Text("日期（YYYY-MM-DD）") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                Text("收款方式", style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.outline)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("微信", "支付宝", "现金", "银行转账", "其他").forEach { m ->
+                        FilterChip(
+                            selected = method == m,
+                            onClick = { method = m },
+                            label = { Text(m, style = MaterialTheme.typography.bodySmall) }
+                        )
+                    }
+                }
+                AppTextField(
+                    value = note,
+                    onValueChange = { note = it },
+                    label = { Text("备注（选填）") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                error?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val amount = amountText.trim().toDoubleOrNull()
+                val hours = hoursText.trim().toDoubleOrNull() ?: 0.0
+                when {
+                    amount == null || amount <= 0 -> error = "请输入有效的收款金额"
+                    dateText.trim().length != 10 -> error = "日期格式应为 YYYY-MM-DD"
+                    else -> onConfirm(amount, hours, dateText.trim(), method, note.trim())
+                }
+            }) { Text("保存收款") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+    )
 }
 
 /**

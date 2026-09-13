@@ -179,6 +179,46 @@ class HomeViewModel(
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /**
+     * 批 2（操作摩擦修复）：手机端现场收款 —— 写入收费流水。
+     *
+     * 与「课时包实收累加」配套使用（调用方负责累加 paidAmount）：
+     * - 本方法写收费流水，供「收费记录」展示 + 随备份回传桌面端
+     * - 桌面端按自然键（学员|日期|金额|课时|方式|备注）去重，因此重复上传不会重复计账
+     *
+     * 幂等：同一自然键重复提交只覆盖同一行。feeRepo 未注入（旧测试构造）时返回失败。
+     */
+    fun recordPaymentLocal(
+        studentName: String,
+        date: String,
+        amount: Double,
+        hours: Double,
+        method: String,
+        note: String,
+        onDone: (Boolean) -> Unit = {}
+    ) {
+        val repo = feeRepo
+        if (repo == null) {
+            _toast.value = "收费记录不可用"
+            onDone(false)
+            return
+        }
+        safeLaunch {
+            try {
+                repo.addLocal(studentName, date, amount, hours, method, note)
+                _toast.value = "已记录收款 ${moneyText(amount)} 元（${studentName}）"
+                onDone(true)
+            } catch (e: Exception) {
+                _toast.value = "收款记录失败：${e.message ?: "未知异常"}"
+                onDone(false)
+            }
+        }
+    }
+
+    /** 金额展示：整数不带小数（与课时管理页 money() 一致的最小实现） */
+    private fun moneyText(v: Double): String =
+        if (v % 1.0 == 0.0) v.toInt().toString() else String.format("%.2f", v)
+
+    /**
      * === v25 优化1：全局到期预警课时包列表 ===
      *
      * 监听 7 天内即将到期的活跃课时包，用于首页顶部横幅展示。

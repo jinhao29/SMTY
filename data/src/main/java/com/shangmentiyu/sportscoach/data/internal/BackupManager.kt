@@ -399,6 +399,10 @@ object BackupManager {
         val packages = db.lessonPackageDao().getAll().first()
         val schedules = db.scheduleDao().getAll().first()
         val coaches = db.coachDao().getAll().first()
+        // 批 2（操作摩擦修复）：收费记录随备份回传桌面端。
+        // 表内含手机端现场录入的收费与 PC 下发的镜像两类；桌面端按同一自然键
+        // （学员|日期|金额|课时|方式|备注）去重，因此重复推送不会产生重复行。
+        val fees = db.feeRecordDao().getAll().first()
         val archivedLessons = try {
             db.archivedLessonDao().count().first()
             // count() 仅返回数量；这里只需要数量做汇总，明细数据由桌面端解析 db 文件获得
@@ -423,6 +427,7 @@ object BackupManager {
                 .put("packages", packages.size)
                 .put("schedules", schedules.size)
                 .put("coaches", coaches.size)
+                .put("fees", fees.size)
                 .put("archivedLessons", archivedLessons)
             )
         root.put("meta", metaHeader)
@@ -526,6 +531,22 @@ object BackupManager {
             )
         }
         root.put("coaches", coachesArr)
+
+        // 收费记录（批 2）：手机端现场录入的收款随备份回传桌面端。
+        // 自然键「学员|日期|金额|课时|方式|备注」与桌面端收费记录一致，
+        // 桌面端按此键去重（合并规则见 docs/reports/fee_merge_rules.md）。
+        val feesArr = JSONArray()
+        for (f in fees) {
+            feesArr.put(JSONObject()
+                .put("studentName", f.studentName)
+                .put("date", f.date)
+                .put("amount", f.amount)
+                .put("hours", f.hours)
+                .put("method", f.method)
+                .put("note", f.note)
+            )
+        }
+        root.put("fees", feesArr)
 
         return root.toString(2)  // 缩进 2 空格，便于桌面端人工查看
     }

@@ -205,4 +205,35 @@ class PcSyncRepositoryTest {
         repo.applyPcDataBlocking(packages = emptyList(), lessons = emptyList(), fees = fees, today = today)
         assertThat(db.feeRecordDao().getAll().first()).hasSize(2)
     }
+
+    // === 批 2（操作摩擦修复）：手机端现场收款 ===
+
+    @Test
+    fun `手机端收款落库且重复提交不放大`() = runTest {
+        val feeRepo = FeeRecordRepository(db.feeRecordDao())
+
+        feeRepo.addLocal("张三", "2026-09-13", 200.0, 5.0, "微信", "现场收款")
+        assertThat(db.feeRecordDao().getAll().first()).hasSize(1)
+
+        // 同一笔重复提交 → 覆盖同一行（自然键相同），不产生第二条
+        feeRepo.addLocal("张三", "2026-09-13", 200.0, 5.0, "微信", "现场收款")
+        assertThat(db.feeRecordDao().getAll().first()).hasSize(1)
+
+        // 同一天的第二笔（金额不同）→ 独立成行，不能被当成重复吞掉
+        feeRepo.addLocal("张三", "2026-09-13", 100.0, 2.0, "现金", "")
+        assertThat(db.feeRecordDao().getAll().first()).hasSize(2)
+    }
+
+    @Test
+    fun `手机端收款与PC下发的同一条合并为一行`() = runTest {
+        val feeRepo = FeeRecordRepository(db.feeRecordDao())
+        feeRepo.addLocal("张三", "2026-09-13", 200.0, 5.0, "微信", "")
+
+        // PC 下发同一条（自然键一致 → 同主键）→ 覆盖而非新增
+        repo.applyPcDataBlocking(
+            packages = emptyList(), lessons = emptyList(),
+            fees = listOf(PcFee("张三", "2026-09-13", 200.0, 5.0, "微信", "")),
+            today = today)
+        assertThat(db.feeRecordDao().getAll().first()).hasSize(1)
+    }
 }
