@@ -19,7 +19,6 @@ import com.shangmentiyu.sportscoach.data.repo.LessonConsumptionRepository
 import com.shangmentiyu.sportscoach.data.repo.LessonPackageRepository
 import com.shangmentiyu.sportscoach.data.repo.LessonRepository
 import com.shangmentiyu.sportscoach.data.repo.OperationRepository
-import com.shangmentiyu.sportscoach.data.repo.ParentReportRepository
 import com.shangmentiyu.sportscoach.data.repo.ScheduleMemoryRepository
 import com.shangmentiyu.sportscoach.data.repo.ScheduleQueryRepository
 import com.shangmentiyu.sportscoach.data.repo.ScheduleRepository
@@ -42,7 +41,6 @@ import com.shangmentiyu.sportscoach.ui.home.HomeViewModel
 import com.shangmentiyu.sportscoach.ui.lesson.LessonViewModel
 import com.shangmentiyu.sportscoach.ui.lessoncheckin.LessonCheckInViewModel
 import com.shangmentiyu.sportscoach.ui.operation.OperationViewModel
-import com.shangmentiyu.sportscoach.ui.parent.ParentReportViewModel
 import com.shangmentiyu.sportscoach.ui.scoring.ScoringViewModel
 import com.shangmentiyu.sportscoach.ui.script.ScriptViewModel
 import com.shangmentiyu.sportscoach.ui.settings.SettingsViewModel
@@ -75,7 +73,6 @@ val appModule = module {
     single { get<AppDatabase>().trainingCycleDao() }
     single { get<AppDatabase>().scheduleMemoryDao() }
     single { get<AppDatabase>().studentFtsDao() }
-    single { get<AppDatabase>().parentReportDao() }
     single { get<AppDatabase>().bodyMetricHistoryDao() }
     single { get<AppDatabase>().dietDao() }
     single { get<AppDatabase>().archivedLessonDao() }
@@ -120,7 +117,6 @@ val appModule = module {
     single { TrainingCycleRepository(get()) }
     single { StageSummaryRepository() }
     single { ScheduleMemoryRepository(get()) }
-    single { ParentReportRepository(get(), get(), get()) }
     single { BodyMetricRepository(get(), get()) }
     single { DietRepository(get()) }
     single { BackupRepository(androidContext()) }
@@ -154,7 +150,6 @@ val appModule = module {
     viewModel { TrainingPlanViewModel(get(), get()) }
     viewModel { AnalyticsViewModel(get(), get()) }
     viewModel { OperationViewModel(get(), get(), get(), get(), get(), get(), get()) }
-    viewModel { ParentReportViewModel(get(), get()) }
     viewModel { StageSummaryViewModel(get(), get(), get()) }
     viewModel { DailyPlanViewModel(get(), get()) }
     viewModel { TrainingCycleViewModel(get(), get()) }
