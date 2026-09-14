@@ -42,7 +42,6 @@ import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import com.shangmentiyu.sportscoach.ui.theme.AppSegmentedTabs
-import com.shangmentiyu.sportscoach.ui.theme.AppTopBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -52,6 +51,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
@@ -63,6 +63,7 @@ import com.shangmentiyu.sportscoach.data.model.CoachRole
 import com.shangmentiyu.sportscoach.ui.theme.AppTextField
 import com.shangmentiyu.sportscoach.ui.theme.Spacing
 import com.shangmentiyu.sportscoach.ui.theme.appOnPrimary
+import com.shangmentiyu.sportscoach.ui.theme.appOnSurface
 import com.shangmentiyu.sportscoach.ui.theme.appOnSurfaceVariant
 import com.shangmentiyu.sportscoach.ui.theme.appOnWarningContainer
 import com.shangmentiyu.sportscoach.ui.theme.appPrimary
@@ -95,18 +96,39 @@ fun CoachManageScreen(
 
     Scaffold(
         topBar = {
-            // 修复：顶栏去掉 glass 半透明色与"分享"图标——教练管理无可分享内容，
-            // 玻璃色在浅底上发灰；改用标准顶栏（surface 底 + 深色标题）
-            AppTopBar(
-                title = { Text("教练管理", fontWeight = FontWeight.SemiBold) },
-                navigationIcon = {
-                    if (onBack != null) {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                        }
+            // v67（李哥：本页整体向下坠）：标题行由 M3 标准顶栏 64dp 压到 44dp，标题字号不变。
+            // 返回箭头沿用 GlassAlertDialog 同款"小热区"写法（32dp 触达区 + 20dp 图标）：
+            // M3 IconButton 有 48dp 最小触达高度，会把行高顶回去。
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp)
+                    .padding(horizontal = Spacing.screenH),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (onBack != null) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(RoundedCornerShape(50))
+                            .clickable(onClick = onBack),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "返回",
+                            tint = appOnSurface(),
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
-                },
-            )
+                    Spacer(Modifier.width(Spacing.sm))
+                }
+                Text(
+                    text = "教练管理",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
@@ -119,7 +141,8 @@ fun CoachManageScreen(
                 selectedIndex = tabIndex,
                 onSelect = { tabIndex = it },
                 fontSize = 14.sp,
-                modifier = Modifier.padding(horizontal = Spacing.screenH, vertical = Spacing.sm)
+                // v67：上下间距 8dp → 4dp，与上方压缩过的标题行一起把整页提起约 28dp
+                modifier = Modifier.padding(horizontal = Spacing.screenH, vertical = Spacing.xs)
             )
             when (tabIndex) {
                 0 -> CoachRosterTab(viewModel)
