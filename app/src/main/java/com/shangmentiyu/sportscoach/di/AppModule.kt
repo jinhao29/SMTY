@@ -31,8 +31,6 @@ import com.shangmentiyu.sportscoach.domain.scheduling.CalculateRemainingLessonsU
 import com.shangmentiyu.sportscoach.domain.scheduling.ValidateScheduleUseCase
 import com.shangmentiyu.sportscoach.domain.usecase.GetUnsignedOutReminderUseCase
 import com.shangmentiyu.sportscoach.ui.analytics.AnalyticsViewModel
-import com.shangmentiyu.sportscoach.ui.bodymetric.BodyMetricChartViewModel
-import com.shangmentiyu.sportscoach.ui.coachreport.CoachDailyReportViewModel
 import com.shangmentiyu.sportscoach.ui.dailyplan.DailyPlanViewModel
 import com.shangmentiyu.sportscoach.ui.diet.DietViewModel
 import com.shangmentiyu.sportscoach.ui.growth.GrowthViewModel
@@ -44,10 +42,8 @@ import com.shangmentiyu.sportscoach.ui.operation.OperationViewModel
 import com.shangmentiyu.sportscoach.ui.scoring.ScoringViewModel
 import com.shangmentiyu.sportscoach.ui.script.ScriptViewModel
 import com.shangmentiyu.sportscoach.ui.settings.SettingsViewModel
-import com.shangmentiyu.sportscoach.ui.stagesummary.StageSummaryViewModel
 import com.shangmentiyu.sportscoach.ui.summary.SummaryViewModel
 import com.shangmentiyu.sportscoach.ui.training.TrainingPlanViewModel
-import com.shangmentiyu.sportscoach.ui.trainingcycle.TrainingCycleViewModel
 import org.koin.android.ext.koin.androidContext
 import org.koin.androidx.viewmodel.dsl.viewModel
 import org.koin.core.scope.get
@@ -150,11 +146,7 @@ val appModule = module {
     viewModel { TrainingPlanViewModel(get(), get()) }
     viewModel { AnalyticsViewModel(get(), get()) }
     viewModel { OperationViewModel(get(), get(), get(), get(), get(), get(), get()) }
-    viewModel { StageSummaryViewModel(get(), get(), get()) }
     viewModel { DailyPlanViewModel(get(), get()) }
-    viewModel { TrainingCycleViewModel(get(), get()) }
-    viewModel { BodyMetricChartViewModel(get(), get()) }
-    viewModel { CoachDailyReportViewModel(get(), get(), get()) }
     viewModel { com.shangmentiyu.sportscoach.ui.coach.CoachManageViewModel(get(), get(), get(), get(), get(), get()) }
     viewModel { LessonCheckInViewModel(get(), get(), get()) }
     viewModel { HeightPredictionViewModel(get()) }

@@ -34,12 +34,6 @@ object Routes {
     const val HEIGHT_PREDICTION = "height_prediction/{studentName}"
     const val DIET_MANAGE = "diet_manage/{studentName}"
 
-    // === 训练规划类（设置详情页二级入口） ===
-    const val STAGE_SUMMARY = "stage_summary"
-    const val TRAINING_CYCLE = "training_cycle"
-    const val BODY_METRIC = "body_metric"
-    const val COACH_REPORT = "coach_report"
-
     // === 工具类 ===
     const val BMI_CALCULATOR = "bmi_calculator"
 

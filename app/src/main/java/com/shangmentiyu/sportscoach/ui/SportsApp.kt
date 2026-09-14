@@ -729,28 +729,6 @@ fun SportsApp() {
                 )
             }
 
-            // === 训练规划类（设置详情页二级入口） ===
-            composable(Routes.STAGE_SUMMARY) {
-                com.shangmentiyu.sportscoach.ui.stagesummary.StageSummaryScreen(
-                    onBack = { navController.popBackStack() }
-                )
-            }
-            composable(Routes.TRAINING_CYCLE) {
-                com.shangmentiyu.sportscoach.ui.trainingcycle.TrainingCycleScreen(
-                    onBack = { navController.popBackStack() }
-                )
-            }
-            composable(Routes.BODY_METRIC) {
-                com.shangmentiyu.sportscoach.ui.bodymetric.BodyMetricChartScreen(
-                    onBack = { navController.popBackStack() }
-                )
-            }
-            composable(Routes.COACH_REPORT) {
-                com.shangmentiyu.sportscoach.ui.coachreport.CoachDailyReportScreen(
-                    onBack = { navController.popBackStack() },
-                    onOpenLesson = { lessonId -> navController.navigate(Routes.lesson(lessonId)) }
-                )
-            }
             composable(Routes.BMI_CALCULATOR) {
                 com.shangmentiyu.sportscoach.ui.tools.BmiCalculatorScreen(
                     onBack = { navController.popBackStack() }
