@@ -7,9 +7,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -51,6 +53,14 @@ import androidx.compose.ui.window.DialogProperties
  *   - 内容多时：自动收缩至剩余空间，配合调用方传入的 verticalScroll 实现滚动
  * - 底部按钮区始终固定在卡片底部，确保可点击
  *
+ * === 输入法避让（v67 修复：长表单弹窗「点保存毫无反应」）===
+ * [DialogProperties.decorFitsSystemWindows] = false 时系统不为输入法让位（窗口不 resize、
+ * 不 pan），键盘直接压在卡片下半部。像教练档案（11 个输入项）这种"必须先打字才能保存"的
+ * 长表单，确认按钮正好落在键盘窗口内 —— 点击被键盘吃掉，Button.onClick 永不触发，
+ * 表现为「无论填什么、点保存都没反应」（既没有 Toast 也没有关闭）。
+ * 处置与 ui/schedule/ScheduleEditDialog 同款：外层 Box 撑满窗口 + imePadding()，
+ * 卡片在「窗口高度 − 键盘高度」的区域内居中 ⇒ 按钮始终浮在键盘之上、可点。
+ *
  * 替代 Material3 默认 AlertDialog，使所有对话框视觉风格统一为
  * 参考图所示的现代圆角胶囊样式。
  *
@@ -82,76 +92,85 @@ fun GlassAlertDialog(
             dismissOnBackPress = dismissOnBackPress
         )
     ) {
-        Surface(
+        // v67 输入法避让（见类注释）：撑满窗口 + 扣掉键盘高度后再居中，
+        // 否则键盘打开的瞬间按钮区就被压到键盘底下，点不动。
+        Box(
             modifier = Modifier
-                .padding(horizontal = 24.dp)
-                .fillMaxWidth()
-                .heightIn(max = maxDialogHeight),
-            shape = RoundedCornerShape(20.dp),
-            color = containerColor,
-            shadowElevation = 8.dp
+                .fillMaxSize()
+                .imePadding(),
+            contentAlignment = Alignment.Center
         ) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                // === 顶部栏：标题 + 右上角 X 关闭图标 ===
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 20.dp, end = 8.dp, top = 16.dp, bottom = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = appOnSurface(),
-                        modifier = Modifier.weight(1f)
-                    )
-                    // 右上角线框式 X 关闭图标（24dp 点击区域，16dp 图标）
+            Surface(
+                modifier = Modifier
+                    .padding(horizontal = 24.dp)
+                    .fillMaxWidth()
+                    .heightIn(max = maxDialogHeight),
+                shape = RoundedCornerShape(20.dp),
+                color = containerColor,
+                shadowElevation = 8.dp
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    // === 顶部栏：标题 + 右上角 X 关闭图标 ===
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 20.dp, end = 8.dp, top = 16.dp, bottom = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = appOnSurface(),
+                            modifier = Modifier.weight(1f)
+                        )
+                        // 右上角线框式 X 关闭图标（24dp 点击区域，16dp 图标）
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(RoundedCornerShape(50))
+                                .clickable(onClick = onDismissRequest),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Close,
+                                contentDescription = "关闭",
+                                tint = appOnSurfaceVariant(),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+
+                    // === 正文区（weight=1f, fill=false）===
+                    // 内容少时：不强制撑满，保持弹窗紧凑（与原行为一致）
+                    // 内容多时：自动收缩到剩余空间，调用方传入的 verticalScroll 负责滚动
+                    // 这样底部按钮区始终固定可见、可点击
                     Box(
                         modifier = Modifier
-                            .size(32.dp)
-                            .clip(RoundedCornerShape(50))
-                            .clickable(onClick = onDismissRequest),
-                        contentAlignment = Alignment.Center
+                            .fillMaxWidth()
+                            .weight(1f, fill = false)
+                            .padding(horizontal = 20.dp, vertical = 8.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Close,
-                            contentDescription = "关闭",
-                            tint = appOnSurfaceVariant(),
-                            modifier = Modifier.size(18.dp)
-                        )
+                        content()
                     }
-                }
 
-                // === 正文区（weight=1f, fill=false）===
-                // 内容少时：不强制撑满，保持弹窗紧凑（与原行为一致）
-                // 内容多时：自动收缩到剩余空间，调用方传入的 verticalScroll 负责滚动
-                // 这样底部按钮区始终固定可见、可点击
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f, fill = false)
-                        .padding(horizontal = 20.dp, vertical = 8.dp)
-                ) {
-                    content()
-                }
-
-                // === 底部按钮区（右对齐）===
-                // 保留调用方传入的 TextButton 原样，仅调整外层布局
-                // 调用方负责按钮内文字颜色（确认按钮用白色，取消按钮用次级灰）
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    dismissButton?.invoke()
-                    if (dismissButton != null) {
-                        Spacer(modifier = Modifier.width(4.dp))
+                    // === 底部按钮区（右对齐）===
+                    // 保留调用方传入的 TextButton 原样，仅调整外层布局
+                    // 调用方负责按钮内文字颜色（确认按钮用白色，取消按钮用次级灰）
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        dismissButton?.invoke()
+                        if (dismissButton != null) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                        }
+                        confirmButton()
                     }
-                    confirmButton()
                 }
             }
         }

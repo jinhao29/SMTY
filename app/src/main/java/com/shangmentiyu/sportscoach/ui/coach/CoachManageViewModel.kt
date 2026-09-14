@@ -79,7 +79,13 @@ class CoachManageViewModel(
     fun setStatusFilter(status: String) { _statusFilter.value = status }
     fun setQuery(q: String) { _query.value = q }
 
-    /** 新增/更新教练，异常（重名校验/上级非法）转为 toast 文案 */
+    /**
+     * 新增/更新教练，异常（重名校验/上级非法）转为 toast 文案。
+     *
+     * v67：失败一律可见——原实现只 catch [IllegalArgumentException]，其余异常要么崩溃、
+     * 要么因 `e.message == null` 而彻底静默，表现成"点保存毫无反应"，真机无从排查
+     * （vivo 屏蔽 logcat）。现兜底 catch Exception：Toast + 落盘 crash_logs/log_*.txt。
+     */
     fun saveCoach(coach: Coach, onDone: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
             val result = try {
@@ -88,6 +94,15 @@ class CoachManageViewModel(
                 true
             } catch (e: IllegalArgumentException) {
                 _toast.value = e.message
+                false
+            } catch (e: Exception) {
+                // 兜底：任何其他失败（含协程被取消）都必须留下痕迹 + 反馈
+                android.util.Log.e("CoachManage", "saveCoach 失败：${coach.name}", e)
+                com.shangmentiyu.sportscoach.app.framework.CrashHandler.writeLog(
+                    "CoachManageViewModel.saveCoach 失败（${coach.name}）\n${e.stackTraceToString()}"
+                )
+                _toast.value = "保存失败：" +
+                    (e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName)
                 false
             }
             onDone(result)
