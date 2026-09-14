@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -401,6 +402,10 @@ fun ScheduleEditDialog(
     // 使用 Column 布局（非 Scaffold），避免 Dialog 内 WindowInsets 处理不可靠
     // 导致 bottomBar 被系统导航栏遮挡 / 点不到。
     // 结构：TopAppBar + LazyColumn(weight=1f, 可滚动) + 底部固定按钮栏
+    //
+    // v67（李哥：编辑课程页顶部与状态栏重叠）：Dialog 里没有外层 Scaffold，
+    // 而 AppTopBar 固化了 windowInsets = WindowInsets(0)（约定由外层 Scaffold 消费状态栏），
+    // 于是标题栏直接铺到 y=0 压在状态栏上。这里必须自己补 statusBarsPadding()。
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
@@ -411,6 +416,7 @@ fun ScheduleEditDialog(
         Box(modifier = Modifier.fillMaxSize()) {
             Column(
             modifier = Modifier.fillMaxSize()
+                .statusBarsPadding()
                 .imePadding()
         ) {
             AppTopBar(

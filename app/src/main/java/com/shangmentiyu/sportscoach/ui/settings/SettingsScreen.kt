@@ -209,26 +209,33 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(Spacing.lg)
             ) {
-                // 【首要元素】"设置"大标题：居中置顶（李哥 2026-09-13 反馈），
-                // 字形 34sp/Bold，与下方卡片内容层级拉开
-                Text(
-                    text = "设置",
+                // 【首要元素】"设置"大标题 + 副标题：居中置顶（李哥 2026-09-13 反馈），
+                // 字形 34sp/Bold，与下方卡片内容层级拉开。
+                // v67（李哥：标题与副标题"脱节"）：两者必须包在同一个子项里。
+                // 原写法把 Spacer 也当成外层 Column 的子项，被 spacedBy(Spacing.lg)=16dp
+                // 上下各加一次 → 实际间距 16+4+16=36dp，视觉上标题和副标题断成两块。
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center,
-                    style = MaterialTheme.typography.headlineLarge.copy(
-                        fontWeight = FontWeight.Bold, fontSize = 34.sp
-                    ),
-                    color = appOnSurface()
-                )
-                Spacer(Modifier.height(4.dp))
-                // 副标题：随标题居中，letterSpacing 保持"·"分隔的舒展节奏
-                Text(
-                    text = "教练信息 · 外观 · 数据同步 · 关于",
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center,
-                    style = MaterialTheme.typography.bodyMedium.copy(letterSpacing = 0.3.sp),
-                    color = appOnSurfaceVariant()
-                )
+                    verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+                ) {
+                    Text(
+                        text = "设置",
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.headlineLarge.copy(
+                            fontWeight = FontWeight.Bold, fontSize = 34.sp
+                        ),
+                        color = appOnSurface()
+                    )
+                    // 副标题：随标题居中，letterSpacing 保持"·"分隔的舒展节奏
+                    Text(
+                        text = "教练信息 · 外观 · 数据同步 · 关于",
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.bodyMedium.copy(letterSpacing = 0.3.sp),
+                        color = appOnSurfaceVariant()
+                    )
+                }
 
                 // v23.12 多租户：工作模式切换（上门体育 / 俱乐部，独立数据库）
                 ModeSection()
