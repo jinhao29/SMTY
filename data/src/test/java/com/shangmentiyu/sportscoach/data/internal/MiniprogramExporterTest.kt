@@ -22,6 +22,7 @@ class MiniprogramExporterTest {
         name = "锚定测试学员",
         grade = "5",
         phone = "13900000001",
+        age = 10,
     )
     private val pkg = com.shangmentiyu.sportscoach.data.model.LessonPackage(
         id = "pkg00001",
@@ -47,6 +48,7 @@ class MiniprogramExporterTest {
         assertThat(parsed.name).isEqualTo("锚定测试学员")
         assertThat(parsed.grade).isEqualTo("5")           // 中文标签 → 编码往返无损
         assertThat(parsed.phone).isEqualTo("13900000001")
+        assertThat(parsed.age).isEqualTo(10)              // 数字年龄往返无损（本轮接通）
         assertThat(parsed.isActive).isTrue()
 
         assertThat(plan.packages).hasSize(1)
@@ -72,8 +74,8 @@ class MiniprogramExporterTest {
         assertThat(root.optJSONArray("coaches")!!.length()).isEqualTo(0)
 
         val row = root.optJSONArray("students")!!.getJSONObject(0)
-        // 桌面端桥导出的学生字段全集逐字段对齐
-        for (field in listOf("id", "name", "phone", "parent_phone", "grade", "class_group",
+        // 桌面端桥导出的学生字段全集逐字段对齐（09-15：class_group 删除 → age 接入）
+        for (field in listOf("id", "name", "phone", "parent_phone", "grade", "age",
                              "address", "status", "expire_date", "note", "remaining_lessons",
                              "created_at", "updated_at", "deleted")) {
             assertThat(row.has(field)).isTrue()
@@ -82,6 +84,15 @@ class MiniprogramExporterTest {
         assertThat(row.optInt("remaining_lessons")).isEqualTo(3)
         assertThat(row.optString("grade")).isEqualTo("五年级")  // 编码 → 中文标签
         assertThat(row.optString("status")).isEqualTo("active")
+        assertThat(row.optInt("age")).isEqualTo(10)
+    }
+
+    @Test
+    fun `未填年龄导出为null_不是0`() {
+        val noAge = student.copy(age = 0)   // 0 = Android 未填哨兵
+        val json = MiniprogramExporter.export("shangmen", listOf(noAge), emptyList())
+        val row = org.json.JSONObject(json).optJSONArray("students")!!.getJSONObject(0)
+        assertThat(row.isNull("age")).isTrue()
     }
 
     @Test

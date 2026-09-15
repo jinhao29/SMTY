@@ -26,7 +26,7 @@ class MiniprogramImporterTest {
       "exported_at": "2026-09-12 10:00:00",
       "students": [
         {"id": 1, "name": "锚定测试学员", "phone": "13800000001", "parent_phone": "13900000001",
-         "grade": "五年级", "class_group": "五年级2班", "address": "某小区某栋",
+         "grade": "五年级", "age": 10, "address": "某小区某栋",
          "status": "active", "expire_date": "2026-12-31", "note": "跨端锚定",
          "remaining_lessons": 7,
          "created_at": "2026-09-01 10:00:00", "updated_at": "2026-09-12 10:00:00",
@@ -59,6 +59,7 @@ class MiniprogramImporterTest {
         assertThat(stu.name).isEqualTo("锚定测试学员")
         assertThat(stu.phone).isEqualTo("13900000001") // parent_phone 优先，与桌面端一致
         assertThat(stu.grade).isEqualTo("5")            // 五年级 → 编码 5
+        assertThat(stu.age).isEqualTo(10)               // 数字年龄随互通落库（本轮接通）
         assertThat(stu.isActive).isTrue()
 
         // 课时包：remaining 反算 used（10 总 - 3 余 = 7 已用），状态转中文
@@ -108,5 +109,14 @@ class MiniprogramImporterTest {
         )
         val plan = MiniprogramImporter.parse(withLessons)
         assertThat(plan.skippedTables).containsExactly("lessons")
+    }
+
+    @Test
+    fun `age为null或缺失_落库为0未填`() {
+        val nullAge = fixtureJson.replace("\"age\": 10,", "\"age\": null,")
+        assertThat(MiniprogramImporter.parse(nullAge).students[0].age).isEqualTo(0)
+
+        val missingAge = fixtureJson.replace("\"age\": 10,", "")
+        assertThat(MiniprogramImporter.parse(missingAge).students[0].age).isEqualTo(0)
     }
 }

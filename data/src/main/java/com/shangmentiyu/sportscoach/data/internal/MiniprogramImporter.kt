@@ -104,6 +104,9 @@ object MiniprogramImporter {
                         name = name,
                         grade = gradeCodeFromLabel(row.optString("grade", "")) ?: "1",
                         phone = phone,
+                        // age 互转契约：JSON null / 缺失 = 未填（Android 哨兵 0），
+                        // 与导出端 0→null 对称；负数为脏数据，同样视为未填
+                        age = if (row.isNull("age")) 0 else row.optInt("age", 0).coerceAtLeast(0),
                         isActive = row.optString("status", "active") == "active",
                         createdAt = parseStampMs(row.optString("created_at", "")) ?: now,
                         updatedAt = parseStampMs(row.optString("updated_at", "")) ?: now

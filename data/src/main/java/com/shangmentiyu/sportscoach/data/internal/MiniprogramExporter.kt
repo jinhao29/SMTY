@@ -78,11 +78,13 @@ object MiniprogramExporter {
                 put("phone", stu.phone)
                 put("parent_phone", "")   // Android 无家长电话独立字段
                 put("grade", Standards.gradeLabel(stu.grade))  // 编码 → 中文标签
-                put("class_group", "")
                 put("address", "")
                 put("status", if (stu.isActive) "active" else "inactive")
                 put("expire_date", "")
                 put("note", "")
+                // age 互转契约：Android 0 = 未填 → JSON null（小程序 None），
+                // 不允许把未填哨兵 0 当真实年龄传出去
+                put("age", if (stu.age > 0) stu.age else JSONObject.NULL)
                 put("remaining_lessons", effectiveRemaining(stu.name, packages))
                 put("created_at", stampMs(stu.createdAt))
                 put("updated_at", stampMs(stu.updatedAt))
